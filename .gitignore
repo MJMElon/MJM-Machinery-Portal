@@ -1,0 +1,24 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+# Holds only the PUBLIC Supabase URL + anon key (same as MachTrek) so the
+# GitHub Pages build works without repo secrets.
+!.env.production
+
+# Server-side secrets for the Edge Function — NEVER commit
+supabase/.env
+supabase/.env.*
+supabase/functions/.env
+supabase/functions/**/.env
+supabase/.temp
+supabase/.branches
+
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.log*

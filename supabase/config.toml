@@ -1,0 +1,8 @@
+# Supabase CLI config for this repo. Only the settings this portal needs;
+# the database itself is shared with MachTrek and migrated by hand (see README).
+project_id = "mjm-machinery-portal"
+
+[functions.whatsapp-webhook]
+# Meta calls this URL without a Supabase JWT. Each POST is instead verified with
+# Meta's X-Hub-Signature-256 (HMAC of the body using the app secret).
+verify_jwt = false
