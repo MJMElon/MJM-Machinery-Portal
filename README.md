@@ -36,19 +36,24 @@ The WhatsApp webhook is a **Supabase Edge Function** (`supabase/functions/whatsa
 ### 1. Database (once)
 Edit the e-mail in section 5 of `supabase/migrations/20260929120000_whatsapp_photo_inbox.sql`, then paste the whole file into **Supabase → SQL Editor** and Run. The final `select` must list your admin. Safe to re-run.
 
-### 2. Edge Function
-```bash
-npx supabase login
-npx supabase link --project-ref <your-project-ref>        # same project as MachTrek
-cp supabase/functions/.env.example supabase/functions/.env  # fill in locally, never commit
-npx supabase secrets set --env-file supabase/functions/.env
-npx supabase functions deploy whatsapp-webhook --no-verify-jwt
-```
-Webhook URL: `https://<your-project-ref>.supabase.co/functions/v1/whatsapp-webhook`
+### 2. Edge Function (no terminal)
+Deployed by GitHub Actions (`.github/workflows/deploy-webhook.yml`).
 
-Replace the expiring Meta token: edit `WHATSAPP_ACCESS_TOKEN` in `supabase/functions/.env` and run `npx supabase secrets set --env-file supabase/functions/.env` again (or edit it in Supabase → Edge Functions → Secrets). No redeploy needed.
+1. Supabase → your avatar → **Account preferences → Access Tokens → Generate new token**. Copy it.
+2. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**: name `SUPABASE_ACCESS_TOKEN`, paste the token.
+3. GitHub → **Actions → Deploy WhatsApp webhook → Run workflow**. The run summary shows the webhook URL:
+   `https://<project-ref>.supabase.co/functions/v1/whatsapp-webhook`
+4. Supabase → **Edge Functions → Secrets** → add each (see `supabase/functions/.env.example` for where to find them):
+   `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ALLOWED_NUMBERS`.
+   `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are provided automatically.
+
+Replace the expiring Meta token: Supabase → Edge Functions → Secrets → edit `WHATSAPP_ACCESS_TOKEN`. No redeploy needed.
+
+Later code changes to `supabase/functions/**` redeploy automatically on push to `main`.
 
 Logs: Supabase → Edge Functions → whatsapp-webhook → Logs.
+
+(Terminal alternative: `npx supabase secrets set --env-file supabase/functions/.env` and `npx supabase functions deploy whatsapp-webhook --no-verify-jwt`.)
 
 ### 3. Web portal
 ```bash
