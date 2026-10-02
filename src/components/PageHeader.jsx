@@ -7,7 +7,7 @@ export default function PageHeader({ title, subtitle, onBack, right, language = 
     <div className="mb-3 flex items-center gap-2">
       <button
         onClick={() => (onBack ? onBack() : navigate(-1))}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 active:bg-slate-100"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 active:bg-slate-100"
         aria-label={language === 'ms' ? 'Kembali' : 'Back'}
       >
         <IconBack width={22} height={22} />

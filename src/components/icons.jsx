@@ -155,3 +155,9 @@ export const IconRefresh = (p) => (
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
   </svg>
 )
+
+export const IconWrench = (p) => (
+  <svg {...base} {...p}>
+    <path d="M14.7 6.3a4 4 0 0 0 5 5L21 10a5.5 5.5 0 0 1-7.4 5.1L7 21.7a2.1 2.1 0 0 1-3-3l6.6-6.6A5.5 5.5 0 0 1 15.7 4.7Z" />
+  </svg>
+)
