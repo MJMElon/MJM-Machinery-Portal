@@ -55,10 +55,8 @@ export default function MachineryProfile() {
   return (
     <div className="space-y-4">
       <PageHeader
-        backTo="/cmms"
-        backLabel="Back to CMMS 2"
-        title={current?.name}
-        subtitle={`${rows.length} machine${rows.length === 1 ? '' : 's'}${access.loaded && !access.can_manage ? ' · view only' : ''}`}
+        title="Machinery Profile"
+        subtitle={`${current?.name || ''} · ${rows.length} machine${rows.length === 1 ? '' : 's'}${access.loaded && !access.can_manage ? ' · view only' : ''}`}
       />
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
       <Card className="overflow-hidden">

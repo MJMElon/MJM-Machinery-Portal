@@ -12,7 +12,9 @@ export default {
         }
       },
       fontFamily: {
-        sans: ["'Plus Jakarta Sans'", 'system-ui', '-apple-system', "'Segoe UI'", 'Roboto', 'sans-serif']
+        sans: ["'Plus Jakarta Sans'", 'system-ui', '-apple-system', "'Segoe UI'", 'Roboto', 'sans-serif'],
+        // Titles and CMMS navigation
+        display: ["'Sora'", "'Plus Jakarta Sans'", 'system-ui', 'sans-serif']
       },
       maxWidth: {
         app: '520px'

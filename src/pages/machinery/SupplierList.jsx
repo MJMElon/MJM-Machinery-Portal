@@ -40,10 +40,8 @@ export default function SupplierList() {
   return (
     <div className="space-y-4">
       <PageHeader
-        backTo="/cmms"
-        backLabel="Back to CMMS 2"
-        title={current?.name}
-        subtitle={`${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} / workshop${suppliers.length === 1 ? '' : 's'}${access.loaded && !access.can_manage ? ' · view only' : ''}`}
+        title="Supplier Workshop List"
+        subtitle={`${current?.name || ''} · ${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} / workshop${suppliers.length === 1 ? '' : 's'}${access.loaded && !access.can_manage ? ' · view only' : ''}`}
         right={
           access.can_manage && (
             <Button onClick={() => setEditing({})}>

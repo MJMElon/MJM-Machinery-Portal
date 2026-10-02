@@ -23,12 +23,7 @@ export default function CmmsUsers() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        backTo="/cmms"
-        backLabel="Back to CMMS 2"
-        title={current?.name}
-        subtitle="CMMS 2 user access for this company"
-      />
+      <PageHeader title="CMMS User Setting" subtitle={`${current?.name || ''} · who can do what in CMMS 2`} />
       {isSuperAdmin ? (
         <AccessTable companyId={current?.id} me={user?.id} />
       ) : (

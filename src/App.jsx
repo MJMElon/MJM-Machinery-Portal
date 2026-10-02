@@ -4,7 +4,7 @@ import Login from './auth/Login.jsx'
 import { Shell } from './components/Shell.jsx'
 import { Button, Card, Spinner } from './components/ui.jsx'
 import PortalHome from './pages/PortalHome.jsx'
-import CmmsHome from './pages/machinery/CmmsHome.jsx'
+import CmmsLayout from './pages/machinery/CmmsLayout.jsx'
 import WorkManage from './pages/machinery/WorkManage.jsx'
 import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import CaseDetail from './pages/machinery/CaseDetail.jsx'
@@ -27,13 +27,15 @@ export default function App() {
           <Route path="/" element={<PortalHome />} />
           <Route path="/settings" element={<CompanySettings />} />
           <Route path="/admin/companies" element={<ManageCompanies />} />
-          <Route path="/cmms" element={<CmmsHome />} />
-          <Route path="/cmms/work" element={<WorkManage />} />
-          <Route path="/cmms/work/all" element={<WorkConsolidated />} />
-          <Route path="/cmms/work/case/:id" element={<CaseDetail />} />
-          <Route path="/cmms/machines" element={<MachineryProfile />} />
-          <Route path="/cmms/suppliers" element={<SupplierList />} />
-          <Route path="/cmms/users" element={<CmmsUsers />} />
+          <Route path="/cmms" element={<CmmsLayout />}>
+            <Route index element={<Navigate to="/cmms/work" replace />} />
+            <Route path="work" element={<WorkManage />} />
+            <Route path="work/all" element={<WorkConsolidated />} />
+            <Route path="work/case/:id" element={<CaseDetail />} />
+            <Route path="machines" element={<MachineryProfile />} />
+            <Route path="suppliers" element={<SupplierList />} />
+            <Route path="users" element={<CmmsUsers />} />
+          </Route>
           {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
           <Route path="/machinery" element={<Navigate to="/cmms" replace />} />
           <Route path="/machinery/*" element={<Navigate to="/cmms/work" replace />} />

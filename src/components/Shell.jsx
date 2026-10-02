@@ -27,12 +27,6 @@ export function Shell() {
 // Centre title of the top bar for each page ('' = main page).
 function pageTitle(path) {
   if (path === '/') return ''
-  if (path.startsWith('/cmms/work/all')) return 'All Companies'
-  if (path.startsWith('/cmms/work/case')) return 'Maintenance Case'
-  if (path.startsWith('/cmms/work')) return 'Maintenance Work Manage'
-  if (path.startsWith('/cmms/machines')) return 'Machinery Profile'
-  if (path.startsWith('/cmms/suppliers')) return 'Supplier Workshop List'
-  if (path.startsWith('/cmms/users')) return 'CMMS User Setting'
   if (path.startsWith('/cmms')) return 'CMMS 2'
   if (path.startsWith('/settings')) return 'Settings'
   if (path.startsWith('/admin/companies')) return 'Manage Companies'
@@ -81,7 +75,7 @@ function TopBar({ title }) {
         {home ? (
           <Brand size="lg" />
         ) : (
-          <h1 className="max-w-[40vw] truncate text-center text-base font-bold tracking-tight text-slate-900 sm:max-w-none sm:text-xl">
+          <h1 className="max-w-[40vw] truncate text-center font-display text-lg font-extrabold tracking-tight text-slate-900 sm:max-w-none sm:text-[28px]">
             {title}
           </h1>
         )}

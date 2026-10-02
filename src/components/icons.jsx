@@ -192,3 +192,44 @@ export const IconPencil = (p) => (
     <path d="m13.5 6.5 4 4" />
   </svg>
 )
+
+// ---- simple one-colour navigation icons (CMMS sidebar) ----------------------
+
+export const IconNotebook = (p) => (
+  <svg {...base} {...p}>
+    <rect x="5" y="3" width="14" height="18" rx="2" />
+    <path d="M9 8h6M9 12h6M9 16h3" />
+  </svg>
+)
+
+export const IconExcavator = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.5" y="16" width="12" height="4" rx="2" />
+    <path d="M4 16v-4h4V9h3l1.5 3H14v4" />
+    <path d="M14 12l4-6 3.5 5" />
+    <path d="M21.5 11v3h-2.5" />
+  </svg>
+)
+
+export const IconWorkshop = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 21V9l9-5 9 5v12" />
+    <path d="M7 21v-7h10v7M7 17.5h10" />
+  </svg>
+)
+
+export const IconUsers = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+    <path d="M15.5 5.2a3 3 0 0 1 0 5.6M17.5 14.4c2 .8 3.5 2.9 3.5 5.6" />
+  </svg>
+)
+
+export const IconRoute = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="6" cy="19" r="2" />
+    <circle cx="18" cy="5" r="2" />
+    <path d="M8 19h7a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h7" />
+  </svg>
+)

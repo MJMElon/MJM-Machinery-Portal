@@ -7,12 +7,12 @@ export const caseLink = (id) => `/cmms/work/case/${id}`
 
 // Laptop: one row per case in columns. Smaller screens: the same row stacks.
 const COLS =
-  'lg:grid lg:grid-cols-[64px_minmax(84px,120px)_minmax(150px,1fr)_96px_minmax(120px,160px)_minmax(110px,150px)_92px_92px_80px] lg:items-center'
+  'lg:grid lg:grid-cols-[52px_minmax(76px,110px)_minmax(130px,1fr)_88px_minmax(104px,150px)_minmax(96px,140px)_84px_78px_76px] lg:items-center'
 
 export function CaseTableHeader({ solved = false }) {
   return (
     <div
-      className={`hidden gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 ${COLS}`}
+      className={`hidden gap-2.5 border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 ${COLS}`}
     >
       <span>Case</span>
       <span>Machine</span>
@@ -56,7 +56,7 @@ export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve
       tabIndex={0}
       onClick={() => navigate(caseLink(c.id))}
       onKeyDown={(e) => e.key === 'Enter' && navigate(caseLink(c.id))}
-      className={`block cursor-pointer gap-3 px-5 py-4 hover:bg-brand-light/40 ${COLS}`}
+      className={`block cursor-pointer gap-2.5 px-4 py-4 hover:bg-brand-light/40 ${COLS}`}
     >
       <span className="flex items-center gap-2 lg:block">
         <span className="font-bold tabular-nums text-brand">{caseNo(c)}</span>
@@ -77,7 +77,7 @@ export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve
         ) : (
           <>
             {photos.slice(0, 2).map((m) => (
-              <Thumb key={m.id} url={urls[m.storage_path]} size="h-10 w-10" />
+              <Thumb key={m.id} url={urls[m.storage_path]} size="h-9 w-9" />
             ))}
             {photos.length > 2 && <span className="text-xs font-medium text-slate-500">+{photos.length - 2}</span>}
           </>
