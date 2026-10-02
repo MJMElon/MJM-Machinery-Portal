@@ -168,3 +168,20 @@ export const IconChat = (p) => (
     <path d="M7.5 9.5h9M7.5 12.5h6" />
   </svg>
 )
+
+// "Mission Control" style: one screen showing several windows at once.
+export const IconConsolidate = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+    <rect x="5.5" y="6.5" width="6" height="5" rx="1" />
+    <rect x="12.5" y="6.5" width="6" height="5" rx="1" />
+    <rect x="5.5" y="13.5" width="13" height="4" rx="1" />
+  </svg>
+)
+
+export const IconBuilding = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 10h4a1 1 0 0 1 1 1v10M2.5 21h19" />
+    <path d="M7.5 8h4M7.5 11.5h4M7.5 15h4M17.5 14v.01M17.5 17.5v.01" />
+  </svg>
+)

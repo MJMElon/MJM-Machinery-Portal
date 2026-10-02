@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Badge, Button, Card, EmptyState, SectionTitle, Spinner } from '../../components/ui.jsx'
+import { Button, Card, EmptyState, SectionTitle, Spinner } from '../../components/ui.jsx'
 import { IconChat, IconExternal, IconImage } from '../../components/icons.jsx'
-import {
-  ackBadge,
-  formatSender,
-  formatTime,
-  getMessage,
-  setReviewed,
-  signPaths,
-  statusBadge
-} from '../../lib/whatsapp.js'
+import { CaseBadges } from '../../components/CaseRow.jsx'
+import { companyByNumber, listCompanies } from '../../lib/companies.js'
+import { formatSender, formatTime, getMessage, setReviewed, signPaths } from '../../lib/whatsapp.js'
 
-// One WhatsApp message: the photo (with caption) or the text body.
+// One maintenance case: a WhatsApp photo (with caption) or text message.
 export default function MessageDetail() {
   const { id } = useParams()
   const [row, setRow] = useState(null)
   const [url, setUrl] = useState(null)
+  const [company, setCompany] = useState(undefined) // undefined = loading, null = not linked
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -28,6 +23,11 @@ export default function MessageDetail() {
       const r = await getMessage(id)
       setRow(r)
       setUrl(r?.storage_path ? (await signPaths([r.storage_path]))[r.storage_path] || null : null)
+      if (r) {
+        listCompanies()
+          .then((cos) => setCompany(companyByNumber(cos)(r.wa_from)))
+          .catch(() => setCompany(null))
+      }
     } catch (e) {
       setError(e.message || 'Could not load this record.')
     } finally {
@@ -61,14 +61,12 @@ export default function MessageDetail() {
   if (!row)
     return (
       <div className="space-y-3">
-        <PageHeader title="Message" />
+        <PageHeader title="Case" />
         <EmptyState title="Record not found" subtitle={error} />
       </div>
     )
 
   const isText = row.message_type === 'text'
-  const st = statusBadge(row.status)
-  const ack = ackBadge(row.ack_status)
 
   return (
     <div className="space-y-3 lg:grid lg:grid-cols-[1fr_360px] lg:gap-4 lg:space-y-0">
@@ -119,19 +117,15 @@ export default function MessageDetail() {
         {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
         <Card className="space-y-3 p-4">
-          <div className="flex flex-wrap gap-1.5">
-            <Badge color={st.color}>{st.label}</Badge>
-            {ack && <Badge color={ack.color}>{ack.label}</Badge>}
-            {row.reviewed_at && <Badge color="green">Reviewed</Badge>}
-          </div>
+          <CaseBadges row={row} />
           {(row.message_type === 'image' || isText) && row.status === 'saved' && (
             <Button full variant={row.reviewed_at ? 'secondary' : 'primary'} disabled={busy} onClick={toggleReviewed}>
-              {busy ? 'Saving…' : row.reviewed_at ? 'Mark as not reviewed' : 'Mark Reviewed'}
+              {busy ? 'Saving…' : row.reviewed_at ? 'Reopen case' : 'Mark Solved'}
             </Button>
           )}
           {row.reviewed_at && (
             <p className="text-xs text-slate-500">
-              Reviewed {formatTime(row.reviewed_at)}
+              Solved {formatTime(row.reviewed_at)}
               {row.reviewed_by_email ? ` by ${row.reviewed_by_email}` : ''}
             </p>
           )}
@@ -140,6 +134,23 @@ export default function MessageDetail() {
         <Card className="p-4">
           <SectionTitle>Details</SectionTitle>
           <dl className="space-y-2 text-sm">
+            <Row
+              label="Company"
+              value={
+                company === undefined ? (
+                  '…'
+                ) : company ? (
+                  company.name + (company.cmms_enabled ? '' : ' (CMMS 2 off)')
+                ) : (
+                  <span>
+                    Not linked ·{' '}
+                    <Link to="/settings" className="text-brand hover:underline">
+                      add this number to a company
+                    </Link>
+                  </span>
+                )
+              }
+            />
             <Row label="Sender" value={formatSender(row.wa_from)} />
             {row.sender_name && <Row label="WhatsApp name" value={row.sender_name} />}
             <Row label="Received" value={formatTime(row.received_at)} />

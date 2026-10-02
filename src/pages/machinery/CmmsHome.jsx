@@ -5,16 +5,16 @@ import { IconList, IconWrench } from '../../components/icons.jsx'
 
 const MACHTREK_URL = import.meta.env.VITE_MACHTREK_URL || 'https://mjmelon.github.io/MachTrek/'
 
-// Machinery System home. MachTrek is linked, not embedded — it stays its own
-// app and is not modified by this portal.
-export default function MachineryHome() {
+// CMMS 2 home. MachTrek is linked, not embedded — it stays its own app and is
+// not modified by this portal.
+export default function CmmsHome() {
   const navigate = useNavigate()
   return (
     <div>
-      <PageHeader title="Machinery System" onBack={() => navigate('/')} />
+      <PageHeader title="CMMS 2" onBack={() => navigate('/')} />
       <div className="mt-4">
         <TileGrid>
-          <ModuleTile to="/machinery/maintenance" label="Maintenance Request" Icon={IconWrench} />
+          <ModuleTile to="/cmms/work" label="Maintenance Work Manage" Icon={IconWrench} />
           <ModuleTile href={MACHTREK_URL} label="MachTrek" Icon={IconList} />
         </TileGrid>
       </div>

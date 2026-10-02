@@ -4,9 +4,11 @@ import Login from './auth/Login.jsx'
 import { Shell } from './components/Shell.jsx'
 import { Button, Card, Spinner } from './components/ui.jsx'
 import PortalHome from './pages/PortalHome.jsx'
-import MachineryHome from './pages/machinery/MachineryHome.jsx'
-import MaintenanceRequest from './pages/machinery/MaintenanceRequest.jsx'
+import CmmsHome from './pages/machinery/CmmsHome.jsx'
+import WorkManage from './pages/machinery/WorkManage.jsx'
+import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import MessageDetail from './pages/machinery/MessageDetail.jsx'
+import CompanySettings from './pages/settings/CompanySettings.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -19,11 +21,16 @@ export default function App() {
       <Route element={<RequirePortalAdmin />}>
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
-          <Route path="/machinery" element={<MachineryHome />} />
-          <Route path="/machinery/maintenance" element={<MaintenanceRequest />} />
+          <Route path="/settings" element={<CompanySettings />} />
+          <Route path="/cmms" element={<CmmsHome />} />
+          <Route path="/cmms/work" element={<WorkManage />} />
+          <Route path="/cmms/work/all" element={<WorkConsolidated />} />
+          <Route path="/cmms/work/case/:id" element={<MessageDetail />} />
+          {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
+          <Route path="/machinery" element={<Navigate to="/cmms" replace />} />
+          <Route path="/machinery/maintenance" element={<Navigate to="/cmms/work" replace />} />
+          <Route path="/machinery/photos" element={<Navigate to="/cmms/work" replace />} />
           <Route path="/machinery/maintenance/:id" element={<MessageDetail />} />
-          {/* Old Incoming Photos links */}
-          <Route path="/machinery/photos" element={<Navigate to="/machinery/maintenance" replace />} />
           <Route path="/machinery/photos/:id" element={<MessageDetail />} />
         </Route>
       </Route>

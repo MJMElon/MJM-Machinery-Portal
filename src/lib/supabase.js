@@ -19,3 +19,4 @@ export const supabase = supabaseEnabled
 export const WA_TABLE = 'machinery_whatsapp_messages'
 export const WA_BUCKET = 'machinery_whatsapp_photos'
 export const ADMIN_TABLE = 'machinery_portal_admins'
+export const COMPANY_TABLE = 'machinery_companies'

@@ -10,11 +10,14 @@ const LIST_COLUMNS =
 // photo caption or the text message body.
 export const INBOX_TYPES = ['image', 'text']
 
-/** filter: all | todo | reviewed | problems */
-export async function listMessages({ filter = 'todo', limit = 100 } = {}) {
+/**
+ * filter: pending | solved | problems | all
+ * A case is a saved text/photo; "solved" = marked reviewed (reviewed_at set).
+ */
+export async function listMessages({ filter = 'pending', limit = 200 } = {}) {
   let q = supabase.from(WA_TABLE).select(LIST_COLUMNS).order('received_at', { ascending: false }).limit(limit)
-  if (filter === 'todo') q = q.in('message_type', INBOX_TYPES).eq('status', 'saved').is('reviewed_at', null)
-  if (filter === 'reviewed') q = q.not('reviewed_at', 'is', null)
+  if (filter === 'pending') q = q.in('message_type', INBOX_TYPES).eq('status', 'saved').is('reviewed_at', null)
+  if (filter === 'solved') q = q.not('reviewed_at', 'is', null)
   if (filter === 'problems') q = q.or('status.eq.failed,status.eq.received,status.eq.processing,ack_status.eq.failed')
   const { data, error } = await q
   if (error) throw error
