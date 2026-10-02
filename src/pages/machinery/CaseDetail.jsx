@@ -227,7 +227,7 @@ export default function CaseDetail() {
                   ) : (
                     <span>
                       Not linked ·{' '}
-                      <Link to="/settings" className="text-brand hover:underline">
+                      <Link to="/admin/companies" className="text-brand hover:underline">
                         add this number to a company
                       </Link>
                     </span>

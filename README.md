@@ -1,9 +1,10 @@
 # MJM Machinery Portal
 
-Company portal (HQ admin login):
+Company portal (HQ admin login). The **company switcher** (top right) picks the company you work in; the main page shows that company's modules:
 
-- **CMMS 2** → **Maintenance Work Manage** (WhatsApp texts + photos as cases, Pending / Solved tabs, per company; the consolidate button shows every company's pending cases at once) and a link to **MachTrek**.
-- **Company Settings** → create companies, switch on CMMS 2 access, and list each company's staff WhatsApp numbers. A WhatsApp case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
+- **CMMS 2** (only for companies with CMMS 2 access) → **Maintenance Work Manage** (WhatsApp texts + photos grouped into numbered cases, Pending / Solved; the consolidate button shows every company's pending cases at once) and a link to **MachTrek**.
+- **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
+- **Companies** (top right, **super admins only**) → create companies, switch on CMMS 2 access, and list each company's staff WhatsApp numbers. A case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
 
 MachTrek is a separate app and is **not modified** by this repo. Both use the **same Supabase project**; everything here uses new, `machinery_`-prefixed objects.
 
@@ -51,7 +52,12 @@ Portal: CMMS 2 → Maintenance Work Manage lists cases (Case No. · Machine · P
 ### 1. Database (once)
 Edit the e-mail in section 5 of `supabase/migrations/20260929120000_whatsapp_photo_inbox.sql`, then paste the whole file into **Supabase → SQL Editor** and Run. The final `select` must list your admin. Safe to re-run.
 
-Then do the same, in order, with `supabase/migrations/20261002120000_companies.sql` (companies for Settings / CMMS 2) and `supabase/migrations/20261003120000_cases.sql` (cases; also puts earlier messages into cases). All are safe to re-run.
+Then do the same, in order, with:
+- `supabase/migrations/20261002120000_companies.sql` (companies)
+- `supabase/migrations/20261003120000_cases.sql` (cases; also puts earlier messages into cases)
+- `supabase/migrations/20261004120000_company_admin.sql` (super admins, company area, blocks). The first run makes every existing portal admin a super admin; later admins are added as normal admins (`update machinery_portal_admins set is_super_admin = true where email = '…'` to promote).
+
+All are safe to re-run.
 
 ### 2. Edge Function (no terminal)
 Deployed by GitHub Actions (`.github/workflows/deploy-webhook.yml`).

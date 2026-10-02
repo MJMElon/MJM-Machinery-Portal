@@ -9,6 +9,7 @@ import WorkManage from './pages/machinery/WorkManage.jsx'
 import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import CompanySettings from './pages/settings/CompanySettings.jsx'
+import ManageCompanies from './pages/admin/ManageCompanies.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -22,6 +23,7 @@ export default function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
           <Route path="/settings" element={<CompanySettings />} />
+          <Route path="/admin/companies" element={<ManageCompanies />} />
           <Route path="/cmms" element={<CmmsHome />} />
           <Route path="/cmms/work" element={<WorkManage />} />
           <Route path="/cmms/work/all" element={<WorkConsolidated />} />

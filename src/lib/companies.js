@@ -1,9 +1,10 @@
-import { supabase, COMPANY_TABLE } from './supabase.js'
+import { supabase, BLOCK_TABLE, COMPANY_TABLE } from './supabase.js'
 
 // Companies are managed in Company Settings. A WhatsApp message belongs to the
 // company whose `whatsapp_numbers` list contains the sender's number.
 
-const COLUMNS = 'id, name, cmms_enabled, whatsapp_numbers'
+// '*' so the list still loads before newer columns (area_ha) exist.
+const COLUMNS = '*'
 
 export const digitsOnly = (s) => String(s ?? '').replace(/\D/g, '')
 
@@ -49,8 +50,38 @@ export function companyByNumber(companies) {
   return (waFrom) => map.get(digitsOnly(waFrom)) || null
 }
 
+// ---- blocks of a company ---------------------------------------------------
+
+export async function listBlocks(companyId) {
+  const { data, error } = await supabase
+    .from(BLOCK_TABLE)
+    .select('id, name, area_ha, notes')
+    .eq('company_id', companyId)
+    .order('name')
+  if (error) throw friendly(error)
+  return data || []
+}
+
+export async function createBlock(companyId, block) {
+  const { error } = await supabase.from(BLOCK_TABLE).insert({ company_id: companyId, ...block })
+  if (error) throw friendly(error)
+}
+
+export async function updateBlock(id, patch) {
+  const { error } = await supabase.from(BLOCK_TABLE).update(patch).eq('id', id)
+  if (error) throw friendly(error)
+}
+
+export async function deleteBlock(id) {
+  const { error } = await supabase.from(BLOCK_TABLE).delete().eq('id', id)
+  if (error) throw friendly(error)
+}
+
 function friendly(error) {
-  if (error?.code === '23505') return new Error('A company with this name already exists.')
-  if (error?.code === '42P01') return new Error('Company table missing. Run the companies SQL migration in Supabase.')
+  if (error?.code === '23505') return new Error('That name is already used.')
+  if (error?.code === '42501') return new Error(error.message || 'Not allowed.')
+  if (error?.code === '42P01' || error?.code === 'PGRST205' || error?.code === '42703' || error?.code === 'PGRST204') {
+    return new Error('Database not up to date. Run the latest SQL migrations in Supabase (see README).')
+  }
   return error
 }

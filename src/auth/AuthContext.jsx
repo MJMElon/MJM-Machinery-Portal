@@ -9,6 +9,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [access, setAccess] = useState('unknown') // unknown | granted | denied | error
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -38,11 +39,12 @@ export function AuthProvider({ children }) {
     setAccess('unknown')
     supabase
       .from(ADMIN_TABLE)
-      .select('user_id')
+      .select('*') // '*' so this still works before the super-admin column exists
       .eq('user_id', uid)
       .maybeSingle()
       .then(({ data, error }) => {
         if (!active) return
+        setIsSuperAdmin(Boolean(data?.is_super_admin))
         if (error) setAccess('error')
         else setAccess(data ? 'granted' : 'denied')
       })
@@ -66,7 +68,9 @@ export function AuthProvider({ children }) {
 
   const user = session?.user ? { id: session.user.id, email: session.user.email || '' } : null
 
-  return <AuthContext.Provider value={{ ready, user, access, login, logout }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ ready, user, access, isSuperAdmin, login, logout }}>{children}</AuthContext.Provider>
+  )
 }
 
 export const useAuth = () => useContext(AuthContext)

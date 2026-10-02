@@ -1,67 +1,42 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card, Select, Spinner } from '../../components/ui.jsx'
+import { Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconConsolidate, IconRefresh, IconWarning } from '../../components/icons.jsx'
 import { CaseTableHeader, CaseTableRow } from '../../components/CaseTable.jsx'
 import { formatSender, formatTime } from '../../lib/whatsapp.js'
 import { UNASSIGNED, useCases } from '../../lib/useCases.js'
+import { useAuth } from '../../auth/AuthContext.jsx'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 
 const TABS = [
   { key: 'pending', label: 'Pending case' },
   { key: 'solved', label: 'Solved case' }
 ]
-const LAST_COMPANY_KEY = 'cmms.company'
 
 // Maintenance Work Manage: one company's cases, split into Pending / Solved.
 export default function WorkManage() {
-  const [params, setParams] = useSearchParams()
+  const { isSuperAdmin } = useAuth()
+  const { current } = useCompany()
   const [tab, setTab] = useState('pending')
   const [showProblems, setShowProblems] = useState(false)
-  const { enabled, pending, solved, problems, urls, loading, error, reload, forCompany } = useCases()
+  const { pending, solved, problems, urls, loading, error, reload, forCompany } = useCases()
 
-  // Company options: companies with CMMS 2 access, then senders not linked to any company.
-  const options = useMemo(() => {
-    const list = enabled.map((c) => ({ key: c.id, label: c.name }))
-    const hasUnassigned = forCompany([...pending, ...solved], UNASSIGNED).length > 0
-    if (hasUnassigned || list.length === 0) list.push({ key: UNASSIGNED, label: 'Unassigned numbers' })
-    return list
-  }, [enabled, pending, solved, forCompany])
-
-  const wanted = params.get('company') || readLast()
-  const company = options.find((o) => o.key === wanted) || options[0]
-
-  useEffect(() => {
-    if (company) writeLast(company.key)
-  }, [company])
-
-  const pendingRows = company ? forCompany(pending, company.key) : []
-  const solvedRows = company ? forCompany(solved, company.key) : []
+  // The company chosen in the top bar; its cases only if it has CMMS 2.
+  const key = current?.cmms_enabled ? current.id : null
+  const pendingRows = key ? forCompany(pending, key) : []
+  const solvedRows = key ? forCompany(solved, key) : []
   const rows = tab === 'pending' ? pendingRows : solvedRows
+  const unassigned = forCompany(pending, UNASSIGNED).length
 
   return (
     <div className="space-y-4">
       <PageHeader
         backTo="/"
         backLabel="Back to main page"
-        title={company?.label}
+        title={current?.name}
         right={
           <div className="flex items-center gap-2">
-            {options.length > 1 && (
-              <div className="w-56 sm:w-72">
-                <Select
-                  aria-label="Company"
-                  value={company?.key}
-                  onChange={(e) => setParams({ company: e.target.value }, { replace: true })}
-                >
-                  {options.map((o) => (
-                    <option key={o.key} value={o.key}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
             <Button variant="secondary" onClick={() => reload()} aria-label="Refresh" className="w-12 px-0">
               <IconRefresh width={18} height={18} />
             </Button>
@@ -79,12 +54,27 @@ export default function WorkManage() {
 
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
-      {company?.key === UNASSIGNED && !loading && (
+      {current && !current.cmms_enabled && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-          These senders are not linked to a company yet. Add their WhatsApp numbers to a company in{' '}
-          <Link to="/settings" className="font-medium underline">
-            Settings
+          CMMS 2 is not enabled for {current.name}. A super admin can turn it on under Companies (top right).
+        </p>
+      )}
+
+      {unassigned > 0 && !loading && (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          {unassigned} pending case{unassigned > 1 ? 's' : ''} came from WhatsApp numbers not linked to any company.{' '}
+          <Link to="/cmms/work/all" className="font-medium underline">
+            View them
           </Link>
+          {isSuperAdmin && (
+            <>
+              {' '}
+              or{' '}
+              <Link to="/admin/companies" className="font-medium underline">
+                link the numbers to a company
+              </Link>
+            </>
+          )}
           .
         </p>
       )}
@@ -176,20 +166,4 @@ export default function WorkManage() {
       )}
     </div>
   )
-}
-
-function readLast() {
-  try {
-    return localStorage.getItem(LAST_COMPANY_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeLast(key) {
-  try {
-    localStorage.setItem(LAST_COMPANY_KEY, key)
-  } catch {
-    // ignore (private mode)
-  }
 }
