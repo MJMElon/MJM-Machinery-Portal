@@ -93,9 +93,10 @@ function TopBar({ title }) {
               to="/admin/companies"
               title="Super admin: manage companies"
               aria-label="Super admin: manage companies"
-              className="shrink-0 transition hover:scale-110 hover:drop-shadow-md"
+              className="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200"
             >
               <SuperAdminIcon />
+              <span className="hidden lg:inline">Admin</span>
             </Link>
           )}
           <button
@@ -185,7 +186,7 @@ function CompanySwitcher({ wide = false }) {
 // Super admin button: a hero-style shield — red rim, yellow field, bold red S.
 function SuperAdminIcon() {
   return (
-    <svg viewBox="0 0 44 36" className="h-10 w-12" aria-hidden="true">
+    <svg viewBox="0 0 44 36" className="h-[17px] w-[21px]" aria-hidden="true">
       <defs>
         <linearGradient id="superadmin-red" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#ef4444" />
