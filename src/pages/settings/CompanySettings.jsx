@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, Field, Spinner, TextArea, TextInput } from '../../components/ui.jsx'
 import { IconBuilding, IconPlus, IconTrash } from '../../components/icons.jsx'
@@ -8,7 +7,6 @@ import { createCompany, deleteCompany, listCompanies, parseNumbers, updateCompan
 // Create companies, give them CMMS 2 access, and list the WhatsApp numbers
 // whose messages belong to each company.
 export default function CompanySettings() {
-  const navigate = useNavigate()
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -51,7 +49,12 @@ export default function CompanySettings() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Company Settings" subtitle="Companies and their module access" onBack={() => navigate('/')} />
+      <PageHeader
+        backTo="/"
+        backLabel="Back to main page"
+        title="Companies"
+        subtitle="Create companies, turn on module access, and link their WhatsApp numbers"
+      />
 
       <Card className="p-4 sm:p-5">
         <form onSubmit={add} className="flex flex-col gap-3 sm:flex-row sm:items-end">

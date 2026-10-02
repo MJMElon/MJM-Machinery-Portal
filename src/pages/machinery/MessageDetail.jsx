@@ -61,7 +61,7 @@ export default function MessageDetail() {
   if (!row)
     return (
       <div className="space-y-3">
-        <PageHeader title="Case" />
+        <PageHeader backLabel="Back" />
         <EmptyState title="Record not found" subtitle={error} />
       </div>
     )
@@ -71,7 +71,11 @@ export default function MessageDetail() {
   return (
     <div className="space-y-3 lg:grid lg:grid-cols-[1fr_360px] lg:gap-4 lg:space-y-0">
       <div className="space-y-3 lg:col-span-2">
-        <PageHeader title={row.sender_name || formatSender(row.wa_from)} subtitle={formatTime(row.received_at)} />
+        <PageHeader
+          backLabel="Back"
+          title={row.sender_name || formatSender(row.wa_from)}
+          subtitle={formatTime(row.received_at)}
+        />
       </div>
 
       {isText ? (

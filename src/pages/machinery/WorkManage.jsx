@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, EmptyState, Select, Spinner } from '../../components/ui.jsx'
 import { IconConsolidate, IconRefresh, IconWarning } from '../../components/icons.jsx'
@@ -14,7 +14,6 @@ const LAST_COMPANY_KEY = 'cmms.company'
 
 // Maintenance Work Manage: one company's cases, split into Pending / Solved.
 export default function WorkManage() {
-  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [tab, setTab] = useState('pending')
   const [showProblems, setShowProblems] = useState(false)
@@ -42,9 +41,9 @@ export default function WorkManage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Maintenance Work Manage"
-        subtitle={company ? company.label : 'CMMS 2'}
-        onBack={() => navigate('/cmms')}
+        backTo="/cmms"
+        backLabel="Back to CMMS 2"
+        title={company?.label}
         right={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="secondary" onClick={() => reload()} aria-label="Refresh">
@@ -108,7 +107,7 @@ export default function WorkManage() {
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
           These senders are not linked to a company yet. Add their WhatsApp numbers to a company in{' '}
           <Link to="/settings" className="font-medium underline">
-            Company Settings
+            Settings
           </Link>
           .
         </p>

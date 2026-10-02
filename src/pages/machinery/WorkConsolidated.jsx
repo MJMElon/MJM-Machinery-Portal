@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, Spinner } from '../../components/ui.jsx'
 import { IconBuilding, IconChevron, IconRefresh } from '../../components/icons.jsx'
@@ -8,7 +8,6 @@ import { UNASSIGNED, useCases } from '../../lib/useCases.js'
 // All companies at a glance (like Mission Control): one section per company
 // with CMMS 2 access, each listing its pending cases.
 export default function WorkConsolidated() {
-  const navigate = useNavigate()
   const { enabled, pending, urls, loading, error, reload, forCompany } = useCases()
 
   const sections = enabled.map((c) => ({ key: c.id, name: c.name, rows: forCompany(pending, c.id) }))
@@ -19,13 +18,14 @@ export default function WorkConsolidated() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="All Companies"
+        backTo="/cmms/work"
+        backLabel="Back to Work Manage"
+        title="Pending cases"
         subtitle={
           loading
-            ? 'Pending cases'
+            ? 'Loading…'
             : `${total} pending case${total === 1 ? '' : 's'} · ${enabled.length} compan${enabled.length === 1 ? 'y' : 'ies'}`
         }
-        onBack={() => navigate('/cmms/work')}
         right={
           <Button size="sm" variant="secondary" onClick={() => reload()} aria-label="Refresh">
             <IconRefresh width={18} height={18} />
@@ -42,10 +42,10 @@ export default function WorkConsolidated() {
       ) : sections.length === 0 ? (
         <EmptyState
           title="No companies with CMMS 2 yet"
-          subtitle="Create a company and turn on CMMS 2 access in Company Settings."
+          subtitle="Create a company and turn on CMMS 2 access in Settings."
           action={
             <Link to="/settings" className="font-medium text-brand hover:underline">
-              Open Company Settings
+              Open Settings
             </Link>
           }
         />

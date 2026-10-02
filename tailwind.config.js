@@ -11,6 +11,9 @@ export default {
           light: '#eff6ff'
         }
       },
+      fontFamily: {
+        sans: ["'Plus Jakarta Sans'", 'system-ui', '-apple-system', "'Segoe UI'", 'Roboto', 'sans-serif']
+      },
       maxWidth: {
         app: '520px'
       }
