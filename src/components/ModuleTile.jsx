@@ -29,15 +29,12 @@ const SIZES = {
 export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, size = 'md' }) {
   const z = SIZES[size]
   const frame = `group relative flex aspect-square w-full flex-col items-center justify-center overflow-hidden ${z.round} border border-slate-200/80 bg-white text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-300/50 active:translate-y-0`
+  // Art: a shaped picture button with no box — the picture's outline is the button.
   const body = Art ? (
-    <span className={frame}>
-      <Art className="absolute inset-0 h-full w-full transition duration-300 group-hover:scale-[1.04]" />
+    <span className="group relative flex w-full flex-col items-center">
+      <Art className="h-auto w-full transition duration-300 [filter:drop-shadow(0_0_0_transparent)] group-hover:-translate-y-1 group-hover:[filter:drop-shadow(0_10px_12px_rgb(59_36_18/0.25))]" />
       <span className="sr-only">{label}</span>
-      {note && (
-        <span className="absolute inset-x-2 bottom-2 rounded-full bg-white/90 py-0.5 text-[11px] font-semibold text-slate-600">
-          {note}
-        </span>
-      )}
+      {note && <span className="-mt-1 text-[11px] font-semibold text-slate-500">{note}</span>}
     </span>
   ) : (
     <span className={`${frame} ${z.pad}`}>
@@ -52,10 +49,11 @@ export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, 
       {badge}
     </span>
   )
-  const cls = `block ${z.round} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${z.tile}`
+  const tileW = Art ? 'sm:w-[270px]' : z.tile
+  const cls = `block ${Art ? 'rounded-2xl' : z.round} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${tileW}`
   if (disabled) {
     return (
-      <div className={`select-none opacity-50 grayscale ${z.tile}`} aria-disabled="true">
+      <div className={`select-none opacity-50 grayscale ${tileW}`} aria-disabled="true">
         {body}
       </div>
     )
@@ -104,7 +102,7 @@ export function TileGrid({ children, orderKey }) {
   const byId = Object.fromEntries(items.map((c) => [String(c.key), c]))
   return (
     <div>
-      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-5">
+      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-center sm:gap-5">
         {sorted.map((id) => (
           <div
             key={id}
