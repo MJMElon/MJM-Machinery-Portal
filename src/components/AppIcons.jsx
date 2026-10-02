@@ -2,7 +2,6 @@
 // One shared look for every tile on the portal.
 
 const TONES = {
-  cmms: ['#4f46e5', '#0ea5e9'], // indigo → sky
   work: ['#f97316', '#f59e0b'], // orange → amber
   machtrek: ['#059669', '#14b8a6'], // emerald → teal
   settings: ['#334155', '#64748b'], // slate
@@ -30,39 +29,6 @@ function Tile({ tone, children, className = '', label }) {
 }
 
 const line = { fill: 'none', stroke: '#fff', strokeLinecap: 'round', strokeLinejoin: 'round' }
-
-// CMMS 2: an excavator arm scooping a spark (the "gem"), with the SI mark.
-export function CmmsIcon({ className }) {
-  return (
-    <Tile tone="cmms" className={className} label="CMMS 2">
-      {/* boom + stick */}
-      <path d="M11 33 L25 14 L41 24" {...line} strokeWidth="4.5" />
-      {/* bucket */}
-      <path
-        d="M38 22 L49 22 L49 30 Q49 35 43 35 L40 35 Z"
-        fill="#fff"
-        stroke="#fff"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <circle cx="25" cy="14" r="2.6" fill="#4f46e5" stroke="#fff" strokeWidth="2" />
-      {/* spark / gem being dug out */}
-      <path d="M46 38 L48.4 44.6 L55 47 L48.4 49.4 L46 56 L43.6 49.4 L37 47 L43.6 44.6 Z" fill="#fde68a" />
-      {/* SI */}
-      <text
-        x="9"
-        y="55"
-        fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
-        fontWeight="800"
-        fontSize="20"
-        letterSpacing="-0.5"
-        fill="#fff"
-      >
-        SI
-      </text>
-    </Tile>
-  )
-}
 
 // Maintenance Work Manage: a notebook with a check.
 export function WorkIcon({ className }) {
@@ -158,8 +124,9 @@ export function UsersIcon({ className }) {
   )
 }
 
-// CMMS 2 tile picture: a brown soil mountain with the white "CMMS 2" sign on
-// top, an excavator working a bench and two dump lorries on the haul road.
+// CMMS 2 tile picture: a soil mountain under contract work, with the white
+// "CMMS 2" sign on the summit, an excavator digging a bench and two dump lorries
+// on the haul road. Modern flat illustration with light/shade and haze.
 export function CmmsScene({ className }) {
   return (
     <svg
@@ -171,96 +138,219 @@ export function CmmsScene({ className }) {
     >
       <defs>
         <linearGradient id="cmms-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#7cc4ff" />
-          <stop offset="1" stopColor="#e0f2fe" />
+          <stop offset="0" stopColor="#7fb8f5" />
+          <stop offset="0.55" stopColor="#cfe4fb" />
+          <stop offset="1" stopColor="#fbe3c8" />
         </linearGradient>
-        <linearGradient id="cmms-soil" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#b9743a" />
-          <stop offset="1" stopColor="#7c4a22" />
+        <radialGradient id="cmms-sun" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="#fff7d6" />
+          <stop offset="0.45" stopColor="#ffe9a8" stopOpacity="0.9" />
+          <stop offset="1" stopColor="#ffe9a8" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="cmms-lit" x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor="#d9a066" />
+          <stop offset="1" stopColor="#b06d36" />
         </linearGradient>
+        <linearGradient id="cmms-shade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#9c6131" />
+          <stop offset="1" stopColor="#6f4220" />
+        </linearGradient>
+        <linearGradient id="cmms-cut" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#b8763c" />
+          <stop offset="1" stopColor="#94592b" />
+        </linearGradient>
+        <linearGradient id="cmms-road" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7a5232" />
+          <stop offset="1" stopColor="#4f331c" />
+        </linearGradient>
+        <linearGradient id="cmms-yel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffd34d" />
+          <stop offset="1" stopColor="#f2a500" />
+        </linearGradient>
+        <linearGradient id="cmms-glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#9fd3ff" />
+          <stop offset="1" stopColor="#2f4a6e" />
+        </linearGradient>
+        <filter id="cmms-soft" x="-20%" y="-20%" width="140%" height="160%">
+          <feDropShadow dx="0" dy="1.2" stdDeviation="1.1" floodColor="#3b2412" floodOpacity="0.35" />
+        </filter>
+        <filter id="cmms-blur">
+          <feGaussianBlur stdDeviation="1.4" />
+        </filter>
       </defs>
+
+      {/* sky + sun */}
       <rect width="200" height="200" fill="url(#cmms-sky)" />
-      <circle cx="172" cy="30" r="13" fill="#fef3c7" />
-      {/* far hill */}
-      <path d="M0 132 Q40 104 78 118 T160 112 T200 120 V200 H0Z" fill="#d6a46e" opacity="0.55" />
-      {/* main soil mountain with dug benches on the right */}
+      <circle cx="160" cy="38" r="26" fill="url(#cmms-sun)" />
+      <circle cx="160" cy="38" r="8.5" fill="#fff8df" />
+      {/* soft clouds */}
+      <g fill="#fff" opacity="0.75">
+        <ellipse cx="34" cy="34" rx="16" ry="4.5" />
+        <ellipse cx="44" cy="31" rx="9" ry="4.5" />
+        <ellipse cx="128" cy="20" rx="11" ry="3" />
+      </g>
+
+      {/* distant hills (atmospheric) */}
+      <path d="M-5 128 C20 112 42 104 64 110 S108 98 130 106 S176 100 205 110 V200 H-5Z" fill="#b9c3dc" opacity="0.7" />
+      <path d="M-5 140 C30 124 58 122 80 128 S140 118 205 128 V200 H-5Z" fill="#cdb39a" opacity="0.65" />
+      {/* distant oil palms */}
+      <g fill="none" stroke="#6f8f6a" strokeLinecap="round" opacity="0.8">
+        <g transform="translate(22 124)">
+          <path d="M0 0 V-12" strokeWidth="1.4" />
+          <path
+            d="M0 -12 q-6 -2 -9 2 M0 -12 q6 -2 9 2 M0 -12 q-4 -5 -9 -5 M0 -12 q4 -5 9 -5 M0 -12 q0 -4 0 -6"
+            strokeWidth="1.6"
+          />
+        </g>
+        <g transform="translate(36 128) scale(0.8)">
+          <path d="M0 0 V-12" strokeWidth="1.4" />
+          <path
+            d="M0 -12 q-6 -2 -9 2 M0 -12 q6 -2 9 2 M0 -12 q-4 -5 -9 -5 M0 -12 q4 -5 9 -5 M0 -12 q0 -4 0 -6"
+            strokeWidth="1.6"
+          />
+        </g>
+        <g transform="translate(184 126) scale(0.9)">
+          <path d="M0 0 V-12" strokeWidth="1.4" />
+          <path
+            d="M0 -12 q-6 -2 -9 2 M0 -12 q6 -2 9 2 M0 -12 q-4 -5 -9 -5 M0 -12 q4 -5 9 -5 M0 -12 q0 -4 0 -6"
+            strokeWidth="1.6"
+          />
+        </g>
+      </g>
+
+      {/* main soil mountain: lit face */}
+      <path d="M-5 168 C22 146 52 104 82 70 Q95 55 108 63 C134 80 166 114 205 134 V200 H-5Z" fill="url(#cmms-lit)" />
+      {/* shadow face (right of the ridge) */}
       <path
-        d="M-2 170 C20 150 42 110 70 82 L92 60 L108 60 L124 78 L124 92 L144 92 L144 108 L166 108 L166 124 L188 124 C194 134 200 140 202 146 V200 H-2Z"
-        fill="url(#cmms-soil)"
+        d="M95 58 Q102 57 108 63 C134 80 166 114 205 134 V200 H122 C120 158 112 106 95 58Z"
+        fill="url(#cmms-shade)"
       />
-      <path d="M124 92 H144 M144 108 H166 M166 124 H188" stroke="#d99a5c" strokeWidth="3" strokeLinecap="round" />
-      <path
-        d="M40 120 q10 -6 18 -2 M56 98 q8 -5 14 -1"
-        stroke="#a5652f"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* white sign on the summit */}
-      <rect x="86" y="44" width="3" height="18" fill="#e2e8f0" />
-      <rect x="111" y="44" width="3" height="18" fill="#e2e8f0" />
-      <rect x="58" y="20" width="84" height="28" rx="4" fill="#fff" stroke="#cbd5e1" strokeWidth="1" />
+      {/* bench cut into the slope: fresh face + level floor */}
+      <path d="M116 72 C140 88 160 102 184 117 L184 121 L122 121 Q114 98 116 72Z" fill="url(#cmms-cut)" />
+      <path d="M116 72 C140 88 160 102 184 117" stroke="#e2ad74" strokeWidth="1" fill="none" opacity="0.7" />
+      <path d="M112 121 H186" stroke="#7a4a24" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+      <path d="M112 122.5 H186" stroke="#f0c18e" strokeWidth="0.8" opacity="0.5" />
+      {/* slope texture */}
+      <g stroke="#f0c18e" strokeWidth="0.9" fill="none" strokeLinecap="round" opacity="0.45">
+        <path d="M40 132 q14 -10 26 -8" />
+        <path d="M58 108 q10 -8 18 -7" />
+        <path d="M28 152 q16 -8 30 -6" />
+      </g>
+      <g fill="#7d4c26" opacity="0.35">
+        <circle cx="70" cy="122" r="1" />
+        <circle cx="52" cy="140" r="0.8" />
+        <circle cx="88" cy="96" r="0.9" />
+        <circle cx="140" cy="140" r="1" />
+        <circle cx="160" cy="152" r="0.8" />
+        <circle cx="130" cy="160" r="1.1" />
+      </g>
+
+      {/* summit sign */}
+      <g filter="url(#cmms-soft)">
+        <rect x="84.5" y="44" width="2.2" height="16" rx="0.6" fill="#64748b" />
+        <rect x="105.3" y="44" width="2.2" height="16" rx="0.6" fill="#64748b" />
+        <rect x="62" y="22" width="68" height="25" rx="3.5" fill="#ffffff" />
+      </g>
+      <rect x="62" y="22" width="68" height="4" rx="2" fill="#2563eb" opacity="0.9" />
       <text
-        x="100"
-        y="40.5"
+        x="96"
+        y="41.5"
         textAnchor="middle"
         fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
         fontWeight="800"
-        fontSize="17"
-        letterSpacing="0.5"
+        fontSize="13.5"
+        letterSpacing="0.4"
         fill="#1e3a8a"
       >
         CMMS 2
       </text>
-      {/* excavator on the middle bench, digging the slope */}
-      <g transform="translate(150 81) scale(1.65)">
-        <rect x="-2" y="10" width="22" height="6" rx="3" fill="#1f2937" />
-        <path
-          d="M0 10 V3 Q0 1 2 1 H9 V-4 Q9 -6 11 -6 H15 L18 1 H19 Q20 1 20 3 V10Z"
-          fill="#f59e0b"
-          stroke="#b45309"
-          strokeWidth="0.8"
-        />
-        <path d="M11 -4.5 H14.5 L16.3 0.5 H11Z" fill="#e0f2fe" />
-        <path
-          d="M2 2 L-8 -12 L-16 -3"
-          stroke="#f59e0b"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        <path d="M-15 -4 L-21 -6 L-22 0 Q-19 3 -15 1Z" fill="#475569" />
-      </g>
-      {/* haul road */}
-      <path d="M-2 176 Q100 166 202 178 V200 H-2Z" fill="#5b3a1d" />
-      <path
-        d="M8 186 H26 M44 184 H62 M80 183 H98 M116 183 H134 M152 184 H170 M188 186 H200"
-        stroke="#a87b4f"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      {/* two dump lorries */}
-      <Lorry x={8} y={150} />
-      <Lorry x={86} y={147} flip />
-    </svg>
-  )
-}
 
-function Lorry({ x, y, flip = false }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(1.4)${flip ? ' scale(-1 1) translate(-40 0)' : ''}`}>
-      {/* soil load + dump body */}
-      <path d="M2 4 Q10 -4 20 2 Q24 -1 26 4Z" fill="#b9743a" />
-      <path d="M0 4 H27 L25 14 H2Z" fill="#f59e0b" stroke="#b45309" strokeWidth="0.8" />
-      {/* cab */}
-      <path d="M28 6 H35 L39 11 V16 H28Z" fill="#fbbf24" stroke="#b45309" strokeWidth="0.8" />
-      <path d="M30 7.5 H34 L36.6 11 H30Z" fill="#e0f2fe" />
-      <rect x="0" y="14" width="39" height="3" rx="1" fill="#374151" />
-      <circle cx="8" cy="19" r="3.6" fill="#1f2937" />
-      <circle cx="8" cy="19" r="1.4" fill="#9ca3af" />
-      <circle cx="31" cy="19" r="3.6" fill="#1f2937" />
-      <circle cx="31" cy="19" r="1.4" fill="#9ca3af" />
-    </g>
+      {/* excavator on the cut, digging up-slope (faces left) */}
+      <g transform="translate(138 98.5)">
+        <ellipse cx="16" cy="23" rx="20" ry="2.6" fill="#3b2412" opacity="0.3" filter="url(#cmms-blur)" />
+        {/* tracks */}
+        <rect x="0" y="15" width="32" height="7.5" rx="3.75" fill="#2b2f36" />
+        <g fill="#5b6270">
+          <circle cx="5" cy="18.7" r="1.6" />
+          <circle cx="11.5" cy="18.7" r="1.3" />
+          <circle cx="18" cy="18.7" r="1.3" />
+          <circle cx="24.5" cy="18.7" r="1.3" />
+          <circle cx="27.6" cy="18.7" r="1.6" />
+        </g>
+        {/* house */}
+        <path d="M5 15 V7 Q5 5 7 5 H29 Q32 5 32 8 V15Z" fill="url(#cmms-yel)" />
+        <rect x="25" y="5" width="7" height="10" rx="1.5" fill="#e09400" />
+        <path d="M5 11 H32" stroke="#c98200" strokeWidth="0.7" />
+        {/* cab */}
+        <path d="M6 5 V-4 Q6 -6 8 -6 H14 Q16 -6 16.6 -4 L18 5Z" fill="url(#cmms-yel)" />
+        <path d="M7.6 -4.4 H13.6 L15 3 H7.6Z" fill="url(#cmms-glass)" />
+        <path d="M8.4 -3.6 L10.6 -3.6 L8.4 0Z" fill="#fff" opacity="0.55" />
+        {/* boom + stick with hydraulic cylinders */}
+        <path d="M8 6 L-6 -16 L-3 -18 L12 5Z" fill="url(#cmms-yel)" />
+        <path d="M3 3 L-4 -10" stroke="#9aa3b2" strokeWidth="1.3" strokeLinecap="round" />
+        <path d="M-5 -17 L-17 -3 L-14.5 -1.5 L-2.5 -15Z" fill="#f2b21c" />
+        <circle cx="-4.5" cy="-17" r="1.7" fill="#2b2f36" />
+        {/* bucket biting the slope */}
+        <path d="M-15 -3.5 L-24 -6.5 Q-26.5 -1 -22 2.5 L-14.5 0.5Z" fill="#4b5563" />
+        <path
+          d="M-24 -6.5 L-26 -5.6 M-25.4 -3.2 L-27.4 -2.6 M-24.2 0 L-26 0.9"
+          stroke="#2b2f36"
+          strokeWidth="0.9"
+          strokeLinecap="round"
+        />
+      </g>
+      {/* dust */}
+      <g fill="#f4dcc0" opacity="0.7" filter="url(#cmms-blur)">
+        <circle cx="111" cy="94" r="3.4" />
+        <circle cx="107" cy="98" r="2.5" />
+        <circle cx="115" cy="90" r="2.1" />
+      </g>
+
+      {/* haul road */}
+      <path d="M-5 170 C50 160 130 162 205 174 V200 H-5Z" fill="url(#cmms-road)" />
+      <path d="M-5 170 C50 160 130 162 205 174" stroke="#a5784d" strokeWidth="1.2" fill="none" opacity="0.8" />
+      <g stroke="#8d6440" strokeWidth="0.9" fill="none" strokeDasharray="3 2.5" opacity="0.8">
+        <path d="M-5 182 C60 172 130 175 205 184" />
+        <path d="M-5 189 C60 180 130 183 205 191" />
+      </g>
+
+      {/* dump lorry 1 (heading right, loaded) */}
+      <g transform="translate(18 158)">
+        <ellipse cx="22" cy="20" rx="24" ry="2.4" fill="#2a1a0d" opacity="0.35" filter="url(#cmms-blur)" />
+        <path d="M1 4 Q9 -4.5 18 1.5 Q23 -1.5 28 4Z" fill="#b8763c" />
+        <path d="M3 2 Q10 -2.5 16 1" stroke="#d9a066" strokeWidth="0.9" fill="none" />
+        <path d="M0 4 H29 L27 13.5 H2Z" fill="url(#cmms-yel)" />
+        <path d="M2 8.5 H28" stroke="#d48a00" strokeWidth="0.8" />
+        <path d="M30 6 H37.5 Q39 6 40 7.5 L43 12 V16 H30Z" fill="url(#cmms-yel)" />
+        <path d="M32 7.6 H37 L39.8 11.8 H32Z" fill="url(#cmms-glass)" />
+        <rect x="0" y="13.5" width="44" height="3" rx="1.2" fill="#2b2f36" />
+        <g>
+          <circle cx="8" cy="18" r="4" fill="#1f2329" />
+          <circle cx="8" cy="18" r="1.6" fill="#9aa3b2" />
+          <circle cx="17" cy="18" r="4" fill="#1f2329" />
+          <circle cx="17" cy="18" r="1.6" fill="#9aa3b2" />
+          <circle cx="36" cy="18" r="4" fill="#1f2329" />
+          <circle cx="36" cy="18" r="1.6" fill="#9aa3b2" />
+        </g>
+      </g>
+      {/* dump lorry 2 (heading left, smaller = further) */}
+      <g transform="translate(140 158) scale(-0.82 0.82)">
+        <ellipse cx="22" cy="20" rx="24" ry="2.4" fill="#2a1a0d" opacity="0.35" filter="url(#cmms-blur)" />
+        <path d="M1 4 Q9 -4.5 18 1.5 Q23 -1.5 28 4Z" fill="#b8763c" />
+        <path d="M0 4 H29 L27 13.5 H2Z" fill="url(#cmms-yel)" />
+        <path d="M2 8.5 H28" stroke="#d48a00" strokeWidth="0.8" />
+        <path d="M30 6 H37.5 Q39 6 40 7.5 L43 12 V16 H30Z" fill="url(#cmms-yel)" />
+        <path d="M32 7.6 H37 L39.8 11.8 H32Z" fill="url(#cmms-glass)" />
+        <rect x="0" y="13.5" width="44" height="3" rx="1.2" fill="#2b2f36" />
+        <g>
+          <circle cx="8" cy="18" r="4" fill="#1f2329" />
+          <circle cx="8" cy="18" r="1.6" fill="#9aa3b2" />
+          <circle cx="17" cy="18" r="4" fill="#1f2329" />
+          <circle cx="17" cy="18" r="1.6" fill="#9aa3b2" />
+          <circle cx="36" cy="18" r="4" fill="#1f2329" />
+          <circle cx="36" cy="18" r="1.6" fill="#9aa3b2" />
+        </g>
+      </g>
+    </svg>
   )
 }

@@ -11,29 +11,30 @@ import { useAuth } from '../auth/AuthContext.jsx'
 // size: 'md' (main page) or 'sm' (module sub-pages).
 const SIZES = {
   md: {
-    tile: 'sm:w-[200px]',
-    icon: 'h-16 w-16 sm:h-20 sm:w-20',
-    pad: 'gap-4 p-4 sm:gap-5 sm:p-6',
-    text: 'sm:text-base'
+    tile: 'sm:w-[140px]',
+    icon: 'h-12 w-12 sm:h-14 sm:w-14',
+    pad: 'gap-2.5 p-3 sm:gap-3',
+    text: 'text-sm',
+    round: 'rounded-[22px]'
   },
   sm: {
-    tile: 'sm:w-[168px]',
-    icon: 'h-14 w-14 sm:h-16 sm:w-16',
-    pad: 'gap-3 p-4 sm:gap-4 sm:p-5',
-    text: 'sm:text-[15px]'
+    tile: 'sm:w-[120px]',
+    icon: 'h-11 w-11',
+    pad: 'gap-2 p-2.5',
+    text: 'text-[13px]',
+    round: 'rounded-[20px]'
   }
 }
 
 export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, size = 'md' }) {
   const z = SIZES[size]
-  const frame =
-    'group relative flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-3xl border border-slate-200/80 bg-white text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-300/50 active:translate-y-0'
+  const frame = `group relative flex aspect-square w-full flex-col items-center justify-center overflow-hidden ${z.round} border border-slate-200/80 bg-white text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-300/50 active:translate-y-0`
   const body = Art ? (
     <span className={frame}>
       <Art className="absolute inset-0 h-full w-full transition duration-300 group-hover:scale-[1.04]" />
       <span className="sr-only">{label}</span>
       {note && (
-        <span className="absolute inset-x-3 bottom-3 rounded-full bg-white/90 py-1 text-xs font-semibold text-slate-600">
+        <span className="absolute inset-x-2 bottom-2 rounded-full bg-white/90 py-0.5 text-[11px] font-semibold text-slate-600">
           {note}
         </span>
       )}
@@ -46,12 +47,12 @@ export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, 
       >
         {label}
       </span>
-      {note && <span className="-mt-2 text-xs font-medium text-slate-400">{note}</span>}
-      {href && <IconExternal width={16} height={16} className="absolute right-4 top-4 text-slate-300" />}
+      {note && <span className="-mt-1 text-[11px] font-medium text-slate-400">{note}</span>}
+      {href && <IconExternal width={13} height={13} className="absolute right-2.5 top-2.5 text-slate-300" />}
       {badge}
     </span>
   )
-  const cls = `block rounded-3xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${z.tile}`
+  const cls = `block ${z.round} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${z.tile}`
   if (disabled) {
     return (
       <div className={`select-none opacity-50 grayscale ${z.tile}`} aria-disabled="true">
@@ -103,7 +104,7 @@ export function TileGrid({ children, orderKey }) {
   const byId = Object.fromEntries(items.map((c) => [String(c.key), c]))
   return (
     <div>
-      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-7">
+      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-5">
         {sorted.map((id) => (
           <div
             key={id}
