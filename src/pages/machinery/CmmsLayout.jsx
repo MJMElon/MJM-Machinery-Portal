@@ -33,15 +33,19 @@ export default function CmmsLayout() {
   return (
     <div className="lg:grid lg:grid-cols-[290px_minmax(0,1fr)] lg:items-start lg:gap-6">
       <aside className="mb-5 lg:sticky lg:top-[96px] lg:mb-0">
-        {/* Same card style as the content blocks on the right */}
-        <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-3 lg:shadow-sm">
+        {/* Back sits outside the card, level with the page heading, so the card
+            lines up with the content block (heading row = 56px + 20px gap). */}
+        <div className="hidden lg:mb-5 lg:flex lg:h-14 lg:items-end">
           <button
             onClick={back}
-            className="hidden items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand lg:inline-flex lg:self-start"
+            className="-ml-2 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand"
           >
             <IconBack width={16} height={16} /> Back
           </button>
-          <p className="hidden px-3 pb-1 pt-3 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 lg:block">
+        </div>
+        {/* Same card style as the content blocks on the right */}
+        <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-3 lg:shadow-sm">
+          <p className="hidden px-3 pb-1 pt-1.5 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 lg:block">
             Modules
           </p>
           {NAV.map(({ to, label, Icon }) => (

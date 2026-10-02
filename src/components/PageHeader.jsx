@@ -8,7 +8,7 @@ import { IconBack } from './icons.jsx'
 export default function PageHeader({ backTo, backLabel, title, subtitle, right }) {
   const navigate = useNavigate()
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 lg:min-h-14">
       <div className="min-w-0">
         {(backTo || backLabel) && (
           <button

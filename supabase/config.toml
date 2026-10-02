@@ -6,3 +6,8 @@ project_id = "mjm-machinery-portal"
 # Meta calls this URL without a Supabase JWT. Each POST is instead verified with
 # Meta's X-Hub-Signature-256 (HMAC of the body using the app secret).
 verify_jwt = false
+
+[functions.case-action]
+# Called from the portal. The function checks the user's Supabase token itself
+# (so the browser's CORS preflight is answered too) and their edit access.
+verify_jwt = false

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { companyByNumber, listCompanies } from './companies.js'
 import { casePhotos, listCases } from './cases.js'
-import { listMessages, signPaths } from './whatsapp.js'
+import { signPaths } from './whatsapp.js'
 
 const POLL_MS = 15000
 export const UNASSIGNED = 'unassigned'
@@ -14,7 +14,6 @@ export function useCases() {
   const [companies, setCompanies] = useState([])
   const [pending, setPending] = useState([])
   const [solved, setSolved] = useState([])
-  const [problems, setProblems] = useState([])
   const [urls, setUrls] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -22,16 +21,14 @@ export function useCases() {
   const load = useCallback(async () => {
     setError('')
     try {
-      const [cos, p, s, pr] = await Promise.all([
+      const [cos, p, s] = await Promise.all([
         listCompanies().catch(() => []),
         listCases({ status: 'pending' }),
-        listCases({ status: 'solved' }),
-        listMessages({ filter: 'problems', limit: 50 }).catch(() => [])
+        listCases({ status: 'solved' })
       ])
       setCompanies(cos)
       setPending(p)
       setSolved(s)
-      setProblems(pr)
       // Thumbnails: the first few photos of each case.
       const paths = [...p, ...s].flatMap((c) =>
         casePhotos(c)
@@ -66,5 +63,5 @@ export function useCases() {
 
   const forCompany = useCallback((rows, key) => rows.filter((r) => keyOf(r) === key), [keyOf])
 
-  return { companies, enabled, pending, solved, problems, urls, loading, error, reload: load, keyOf, forCompany }
+  return { companies, enabled, pending, solved, urls, loading, error, reload: load, keyOf, forCompany }
 }

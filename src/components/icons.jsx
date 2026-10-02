@@ -247,3 +247,10 @@ export const IconUndo = (p) => (
     <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
   </svg>
 )
+
+export const IconPushpin = (p) => (
+  <svg {...base} {...p}>
+    <path d="M9 3h6l-1 5 3 3v2H7v-2l3-3-1-5Z" />
+    <path d="M12 13v8" />
+  </svg>
+)

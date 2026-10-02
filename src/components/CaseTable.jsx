@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { IconCheckCircle, IconImage, IconPencil, IconTrash, IconUndo } from './icons.jsx'
+import { IconCheckCircle, IconImage, IconPencil, IconPushpin, IconTrash, IconUndo } from './icons.jsx'
 import { casePhotos, caseNo } from '../lib/cases.js'
 import { formatSender, formatTime } from '../lib/whatsapp.js'
 
@@ -39,8 +40,9 @@ const fmtDate = (d) =>
  * One case. `access` = { can_solve, can_edit, can_delete } for this company;
  * buttons the user may not use are shown disabled.
  */
-export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve, onEdit, onDelete }) {
+export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve, onEdit, onDelete, onPin }) {
   const navigate = useNavigate()
+  const held = useRef(false) // a long press just happened: don't open the case
   const photos = casePhotos(c)
   const updates = (c.messages || []).length
   const solved = c.status === 'solved'
@@ -53,12 +55,27 @@ export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve
     <div
       role="link"
       tabIndex={0}
-      onClick={() => navigate(caseLink(c.id))}
+      onClick={() => {
+        if (held.current) {
+          held.current = false
+          return
+        }
+        navigate(caseLink(c.id))
+      }}
       onKeyDown={(e) => e.key === 'Enter' && navigate(caseLink(c.id))}
-      className={`block cursor-pointer gap-2.5 px-4 py-4 hover:bg-brand-light/40 ${COLS}`}
+      className={`block cursor-pointer gap-2.5 px-4 py-4 hover:bg-brand-light/40 ${COLS} ${c.pinned_at ? 'bg-amber-50/70' : ''}`}
     >
       <span className="flex items-center gap-2 lg:block">
-        <span className="font-bold tabular-nums text-brand">{caseNo(c)}</span>
+        <HoldToPin
+          pinned={Boolean(c.pinned_at)}
+          disabled={!onPin || !access.can_edit || solved}
+          onDone={() => {
+            held.current = true
+            onPin?.()
+          }}
+        >
+          {caseNo(c)}
+        </HoldToPin>
         <span className="truncate font-semibold text-slate-800 lg:hidden">{c.machine_name || ''}</span>
       </span>
       <span className="hidden truncate font-semibold text-slate-800 lg:block">
@@ -132,6 +149,56 @@ const TONES = {
   red: 'hover:bg-red-50 hover:text-red-600',
   green: 'hover:bg-emerald-50 hover:text-emerald-600',
   blue: 'hover:bg-slate-100 hover:text-brand'
+}
+
+const HOLD_MS = 3000
+
+// Case number: press and hold 3 seconds to pin (or unpin). A ring fills while
+// holding; letting go early cancels.
+function HoldToPin({ pinned, disabled, onDone, children }) {
+  const [holding, setHolding] = useState(false)
+  const timer = useRef(null)
+  const cancel = () => {
+    clearTimeout(timer.current)
+    setHolding(false)
+  }
+  useEffect(() => cancel, [])
+  return (
+    <span
+      title={disabled ? undefined : pinned ? 'Hold 3 seconds to unpin' : 'Hold 3 seconds to pin to the top'}
+      onPointerDown={(e) => {
+        if (disabled || e.button !== 0) return
+        setHolding(true)
+        timer.current = setTimeout(() => {
+          setHolding(false)
+          onDone()
+        }, HOLD_MS)
+      }}
+      onPointerUp={cancel}
+      onPointerLeave={cancel}
+      onContextMenu={(e) => !disabled && e.preventDefault()}
+      className="relative inline-flex select-none items-center gap-1 font-bold tabular-nums text-brand"
+    >
+      {pinned && <IconPushpin width={14} height={14} className="text-amber-500" />}
+      {children}
+      {holding && (
+        <svg viewBox="0 0 36 36" className="pointer-events-none absolute -left-2 -top-2.5 h-11 w-11 -rotate-90">
+          <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+          <circle
+            cx="18"
+            cy="18"
+            r="15"
+            fill="none"
+            stroke={pinned ? '#64748b' : '#f59e0b'}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray="94.25"
+            className="animate-[pin-hold_3s_linear_forwards]"
+          />
+        </svg>
+      )}
+    </span>
+  )
 }
 
 function IconButton({ children, tone = 'blue', ...props }) {

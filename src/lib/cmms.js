@@ -69,6 +69,55 @@ export async function deleteCase(id) {
   if (error) throw friendly(error)
 }
 
+// ---- case workflow: pins, timeline, notes, send to supplier, close ------------
+
+export async function setCasePinned(id, pinned) {
+  const { error } = await supabase.rpc('machinery_set_case_pinned', { p_id: id, p_pinned: pinned })
+  if (error) throw friendly(error)
+}
+
+export async function listCaseActions(caseId) {
+  const { data, error } = await supabase
+    .from('machinery_case_actions')
+    .select('*')
+    .eq('case_id', caseId)
+    .order('created_at')
+  if (error) throw friendly(error)
+  return data || []
+}
+
+export async function addCaseNote(caseId, body) {
+  const { error } = await supabase.rpc('machinery_add_case_note', { p_case: caseId, p_body: body })
+  if (error) throw friendly(error)
+}
+
+/** Close (solved = true) or reopen a case, with an optional remark; logged on the timeline. */
+export async function closeCase(id, solved, remark) {
+  const { error } = await supabase.rpc('machinery_close_case', { p_id: id, p_solved: solved, p_remark: remark || null })
+  if (error) throw friendly(error)
+}
+
+/** Official WhatsApp message from the company number to the supplier (Edge Function). */
+export async function sendToSupplier({ caseId, supplierId, message }) {
+  const { data, error } = await supabase.functions.invoke('case-action', {
+    body: { case_id: caseId, supplier_id: supplierId, message }
+  })
+  if (error) {
+    let msg = error.message
+    try {
+      const body = await error.context?.json?.()
+      if (body?.error) msg = body.error
+    } catch {
+      // keep the generic message
+    }
+    if (/Failed to send a request|FunctionsFetchError|Function not found|404/i.test(msg)) {
+      msg = 'The case-action function is not deployed yet (GitHub → Actions → Deploy WhatsApp webhook).'
+    }
+    throw new Error(msg)
+  }
+  return data
+}
+
 // ---- users and access --------------------------------------------------------
 
 export async function listPortalUsers() {
@@ -124,10 +173,11 @@ export function useCmmsAccess(companyId) {
 
 function friendly(error) {
   if (error?.code === '23505') return new Error('That name is already used.')
-  if (error?.code === '42501') return new Error(error.message || 'You do not have access to do this.')
+  if (error?.code === '42501' || error?.code === '22023')
+    return new Error(error.message || 'You do not have access to do this.')
   if (['42P01', 'PGRST205', '42703', 'PGRST204', 'PGRST202', '42883'].includes(error?.code)) {
     return new Error(
-      'Database not up to date. Run the latest SQL migration (20261005120000_cmms_setup.sql) in Supabase.'
+      'Database not up to date. Run the latest SQL migrations (…cmms_setup.sql, …case_workflow.sql) in Supabase.'
     )
   }
   return error

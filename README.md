@@ -41,6 +41,14 @@ A case groups the WhatsApp texts and photos about one breakdown (`machinery_case
 
 Portal: CMMS 2 → Maintenance Work Manage lists cases (Case No. · Machine · Problem · Photo · Sent by) under Pending / Solved; the case page shows all photos and messages, edits machine/problem, and marks it solved.
 
+## Case workflow (Solve window)
+
+The Solve icon on a pending case opens: **1. Open case** (what was reported), **2. Action** (official WhatsApp messages to the supplier from the company number, and internal notes, as one thread) and **3. Close case** (milestones with date/time, closing remark, Close case). Messages are sent by the `case-action` Edge Function (deployed by the same GitHub workflow), which checks the user's edit access and logs every send in `machinery_case_actions`.
+
+WhatsApp only allows free text to people who messaged the business number in the last 24 hours. To reach any supplier, create an approved message template with one body variable `{{1}}` and set the Supabase secret `WHATSAPP_SUPPLIER_TEMPLATE` (template name; optional `WHATSAPP_TEMPLATE_LANG`, default `en`). A failed send is logged with the reason and offers "Open in my WhatsApp".
+
+Hold a case number for 3 seconds to pin it to the top (max 3 per company); hold again to unpin.
+
 ## Access rules
 
 - Sign in with the same Supabase Auth email/password as MachTrek's **HQ admin**.
@@ -62,6 +70,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261003120000_cases.sql` (cases; also puts earlier messages into cases)
 - `supabase/migrations/20261004120000_company_admin.sql` (super admins, company area, blocks).
 - `supabase/migrations/20261005120000_cmms_setup.sql` (CMMS user access, machinery profile, suppliers, supplier + sent-out date on cases; case changes go through access-checked functions). The first run makes every existing portal admin a super admin; later admins are added as normal admins (`update machinery_portal_admins set is_super_admin = true where email = '…'` to promote).
+- `supabase/migrations/20261006120000_case_workflow.sql` (case timeline: messages to suppliers, notes, closed/reopened milestones; pinned cases).
 
 All are safe to re-run.
 

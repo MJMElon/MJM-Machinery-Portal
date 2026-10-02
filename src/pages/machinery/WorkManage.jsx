@@ -2,15 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
-import { IconConsolidate, IconRefresh, IconWarning } from '../../components/icons.jsx'
+import { IconConsolidate, IconRefresh } from '../../components/icons.jsx'
 import { CaseTableHeader, CaseTableRow } from '../../components/CaseTable.jsx'
-import { formatSender, formatTime } from '../../lib/whatsapp.js'
 import { UNASSIGNED, useCases } from '../../lib/useCases.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { CaseEditModal } from '../../components/CaseEditModal.jsx'
-import { setCaseSolved, caseNo } from '../../lib/cases.js'
-import { deleteCase, listMachines, listSuppliers, useCmmsAccess } from '../../lib/cmms.js'
+import { caseNo } from '../../lib/cases.js'
+import { closeCase, deleteCase, listMachines, listSuppliers, setCasePinned, useCmmsAccess } from '../../lib/cmms.js'
+import { CaseWorkflowModal } from '../../components/CaseWorkflowModal.jsx'
 
 const TABS = [
   { key: 'pending', label: 'Pending case' },
@@ -22,12 +22,16 @@ export default function WorkManage() {
   const { isSuperAdmin } = useAuth()
   const { current } = useCompany()
   const [tab, setTab] = useState('pending')
-  const [showProblems, setShowProblems] = useState(false)
-  const { pending, solved, problems, urls, loading, error, reload, forCompany } = useCases()
+  const { pending, solved, urls, loading, error, reload, forCompany } = useCases()
 
   // The company chosen in the top bar; its cases only if it has CMMS 2.
   const key = current?.cmms_enabled ? current.id : null
-  const pendingRows = key ? forCompany(pending, key) : []
+  // Pinned cases (max 3) stay on top, newest pin first.
+  const pendingRows = (key ? forCompany(pending, key) : []).sort(
+    (a, b) =>
+      Number(Boolean(b.pinned_at)) - Number(Boolean(a.pinned_at)) ||
+      (b.pinned_at || '').localeCompare(a.pinned_at || '')
+  )
   const solvedRows = key ? forCompany(solved, key) : []
   const rows = tab === 'pending' ? pendingRows : solvedRows
   const unassigned = forCompany(pending, UNASSIGNED).length
@@ -51,6 +55,7 @@ export default function WorkManage() {
   const supplierName = (id) => suppliers.find((s) => s.id === id)?.name
 
   const [editing, setEditing] = useState(null)
+  const [working, setWorking] = useState(null) // case open in the Solve window
   const [busyId, setBusyId] = useState(null)
   const [actionError, setActionError] = useState('')
   async function act(c, fn) {
@@ -177,7 +182,12 @@ export default function WorkManage() {
                   supplierName={supplierName(c.supplier_id)}
                   access={access}
                   busy={busyId === c.id}
-                  onSolve={() => act(c, () => setCaseSolved(c.id, c.status !== 'solved'))}
+                  onSolve={() =>
+                    c.status === 'solved'
+                      ? window.confirm(`Reopen case ${caseNo(c)}?`) && act(c, () => closeCase(c.id, false))
+                      : setWorking(c)
+                  }
+                  onPin={() => act(c, () => setCasePinned(c.id, !c.pinned_at))}
                   onEdit={() => setEditing(c)}
                   onDelete={() =>
                     window.confirm(`Delete case ${caseNo(c)} and its WhatsApp messages? This cannot be undone.`) &&
@@ -190,6 +200,17 @@ export default function WorkManage() {
         )}
       </Card>
 
+      {working && (
+        <CaseWorkflowModal
+          c={pendingRows.find((x) => x.id === working.id) || solvedRows.find((x) => x.id === working.id) || working}
+          machines={machines}
+          suppliers={suppliers}
+          access={access}
+          onClose={() => setWorking(null)}
+          onChanged={reload}
+        />
+      )}
+
       {editing && (
         <CaseEditModal
           c={editing}
@@ -198,31 +219,6 @@ export default function WorkManage() {
           onClose={() => setEditing(null)}
           onSaved={reload}
         />
-      )}
-
-      {problems.length > 0 && (
-        <div className="space-y-2">
-          <button
-            onClick={() => setShowProblems((v) => !v)}
-            className="flex items-center gap-1.5 text-sm text-amber-700 hover:underline"
-          >
-            <IconWarning width={16} height={16} />
-            {problems.length} WhatsApp message{problems.length > 1 ? 's' : ''} could not be saved or replied to
-            {showProblems ? ' · hide' : ' · show'}
-          </button>
-          {showProblems && (
-            <Card className="divide-y divide-slate-100 overflow-hidden text-sm">
-              {problems.map((m) => (
-                <div key={m.id} className="px-4 py-3">
-                  <p className="font-medium text-slate-800">
-                    {m.sender_name || formatSender(m.wa_from)} · {m.message_type} · {formatTime(m.received_at)}
-                  </p>
-                  <p className="mt-0.5 break-words text-red-700">{m.error_details || m.ack_error || m.status}</p>
-                </div>
-              ))}
-            </Card>
-          )}
-        </div>
       )}
     </div>
   )

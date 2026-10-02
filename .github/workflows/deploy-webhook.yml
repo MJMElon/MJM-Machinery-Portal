@@ -63,6 +63,13 @@ jobs:
           supabase functions deploy whatsapp-webhook \
             --project-ref "${{ steps.check.outputs.ref }}" \
             --no-verify-jwt
+
+      - name: Deploy case-action (portal → supplier WhatsApp)
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          supabase functions deploy case-action \
+            --project-ref "${{ steps.check.outputs.ref }}" \
+            --no-verify-jwt
           {
             echo "### WhatsApp webhook deployed"
             echo ""

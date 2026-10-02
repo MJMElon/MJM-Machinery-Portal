@@ -119,3 +119,13 @@ input[type='number'] {
     background-position: 40% 0;
   }
 }
+
+/* Hold-to-pin progress ring (case number). */
+@keyframes pin-hold {
+  from {
+    stroke-dashoffset: 94.25;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
