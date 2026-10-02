@@ -137,7 +137,7 @@ export function EmptyState({ title, subtitle, action }) {
   )
 }
 
-export function Modal({ open, onClose, title, children }) {
+export function Modal({ open, onClose, title, children, wide = false }) {
   if (!open) return null
   return (
     <div
@@ -145,7 +145,10 @@ export function Modal({ open, onClose, title, children }) {
       onClick={onClose}
     >
       <div
-        className="max-h-[90dvh] w-full max-w-app overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl"
+        className={cx(
+          'max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl',
+          wide ? 'max-w-2xl sm:p-6' : 'max-w-app'
+        )}
         onClick={(e) => e.stopPropagation()}
       >
         {title && <h3 className="mb-3 text-base font-bold text-slate-800">{title}</h3>}

@@ -8,6 +8,9 @@ import CmmsHome from './pages/machinery/CmmsHome.jsx'
 import WorkManage from './pages/machinery/WorkManage.jsx'
 import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import CaseDetail from './pages/machinery/CaseDetail.jsx'
+import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
+import SupplierList from './pages/machinery/SupplierList.jsx'
+import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
 import CompanySettings from './pages/settings/CompanySettings.jsx'
 import ManageCompanies from './pages/admin/ManageCompanies.jsx'
 
@@ -28,6 +31,9 @@ export default function App() {
           <Route path="/cmms/work" element={<WorkManage />} />
           <Route path="/cmms/work/all" element={<WorkConsolidated />} />
           <Route path="/cmms/work/case/:id" element={<CaseDetail />} />
+          <Route path="/cmms/machines" element={<MachineryProfile />} />
+          <Route path="/cmms/suppliers" element={<SupplierList />} />
+          <Route path="/cmms/users" element={<CmmsUsers />} />
           {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
           <Route path="/machinery" element={<Navigate to="/cmms" replace />} />
           <Route path="/machinery/*" element={<Navigate to="/cmms/work" replace />} />

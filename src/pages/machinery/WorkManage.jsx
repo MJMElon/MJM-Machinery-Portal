@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
@@ -8,6 +8,9 @@ import { formatSender, formatTime } from '../../lib/whatsapp.js'
 import { UNASSIGNED, useCases } from '../../lib/useCases.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
+import { CaseEditModal } from '../../components/CaseEditModal.jsx'
+import { setCaseSolved, caseNo } from '../../lib/cases.js'
+import { deleteCase, listMachines, listSuppliers, useCmmsAccess } from '../../lib/cmms.js'
 
 const TABS = [
   { key: 'pending', label: 'Pending case' },
@@ -28,6 +31,40 @@ export default function WorkManage() {
   const solvedRows = key ? forCompany(solved, key) : []
   const rows = tab === 'pending' ? pendingRows : solvedRows
   const unassigned = forCompany(pending, UNASSIGNED).length
+
+  // Machinery + suppliers of this company (supplier names, edit dialog) and the user's access.
+  const access = useCmmsAccess(key)
+  const [machines, setMachines] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const loadLists = useCallback(() => {
+    if (!key) return
+    listMachines(key)
+      .then(setMachines)
+      .catch(() => setMachines([]))
+    listSuppliers(key)
+      .then(setSuppliers)
+      .catch(() => setSuppliers([]))
+  }, [key])
+  useEffect(() => {
+    loadLists()
+  }, [loadLists])
+  const supplierName = (id) => suppliers.find((s) => s.id === id)?.name
+
+  const [editing, setEditing] = useState(null)
+  const [busyId, setBusyId] = useState(null)
+  const [actionError, setActionError] = useState('')
+  async function act(c, fn) {
+    setBusyId(c.id)
+    setActionError('')
+    try {
+      await fn()
+      await reload()
+    } catch (e) {
+      setActionError(e.message || 'Could not update the case.')
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -52,7 +89,9 @@ export default function WorkManage() {
         }
       />
 
-      {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
+      {(error || actionError) && (
+        <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error || actionError}</p>
+      )}
 
       {current && !current.cmms_enabled && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
@@ -130,15 +169,38 @@ export default function WorkManage() {
           </div>
         ) : (
           <>
-            <CaseTableHeader />
+            <CaseTableHeader solved={tab === 'solved'} />
             <div className="divide-y divide-slate-100">
               {rows.map((c) => (
-                <CaseTableRow key={c.id} c={c} urls={urls} />
+                <CaseTableRow
+                  key={c.id}
+                  c={c}
+                  urls={urls}
+                  supplierName={supplierName(c.supplier_id)}
+                  access={access}
+                  busy={busyId === c.id}
+                  onSolve={() => act(c, () => setCaseSolved(c.id, c.status !== 'solved'))}
+                  onEdit={() => setEditing(c)}
+                  onDelete={() =>
+                    window.confirm(`Delete case ${caseNo(c)} and its WhatsApp messages? This cannot be undone.`) &&
+                    act(c, () => deleteCase(c.id))
+                  }
+                />
               ))}
             </div>
           </>
         )}
       </Card>
+
+      {editing && (
+        <CaseEditModal
+          c={editing}
+          machines={machines}
+          suppliers={suppliers}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      )}
 
       {problems.length > 0 && (
         <div className="space-y-2">

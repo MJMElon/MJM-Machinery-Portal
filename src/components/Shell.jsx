@@ -30,6 +30,9 @@ function pageTitle(path) {
   if (path.startsWith('/cmms/work/all')) return 'All Companies'
   if (path.startsWith('/cmms/work/case')) return 'Maintenance Case'
   if (path.startsWith('/cmms/work')) return 'Maintenance Work Manage'
+  if (path.startsWith('/cmms/machines')) return 'Machinery Profile'
+  if (path.startsWith('/cmms/suppliers')) return 'Supplier Workshop List'
+  if (path.startsWith('/cmms/users')) return 'CMMS User Setting'
   if (path.startsWith('/cmms')) return 'CMMS 2'
   if (path.startsWith('/settings')) return 'Settings'
   if (path.startsWith('/admin/companies')) return 'Manage Companies'
@@ -84,17 +87,17 @@ function TopBar({ title }) {
         )}
 
         <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
+          <span className="mx-1 hidden max-w-[220px] truncate text-sm text-slate-500 lg:block">{user?.email}</span>
           {isSuperAdmin && (
             <Link
               to="/admin/companies"
               title="Super admin: manage companies"
               aria-label="Super admin: manage companies"
-              className="shrink-0 rounded-xl transition hover:scale-105 hover:shadow-md hover:shadow-red-500/20"
+              className="shrink-0 rounded-xl transition hover:scale-105 hover:shadow-md hover:shadow-amber-400/40"
             >
               <SuperAdminIcon />
             </Link>
           )}
-          <span className="mx-1 hidden max-w-[220px] truncate text-sm text-slate-500 2xl:block">{user?.email}</span>
           <button
             onClick={async () => {
               await logout()
@@ -179,18 +182,19 @@ function CompanySwitcher({ wide = false }) {
   )
 }
 
-// Super admin button: a red gear on blue (Superman colours).
+// Super admin button: a bright red gear on Superman yellow.
 function SuperAdminIcon() {
   const teeth = Array.from({ length: 8 }, (_, i) => i * 45)
   return (
     <svg viewBox="0 0 40 40" className="h-10 w-10" aria-hidden="true">
       <defs>
         <linearGradient id="superadmin-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#1d4ed8" />
-          <stop offset="1" stopColor="#1e3a8a" />
+          <stop offset="0" stopColor="#fde047" />
+          <stop offset="1" stopColor="#facc15" />
         </linearGradient>
       </defs>
       <rect width="40" height="40" rx="11" fill="url(#superadmin-bg)" />
+      <rect x="0.5" y="0.5" width="39" height="39" rx="10.5" fill="none" stroke="#eab308" />
       <g transform="translate(20 20)">
         {teeth.map((deg) => (
           <rect
@@ -200,12 +204,12 @@ function SuperAdminIcon() {
             width="4.8"
             height="6"
             rx="1.3"
-            fill="#ef4444"
+            fill="#ff2d2d"
             transform={`rotate(${deg})`}
           />
         ))}
-        <circle r="8.6" fill="#ef4444" />
-        <circle r="3.6" fill="#1e40af" />
+        <circle r="8.6" fill="#ff2d2d" />
+        <circle r="3.6" fill="#fde047" />
       </g>
     </svg>
   )

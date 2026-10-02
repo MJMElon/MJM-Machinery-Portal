@@ -1,35 +1,30 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Field,
-  SectionTitle,
-  Spinner,
-  TextArea,
-  TextInput
-} from '../../components/ui.jsx'
-import { IconChat, IconExternal } from '../../components/icons.jsx'
-import { caseNo, casePhotos, getCase, setCaseSolved, updateCase } from '../../lib/cases.js'
+import { Badge, Button, Card, EmptyState, SectionTitle, Spinner } from '../../components/ui.jsx'
+import { IconChat, IconExternal, IconPencil, IconTrash } from '../../components/icons.jsx'
+import { caseNo, casePhotos, getCase, setCaseSolved } from '../../lib/cases.js'
+import { deleteCase, listMachines, listSuppliers, useCmmsAccess } from '../../lib/cmms.js'
+import { CaseEditModal } from '../../components/CaseEditModal.jsx'
 import { companyByNumber, listCompanies } from '../../lib/companies.js'
 import { formatSender, formatTime, signPaths } from '../../lib/whatsapp.js'
 
-// One maintenance case: machine + problem (editable), all its photos, and the
-// WhatsApp messages in order.
+// One maintenance case: machine, problem, supplier and sent-out date (edit
+// dialog), all its photos, and the WhatsApp messages in order.
 export default function CaseDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [c, setC] = useState(null)
   const [urls, setUrls] = useState({})
   const [company, setCompany] = useState(undefined) // undefined = loading, null = not linked
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [machine, setMachine] = useState('')
-  const [problem, setProblem] = useState('')
-  const [saved, setSaved] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [machines, setMachines] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const companyId = company?.id ?? null
+  const access = useCmmsAccess(companyId)
 
   const load = useCallback(async () => {
     setError('')
@@ -37,8 +32,6 @@ export default function CaseDetail() {
       const row = await getCase(id)
       setC(row)
       if (row) {
-        setMachine(row.machine_name || '')
-        setProblem(row.problem || '')
         setUrls(await signPaths(casePhotos(row).map((m) => m.storage_path)))
         listCompanies()
           .then((cos) => setCompany(companyByNumber(cos)(row.wa_from)))
@@ -55,10 +48,19 @@ export default function CaseDetail() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (!companyId) return
+    listMachines(companyId)
+      .then(setMachines)
+      .catch(() => setMachines([]))
+    listSuppliers(companyId)
+      .then(setSuppliers)
+      .catch(() => setSuppliers([]))
+  }, [companyId])
+
   async function run(fn) {
     setBusy(true)
     setError('')
-    setSaved(false)
     try {
       await fn()
       await load()
@@ -86,7 +88,7 @@ export default function CaseDetail() {
     )
 
   const photos = casePhotos(c)
-  const dirty = machine.trim() !== (c.machine_name || '') || problem.trim() !== (c.problem || '')
+  const supplier = suppliers.find((s) => s.id === c.supplier_id)
   const solved = c.status === 'solved'
 
   return (
@@ -98,32 +100,70 @@ export default function CaseDetail() {
         subtitle={`Opened ${formatTime(c.opened_at)} by ${c.sender_name || formatSender(c.wa_from)}`}
       />
 
+      {editing && (
+        <CaseEditModal
+          c={c}
+          machines={machines}
+          suppliers={suppliers}
+          onClose={() => setEditing(false)}
+          onSaved={load}
+        />
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
-          <Card className="space-y-4 p-5">
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
-              <Field label="Machine name">
-                <TextInput value={machine} onChange={(e) => setMachine(e.target.value)} placeholder="e.g. EX-03" />
-              </Field>
-              <Field label="Problem">
-                <TextArea rows={2} value={problem} onChange={(e) => setProblem(e.target.value)} />
-              </Field>
+          <Card className="p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <SectionTitle>Case</SectionTitle>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!access.can_edit || busy}
+                  title={access.can_edit ? 'Edit case' : 'No edit access'}
+                  onClick={() => setEditing(true)}
+                >
+                  <IconPencil width={16} height={16} /> Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="text-red-600"
+                  disabled={!access.can_delete || busy}
+                  title={access.can_delete ? 'Delete case' : 'No delete access'}
+                  onClick={async () => {
+                    if (!window.confirm(`Delete case ${caseNo(c)} and its WhatsApp messages? This cannot be undone.`))
+                      return
+                    setBusy(true)
+                    try {
+                      await deleteCase(c.id)
+                      navigate('/cmms/work')
+                    } catch (e) {
+                      setError(e.message || 'Could not delete.')
+                      setBusy(false)
+                    }
+                  }}
+                >
+                  <IconTrash width={16} height={16} /> Delete
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center justify-end gap-3">
-              {saved && !dirty && <span className="text-sm text-green-700">Saved</span>}
-              <Button
-                size="sm"
-                disabled={busy || !dirty}
-                onClick={async () => {
-                  const ok = await run(() =>
-                    updateCase(c.id, { machine_name: machine.trim() || null, problem: problem.trim() || null })
-                  )
-                  setSaved(ok)
-                }}
-              >
-                Save changes
-              </Button>
-            </div>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <Info label="Machine" value={c.machine_name} />
+              <Info label="Supplier / workshop" value={supplier?.name} />
+              <Info label="Problem" value={c.problem} />
+              <Info
+                label="Sent out on"
+                value={
+                  c.sent_at &&
+                  new Date(c.sent_at + 'T00:00:00').toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                  })
+                }
+              />
+            </dl>
           </Card>
 
           <Card className="p-5">
@@ -200,7 +240,8 @@ export default function CaseDetail() {
             <Button
               full
               variant={solved ? 'secondary' : 'primary'}
-              disabled={busy}
+              disabled={busy || !access.can_solve}
+              title={access.can_solve ? undefined : 'No solve access'}
               onClick={() => run(() => setCaseSolved(c.id, !solved))}
             >
               {busy ? 'Saving…' : solved ? 'Reopen case' : 'Mark Solved'}
@@ -247,6 +288,17 @@ export default function CaseDetail() {
           </Card>
         </div>
       </div>
+    </div>
+  )
+}
+
+function Info({ label, value }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-0.5 whitespace-pre-wrap break-words text-slate-800">
+        {value || <span className="text-slate-400">—</span>}
+      </dd>
     </div>
   )
 }

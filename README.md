@@ -2,7 +2,12 @@
 
 Company portal (HQ admin login). The **company switcher** (top right) picks the company you work in; the main page shows that company's modules:
 
-- **CMMS 2** (only for companies with CMMS 2 access) → **Maintenance Work Manage** (WhatsApp texts + photos grouped into numbered cases, Pending / Solved; the consolidate button shows every company's pending cases at once) and a link to **MachTrek**.
+- **CMMS 2** (only for companies with CMMS 2 access):
+  - **Maintenance Work Manage**: WhatsApp texts + photos grouped into numbered cases, Pending / Solved, with supplier, sent-out date and Solve / Edit / Delete (per-user access). The consolidate button shows every company's pending cases at once.
+  - **Machinery Profile**: the company's machines.
+  - **Supplier Workshop List**: suppliers/workshops and the machines each handles (suppliers that handle a case's machine are proposed first).
+  - **CMMS User Setting**: per company, who may Solve, Edit, Delete and Manage lists (super admins set it; super admins can do everything).
+  - **MachTrek** link.
 - **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
 - **Companies** (top right, **super admins only**) → create companies, switch on CMMS 2 access, and list each company's staff WhatsApp numbers. A case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
 
@@ -55,7 +60,8 @@ Edit the e-mail in section 5 of `supabase/migrations/20260929120000_whatsapp_pho
 Then do the same, in order, with:
 - `supabase/migrations/20261002120000_companies.sql` (companies)
 - `supabase/migrations/20261003120000_cases.sql` (cases; also puts earlier messages into cases)
-- `supabase/migrations/20261004120000_company_admin.sql` (super admins, company area, blocks). The first run makes every existing portal admin a super admin; later admins are added as normal admins (`update machinery_portal_admins set is_super_admin = true where email = '…'` to promote).
+- `supabase/migrations/20261004120000_company_admin.sql` (super admins, company area, blocks).
+- `supabase/migrations/20261005120000_cmms_setup.sql` (CMMS user access, machinery profile, suppliers, supplier + sent-out date on cases; case changes go through access-checked functions). The first run makes every existing portal admin a super admin; later admins are added as normal admins (`update machinery_portal_admins set is_super_admin = true where email = '…'` to promote).
 
 All are safe to re-run.
 

@@ -5,7 +5,8 @@ import { supabase, CASE_TABLE } from './supabase.js'
 
 const MESSAGE_COLUMNS =
   'id, wa_message_id, wa_from, sender_name, message_type, received_at, caption, storage_path, status, ack_status, ack_error, error_details'
-const CASE_COLUMNS = `id, case_no, wa_from, sender_name, machine_name, problem, status, opened_at, solved_at, solved_by_email, messages:machinery_whatsapp_messages(${MESSAGE_COLUMNS})`
+// '*' keeps older databases working (columns added by later migrations are optional).
+const CASE_COLUMNS = `*, messages:machinery_whatsapp_messages(${MESSAGE_COLUMNS})`
 
 export const caseNo = (c) => `#${c.case_no}`
 
@@ -25,11 +26,6 @@ export async function getCase(id) {
   const { data, error } = await supabase.from(CASE_TABLE).select(CASE_COLUMNS).eq('id', id).maybeSingle()
   if (error) throw friendly(error)
   return data ? withSortedMessages(data) : null
-}
-
-export async function updateCase(id, patch) {
-  const { error } = await supabase.from(CASE_TABLE).update(patch).eq('id', id)
-  if (error) throw friendly(error)
 }
 
 /** Status goes through an RPC so "solved by" is always the real caller. */

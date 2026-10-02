@@ -1,65 +1,149 @@
-import { Link } from 'react-router-dom'
-import { IconImage } from './icons.jsx'
+import { Link, useNavigate } from 'react-router-dom'
+import { IconImage, IconPencil, IconTrash } from './icons.jsx'
 import { casePhotos, caseNo } from '../lib/cases.js'
 import { formatSender, formatTime } from '../lib/whatsapp.js'
 
 export const caseLink = (id) => `/cmms/work/case/${id}`
 
-// Laptop: one row per case in five columns. Phone: the same row stacks.
-const COLS = 'md:grid md:grid-cols-[96px_minmax(120px,180px)_minmax(0,1fr)_168px_minmax(180px,250px)] md:items-center'
+// Laptop: one row per case in columns. Smaller screens: the same row stacks.
+const COLS =
+  'lg:grid lg:grid-cols-[64px_minmax(84px,120px)_minmax(150px,1fr)_96px_minmax(120px,160px)_minmax(110px,150px)_92px_92px_80px] lg:items-center'
 
-export function CaseTableHeader() {
+export function CaseTableHeader({ solved = false }) {
   return (
     <div
-      className={`hidden gap-4 border-b border-slate-200 bg-slate-50/80 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 ${COLS}`}
+      className={`hidden gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 ${COLS}`}
     >
-      <span>Case No.</span>
+      <span>Case</span>
       <span>Machine</span>
       <span>Problem</span>
       <span>Photo</span>
       <span>Sent by</span>
+      <span>Supplier</span>
+      <span>Sent out</span>
+      <span className="text-center">{solved ? 'Reopen' : 'Solve'}</span>
+      <span className="text-center">Edit</span>
     </div>
   )
 }
 
-export function CaseTableRow({ c, urls }) {
+const fmtDate = (d) =>
+  d
+    ? new Date(d + (d.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      })
+    : null
+
+/**
+ * One case. `access` = { can_solve, can_edit, can_delete } for this company;
+ * buttons the user may not use are shown disabled.
+ */
+export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve, onEdit, onDelete }) {
+  const navigate = useNavigate()
   const photos = casePhotos(c)
   const updates = (c.messages || []).length
+  const solved = c.status === 'solved'
+  const stop = (fn) => (e) => {
+    e.stopPropagation()
+    fn()
+  }
+  const label = (text) => <span className="mr-1 text-xs font-medium text-slate-400 lg:hidden">{text}:</span>
   return (
-    <Link to={caseLink(c.id)} className={`block gap-4 px-5 py-4 hover:bg-brand-light/40 ${COLS}`}>
-      <span className="flex items-center gap-2 md:block">
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(caseLink(c.id))}
+      onKeyDown={(e) => e.key === 'Enter' && navigate(caseLink(c.id))}
+      className={`block cursor-pointer gap-3 px-5 py-4 hover:bg-brand-light/40 ${COLS}`}
+    >
+      <span className="flex items-center gap-2 lg:block">
         <span className="font-bold tabular-nums text-brand">{caseNo(c)}</span>
-        <span className="truncate font-semibold text-slate-800 md:hidden">{c.machine_name || ''}</span>
+        <span className="truncate font-semibold text-slate-800 lg:hidden">{c.machine_name || ''}</span>
       </span>
-      <span className="hidden truncate font-semibold text-slate-800 md:block">
+      <span className="hidden truncate font-semibold text-slate-800 lg:block">
         {c.machine_name || <span className="font-normal text-slate-400">—</span>}
       </span>
-      <span className="mt-1 block min-w-0 md:mt-0">
+      <span className="mt-1 block min-w-0 lg:mt-0">
         <span className="line-clamp-2 text-sm text-slate-700">
           {c.problem || <span className="italic text-slate-400">No description</span>}
         </span>
         {updates > 1 && <span className="mt-0.5 block text-xs text-slate-400">{updates} messages</span>}
       </span>
-      <span className="mt-2 flex items-center gap-1.5 md:mt-0">
+      <span className="mt-2 flex items-center gap-1.5 lg:mt-0">
         {photos.length === 0 ? (
-          <span className="text-sm text-slate-400">—</span>
+          <span className="hidden text-sm text-slate-400 lg:inline">—</span>
         ) : (
           <>
-            {photos.slice(0, 3).map((m) => (
-              <Thumb key={m.id} url={urls[m.storage_path]} />
+            {photos.slice(0, 2).map((m) => (
+              <Thumb key={m.id} url={urls[m.storage_path]} size="h-10 w-10" />
             ))}
-            {photos.length > 3 && <span className="text-xs font-medium text-slate-500">+{photos.length - 3}</span>}
+            {photos.length > 2 && <span className="text-xs font-medium text-slate-500">+{photos.length - 2}</span>}
           </>
         )}
       </span>
-      <span className="mt-2 block min-w-0 text-sm md:mt-0">
+      <span className="mt-2 block min-w-0 text-sm lg:mt-0">
         <span className="block truncate font-medium text-slate-800">{c.sender_name || formatSender(c.wa_from)}</span>
-        <span className="block truncate text-xs text-slate-500">
-          {c.sender_name ? `${formatSender(c.wa_from)} · ` : ''}
-          {formatTime(c.opened_at)}
-        </span>
+        <span className="block truncate text-xs text-slate-500">{formatTime(c.opened_at)}</span>
       </span>
-    </Link>
+      <span className="mt-1 block min-w-0 truncate text-sm lg:mt-0">
+        {label('Supplier')}
+        {supplierName ? (
+          <span className="font-medium text-slate-800">{supplierName}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        )}
+      </span>
+      <span className="mt-1 block text-sm lg:mt-0">
+        {label('Sent out')}
+        {fmtDate(c.sent_at) || <span className="text-slate-400">—</span>}
+      </span>
+      <span className="mt-3 flex lg:mt-0 lg:justify-center">
+        <button
+          onClick={stop(onSolve)}
+          disabled={!access.can_solve || busy}
+          title={access.can_solve ? (solved ? 'Reopen case' : 'Mark solved') : 'No solve access'}
+          className={`h-9 rounded-lg px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+            solved
+              ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              : 'bg-emerald-600 text-white hover:bg-emerald-700'
+          }`}
+        >
+          {solved ? 'Reopen' : 'Solve'}
+        </button>
+      </span>
+      <span className="-mt-9 flex justify-end gap-1 lg:mt-0 lg:justify-center">
+        <IconButton
+          title={access.can_edit ? 'Edit case' : 'No edit access'}
+          disabled={!access.can_edit || busy}
+          onClick={stop(onEdit)}
+        >
+          <IconPencil width={17} height={17} />
+        </IconButton>
+        <IconButton
+          title={access.can_delete ? 'Delete case' : 'No delete access'}
+          disabled={!access.can_delete || busy}
+          onClick={stop(onDelete)}
+          danger
+        >
+          <IconTrash width={17} height={17} />
+        </IconButton>
+      </span>
+    </div>
+  )
+}
+
+function IconButton({ children, danger, ...props }) {
+  return (
+    <button
+      {...props}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition disabled:cursor-not-allowed disabled:opacity-30 ${
+        danger ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-slate-100 hover:text-brand'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 
