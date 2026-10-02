@@ -2,21 +2,24 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
-import { IconCheck, IconLogout } from './icons.jsx'
+import { IconCheck, IconCog, IconLogout } from './icons.jsx'
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
+// Inner pages (modules) use the width more fully: MJM sits closer to the left edge.
+const INNER = 'px-4 sm:px-5 lg:px-6'
 
 // Laptop-first layout. On the main page the MJM title is big and centred; on
 // every other page MJM moves to the left and the page title sits in the middle.
 export function Shell() {
   const { pathname } = useLocation()
   const title = pageTitle(pathname)
+  const gutter = title ? INNER : GUTTER
   return (
     <CompanyProvider>
       <div className="flex min-h-[100dvh] w-full flex-col">
-        <TopBar title={title} />
-        <main className={`w-full flex-1 pb-12 pt-6 sm:pt-8 ${GUTTER}`}>
+        <TopBar title={title} gutter={gutter} />
+        <main className={`w-full flex-1 pb-12 pt-6 sm:pt-8 ${gutter}`}>
           <Outlet />
         </main>
       </div>
@@ -38,7 +41,7 @@ function Brand({ size }) {
   return (
     <span className={`flex flex-col ${big ? 'items-center' : 'items-start'}`}>
       <span
-        className={`font-extrabold leading-none tracking-tight text-brand ${big ? 'text-4xl sm:text-5xl' : 'text-2xl'}`}
+        className={`text-silver font-extrabold leading-none tracking-tight ${big ? 'text-4xl sm:text-5xl' : 'text-2xl'}`}
       >
         MJM
       </span>
@@ -51,14 +54,14 @@ function Brand({ size }) {
   )
 }
 
-function TopBar({ title }) {
+function TopBar({ title, gutter }) {
   const { user, logout, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
   const home = !title
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div
-        className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${GUTTER} ${home ? 'h-24' : 'h-16 sm:h-[72px]'}`}
+        className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${gutter} ${home ? 'h-24' : 'h-16 sm:h-[72px]'}`}
       >
         {/* Left: (MJM on inner pages) + the company switcher */}
         <div className="flex min-w-0 items-center gap-4">
@@ -87,10 +90,9 @@ function TopBar({ title }) {
               to="/admin/companies"
               title="Super admin: manage companies"
               aria-label="Super admin: manage companies"
-              className="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 active:bg-slate-200"
             >
-              <SuperAdminIcon />
-              <span className="hidden lg:inline">Admin</span>
+              <IconCog width={20} height={20} />
             </Link>
           )}
           <button
@@ -108,7 +110,7 @@ function TopBar({ title }) {
         </div>
       </div>
       {/* Phones: the company switcher gets its own row */}
-      <div className={`border-t border-slate-100 py-2 sm:hidden ${GUTTER}`}>
+      <div className={`border-t border-slate-100 py-2 sm:hidden ${gutter}`}>
         <CompanySwitcher wide />
       </div>
     </header>
@@ -133,7 +135,7 @@ function CompanySwitcher({ wide = false }) {
     <div className={`relative min-w-0 ${wide ? 'w-full' : ''}`} ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white pl-3 pr-2 text-sm font-semibold text-slate-800 hover:border-brand/50 ${wide ? 'w-full' : 'max-w-[260px]'}`}
+        className={`flex h-9 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white pl-3 pr-2 text-[13px] font-semibold text-slate-800 hover:border-brand/50 ${wide ? 'w-full' : 'max-w-[260px]'}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         title="Change company"
@@ -174,40 +176,5 @@ function CompanySwitcher({ wide = false }) {
         </div>
       )}
     </div>
-  )
-}
-
-// Super admin button: a hero-style shield — red rim, yellow field, bold red S.
-function SuperAdminIcon() {
-  return (
-    <svg viewBox="0 0 44 36" className="h-[17px] w-[21px]" aria-hidden="true">
-      <defs>
-        <linearGradient id="superadmin-red" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ef4444" />
-          <stop offset="1" stopColor="#b91c1c" />
-        </linearGradient>
-        <linearGradient id="superadmin-yellow" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fde68a" />
-          <stop offset="1" stopColor="#facc15" />
-        </linearGradient>
-      </defs>
-      {/* shield: red rim, then yellow field */}
-      <path d="M8 1.5 H36 L43 10.5 L22 34.5 L1 10.5Z" fill="url(#superadmin-red)" strokeLinejoin="round" />
-      <path d="M9.6 4.6 H34.4 L39 10.6 L22 30 L5 10.6Z" fill="url(#superadmin-yellow)" />
-      <text
-        x="22.4"
-        y="22.4"
-        textAnchor="middle"
-        fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
-        fontWeight="800"
-        fontSize="19"
-        fontStyle="italic"
-        fill="url(#superadmin-red)"
-        stroke="#991b1b"
-        strokeWidth="0.4"
-      >
-        S
-      </text>
-    </svg>
   )
 }

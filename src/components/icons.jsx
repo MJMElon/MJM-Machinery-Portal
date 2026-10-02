@@ -233,3 +233,17 @@ export const IconRoute = (p) => (
     <path d="M8 19h7a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h7" />
   </svg>
 )
+
+export const IconCheckCircle = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m8 12.3 2.7 2.7L16 9.6" />
+  </svg>
+)
+
+export const IconUndo = (p) => (
+  <svg {...base} {...p}>
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+  </svg>
+)

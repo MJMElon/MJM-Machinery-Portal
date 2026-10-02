@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { IconImage, IconPencil, IconTrash } from './icons.jsx'
+import { IconCheckCircle, IconImage, IconPencil, IconTrash, IconUndo } from './icons.jsx'
 import { casePhotos, caseNo } from '../lib/cases.js'
 import { formatSender, formatTime } from '../lib/whatsapp.js'
 
@@ -7,7 +7,7 @@ export const caseLink = (id) => `/cmms/work/case/${id}`
 
 // Laptop: one row per case in columns. Smaller screens: the same row stacks.
 const COLS =
-  'lg:grid lg:grid-cols-[52px_minmax(76px,110px)_minmax(130px,1fr)_88px_minmax(104px,150px)_minmax(96px,140px)_84px_78px_76px] lg:items-center'
+  'lg:grid lg:grid-cols-[52px_minmax(76px,110px)_minmax(130px,1fr)_88px_minmax(104px,150px)_minmax(96px,140px)_84px_116px] lg:items-center'
 
 export function CaseTableHeader({ solved = false }) {
   return (
@@ -21,8 +21,7 @@ export function CaseTableHeader({ solved = false }) {
       <span>Sent by</span>
       <span>Supplier</span>
       <span>Sent out</span>
-      <span className="text-center">{solved ? 'Reopen' : 'Solve'}</span>
-      <span className="text-center">Edit</span>
+      <span className="text-center">Action</span>
     </div>
   )
 }
@@ -99,21 +98,16 @@ export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve
         {label('Sent out')}
         {fmtDate(c.sent_at) || <span className="text-slate-400">—</span>}
       </span>
-      <span className="mt-3 flex lg:mt-0 lg:justify-center">
-        <button
-          onClick={stop(onSolve)}
-          disabled={!access.can_solve || busy}
+      {/* Action: solve / reopen, edit, delete — disabled without access */}
+      <span className="mt-2 flex justify-end gap-0.5 lg:mt-0 lg:justify-center">
+        <IconButton
           title={access.can_solve ? (solved ? 'Reopen case' : 'Mark solved') : 'No solve access'}
-          className={`h-9 rounded-lg px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-            solved
-              ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-              : 'bg-emerald-600 text-white hover:bg-emerald-700'
-          }`}
+          disabled={!access.can_solve || busy}
+          onClick={stop(onSolve)}
+          tone="green"
         >
-          {solved ? 'Reopen' : 'Solve'}
-        </button>
-      </span>
-      <span className="-mt-9 flex justify-end gap-1 lg:mt-0 lg:justify-center">
+          {solved ? <IconUndo width={17} height={17} /> : <IconCheckCircle width={18} height={18} />}
+        </IconButton>
         <IconButton
           title={access.can_edit ? 'Edit case' : 'No edit access'}
           disabled={!access.can_edit || busy}
@@ -125,7 +119,7 @@ export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve
           title={access.can_delete ? 'Delete case' : 'No delete access'}
           disabled={!access.can_delete || busy}
           onClick={stop(onDelete)}
-          danger
+          tone="red"
         >
           <IconTrash width={17} height={17} />
         </IconButton>
@@ -134,13 +128,18 @@ export function CaseTableRow({ c, urls, supplierName, access = {}, busy, onSolve
   )
 }
 
-function IconButton({ children, danger, ...props }) {
+const TONES = {
+  red: 'hover:bg-red-50 hover:text-red-600',
+  green: 'hover:bg-emerald-50 hover:text-emerald-600',
+  blue: 'hover:bg-slate-100 hover:text-brand'
+}
+
+function IconButton({ children, tone = 'blue', ...props }) {
   return (
     <button
       {...props}
-      className={`flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition disabled:cursor-not-allowed disabled:opacity-30 ${
-        danger ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-slate-100 hover:text-brand'
-      }`}
+      aria-label={props.title}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition disabled:cursor-not-allowed disabled:opacity-30 ${TONES[tone]}`}
     >
       {children}
     </button>

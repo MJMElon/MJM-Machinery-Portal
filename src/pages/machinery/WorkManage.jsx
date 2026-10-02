@@ -70,7 +70,6 @@ export default function WorkManage() {
     <div className="space-y-4">
       <PageHeader
         title="Maintenance Work Manage"
-        subtitle={current?.name}
         right={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => reload()} aria-label="Refresh" className="w-12 px-0">
