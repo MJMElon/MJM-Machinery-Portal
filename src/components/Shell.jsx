@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
-import { IconBuilding, IconCheck, IconLogout } from './icons.jsx'
+import { IconCheck, IconLogout } from './icons.jsx'
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
@@ -63,12 +63,16 @@ function TopBar({ title }) {
       <div
         className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${GUTTER} ${home ? 'h-24' : 'h-16 sm:h-[72px]'}`}
       >
-        <div className="min-w-0">
+        {/* Left: (MJM on inner pages) + the company switcher */}
+        <div className="flex min-w-0 items-center gap-4">
           {!home && (
-            <Link to="/" aria-label="Main page" className="inline-block">
+            <Link to="/" aria-label="Main page" className="shrink-0">
               <Brand />
             </Link>
           )}
+          <div className="hidden min-w-0 sm:block">
+            <CompanySwitcher />
+          </div>
         </div>
 
         {home ? (
@@ -80,17 +84,14 @@ function TopBar({ title }) {
         )}
 
         <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
-          <div className="hidden sm:block">
-            <CompanySwitcher />
-          </div>
           {isSuperAdmin && (
             <Link
               to="/admin/companies"
-              title="Manage companies (super admin)"
-              className="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              title="Super admin: manage companies"
+              aria-label="Super admin: manage companies"
+              className="shrink-0 rounded-xl transition hover:scale-105 hover:shadow-md hover:shadow-red-500/20"
             >
-              <IconBuilding width={19} height={19} />
-              <span className="hidden lg:inline">Companies</span>
+              <SuperAdminIcon />
             </Link>
           )}
           <span className="mx-1 hidden max-w-[220px] truncate text-sm text-slate-500 2xl:block">{user?.email}</span>
@@ -154,7 +155,7 @@ function CompanySwitcher({ wide = false }) {
       {open && (
         <div
           role="listbox"
-          className="absolute right-0 z-30 mt-2 w-72 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-300/40"
+          className="absolute left-0 z-30 mt-2 w-72 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-300/40"
         >
           <p className="px-4 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Company</p>
           {companies.map((c) => (
@@ -168,15 +169,44 @@ function CompanySwitcher({ wide = false }) {
               }}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-50"
             >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-slate-800">{c.name}</span>
-                <span className="block text-xs text-slate-400">{c.cmms_enabled ? 'CMMS 2' : 'No modules yet'}</span>
-              </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{c.name}</span>
               {c.id === current.id && <IconCheck width={18} height={18} className="text-brand" />}
             </button>
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+// Super admin button: a red gear on blue (Superman colours).
+function SuperAdminIcon() {
+  const teeth = Array.from({ length: 8 }, (_, i) => i * 45)
+  return (
+    <svg viewBox="0 0 40 40" className="h-10 w-10" aria-hidden="true">
+      <defs>
+        <linearGradient id="superadmin-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1d4ed8" />
+          <stop offset="1" stopColor="#1e3a8a" />
+        </linearGradient>
+      </defs>
+      <rect width="40" height="40" rx="11" fill="url(#superadmin-bg)" />
+      <g transform="translate(20 20)">
+        {teeth.map((deg) => (
+          <rect
+            key={deg}
+            x="-2.4"
+            y="-12.5"
+            width="4.8"
+            height="6"
+            rx="1.3"
+            fill="#ef4444"
+            transform={`rotate(${deg})`}
+          />
+        ))}
+        <circle r="8.6" fill="#ef4444" />
+        <circle r="3.6" fill="#1e40af" />
+      </g>
+    </svg>
   )
 }

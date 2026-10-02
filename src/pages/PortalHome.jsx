@@ -39,16 +39,7 @@ export default function PortalHome() {
     )
 
   return (
-    <div>
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Company</p>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{current.name}</h2>
-        {current.area_ha != null && (
-          <p className="mt-0.5 text-sm text-slate-500">
-            {Number(current.area_ha).toLocaleString('en-MY', { maximumFractionDigits: 2 })} ha
-          </p>
-        )}
-      </div>
+    <div className="pt-4 sm:pt-10">
       <TileGrid>
         <ModuleTile
           to="/cmms"

@@ -10,10 +10,12 @@ export default function CmmsHome() {
   return (
     <div>
       <PageHeader backTo="/" backLabel="Back to main page" />
-      <TileGrid>
-        <ModuleTile to="/cmms/work" label={'Maintenance\nWork Manage'} Icon={WorkIcon} />
-        <ModuleTile href={MACHTREK_URL} label="MachTrek" Icon={MachTrekIcon} />
-      </TileGrid>
+      <div className="pt-2 sm:pt-6">
+        <TileGrid>
+          <ModuleTile size="sm" to="/cmms/work" label={'Maintenance\nWork Manage'} Icon={WorkIcon} />
+          <ModuleTile size="sm" href={MACHTREK_URL} label="MachTrek" Icon={MachTrekIcon} />
+        </TileGrid>
+      </div>
     </div>
   )
 }
