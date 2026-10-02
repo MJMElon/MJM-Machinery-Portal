@@ -8,7 +8,8 @@ export interface Config {
   phoneNumberId: string
   allowedNumbers: Set<string> // digits only, e.g. "60123456789"
   graphVersion: string // e.g. "v23.0"
-  ackText: string
+  ackText: string // reply to a saved photo
+  ackTextMessage: string // reply to a saved text message
   maxBytes: number
 }
 
@@ -141,8 +142,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     for (const row of rows) {
       const inserted = await deps.store.insertIfNew(row)
       if (!inserted) log('duplicate delivery', { wa_message_id: row.wa_message_id })
-      // Images are (re)tried on duplicates too: claim() only picks up rows that
-      // are still "received" or "failed", so a saved photo is never redone.
+      // Rows are (re)tried on duplicates too: claim() only picks up rows that
+      // are still "received" or "failed", so a saved message is never redone.
       if (row.status === 'received') toProcess.push(row.wa_message_id)
     }
   } catch (e) {
@@ -153,7 +154,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (toProcess.length) {
     deps.waitUntil(
       (async () => {
-        for (const id of toProcess) await processImage(id, deps)
+        for (const id of toProcess) await processMessage(id, deps)
       })(),
     )
   }
@@ -188,6 +189,8 @@ export function extractMessages(payload: any, config: Config, log: NonNullable<D
         const from = digitsOnly(m.from)
         const type = String(m.type ?? 'unknown')
         const ts = Number(m.timestamp)
+        // `caption` holds the photo caption, or the body of a text message.
+        const text = type === 'image' ? (m.image?.caption ?? null) : type === 'text' ? (m.text?.body ?? null) : null
         const row: MessageRow = {
           wa_message_id: String(m.id),
           wa_from: from,
@@ -195,7 +198,7 @@ export function extractMessages(payload: any, config: Config, log: NonNullable<D
           phone_number_id: pnid,
           message_type: type,
           received_at: new Date(Number.isFinite(ts) && ts > 0 ? ts * 1000 : Date.now()).toISOString(),
-          caption: type === 'image' ? (m.image?.caption ?? null) : null,
+          caption: text,
           media_id: type === 'image' ? (m.image?.id ?? null) : null,
           mime_type: type === 'image' ? (m.image?.mime_type ?? null) : null,
           status: 'received',
@@ -207,11 +210,11 @@ export function extractMessages(payload: any, config: Config, log: NonNullable<D
           row.status = 'ignored'
           row.ack_status = 'skipped'
           row.error_details = 'Sender is not in WHATSAPP_ALLOWED_NUMBERS (trial allowlist). Logged only.'
-        } else if (type !== 'image') {
+        } else if (type !== 'image' && type !== 'text') {
           row.status = 'ignored'
           row.ack_status = 'skipped'
           row.error_details = `Message type "${type}" is not handled yet. Logged only.`
-        } else if (!row.media_id) {
+        } else if (type === 'image' && !row.media_id) {
           row.status = 'failed'
           row.ack_status = 'skipped'
           row.error_details = 'Image message has no media id.'
@@ -224,9 +227,9 @@ export function extractMessages(payload: any, config: Config, log: NonNullable<D
 }
 
 // ---------------------------------------------------------------------------
-// Download from Meta → Storage → acknowledge
+// Save (photo: download from Meta → Storage) → acknowledge
 // ---------------------------------------------------------------------------
-export async function processImage(waMessageId: string, deps: Deps): Promise<void> {
+export async function processMessage(waMessageId: string, deps: Deps): Promise<void> {
   const { store, config } = deps
   const log = deps.log ?? (() => {})
   let row: MessageRow | null
@@ -239,30 +242,35 @@ export async function processImage(waMessageId: string, deps: Deps): Promise<voi
   if (!row) return // already saved, being processed, or out of attempts
   const attempts = (row.attempts ?? 0) + 1
 
-  let storagePath: string
+  const isText = row.message_type === 'text'
   try {
-    const { bytes, mimeType } = await downloadMedia(row.media_id!, deps)
-    storagePath = buildStoragePath(row.wa_message_id, row.received_at, mimeType)
-    await store.upload(storagePath, bytes, mimeType)
-    await store.update(waMessageId, {
-      status: 'saved',
-      storage_path: storagePath,
-      mime_type: mimeType,
-      file_size: bytes.byteLength,
-      error_details: null,
-      attempts,
-    })
-    log('photo saved', { wa_message_id: waMessageId, storage_path: storagePath })
+    if (isText) {
+      await store.update(waMessageId, { status: 'saved', error_details: null, attempts })
+      log('text saved', { wa_message_id: waMessageId })
+    } else {
+      const { bytes, mimeType } = await downloadMedia(row.media_id!, deps)
+      const storagePath = buildStoragePath(row.wa_message_id, row.received_at, mimeType)
+      await store.upload(storagePath, bytes, mimeType)
+      await store.update(waMessageId, {
+        status: 'saved',
+        storage_path: storagePath,
+        mime_type: mimeType,
+        file_size: bytes.byteLength,
+        error_details: null,
+        attempts,
+      })
+      log('photo saved', { wa_message_id: waMessageId, storage_path: storagePath })
+    }
   } catch (e) {
     const msg = errText(e)
-    log('photo save failed', { wa_message_id: waMessageId, error: msg })
+    log('save failed', { wa_message_id: waMessageId, error: msg })
     await safeUpdate(store, waMessageId, { status: 'failed', error_details: msg, attempts }, log)
-    return // no acknowledgement for a photo we could not keep
+    return // no acknowledgement for a message we could not keep
   }
 
   if (row.ack_status === 'sent') return
   try {
-    const ackId = await sendText(row.wa_from, config.ackText, deps)
+    const ackId = await sendText(row.wa_from, isText ? config.ackTextMessage : config.ackText, deps)
     await safeUpdate(
       store,
       waMessageId,
@@ -271,7 +279,7 @@ export async function processImage(waMessageId: string, deps: Deps): Promise<voi
     )
   } catch (e) {
     const msg = errText(e)
-    log('acknowledgement failed (photo is still saved)', { wa_message_id: waMessageId, error: msg })
+    log('acknowledgement failed (message is still saved)', { wa_message_id: waMessageId, error: msg })
     await safeUpdate(store, waMessageId, { ack_status: 'failed', ack_error: msg }, log)
   }
 }
@@ -313,7 +321,13 @@ export async function sendText(to: string, text: string, deps: Deps): Promise<st
   const res = await deps.fetch(graph(config, `${encodeURIComponent(config.phoneNumberId)}/messages`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: text } }),
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: { body: text },
+    }),
     signal: AbortSignal.timeout(20_000),
   })
   const json = await readJson(res)
@@ -350,7 +364,7 @@ export class GraphError extends Error {
     } else if (code === 131030) {
       hint = ' → This number is not in the test number\'s recipient list (Meta → WhatsApp → API Setup → "To").'
     } else if (code === 131047) {
-      hint = ' → More than 24 hours since the sender\'s last message; a template would be required.'
+      hint = " → More than 24 hours since the sender's last message; a template would be required."
     }
     const detail = [e.message, e.error_data?.details].filter(Boolean).join(' — ') || `HTTP ${status}`
     super(`${step} failed (HTTP ${status}${code ? `, code ${code}` : ''}): ${detail}${hint}`.slice(0, 1000))

@@ -161,3 +161,10 @@ export const IconWrench = (p) => (
     <path d="M14.7 6.3a4 4 0 0 0 5 5L21 10a5.5 5.5 0 0 1-7.4 5.1L7 21.7a2.1 2.1 0 0 1-3-3l6.6-6.6A5.5 5.5 0 0 1 15.7 4.7Z" />
   </svg>
 )
+
+export const IconChat = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+    <path d="M7.5 9.5h9M7.5 12.5h6" />
+  </svg>
+)

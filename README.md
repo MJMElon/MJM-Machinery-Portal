@@ -1,6 +1,6 @@
 # MJM Machinery Portal
 
-Company portal (HQ admin login) → **Machinery** module → **Incoming Photos** (WhatsApp) and a link to **MachTrek**.
+Company portal (HQ admin login) → **Machinery System** → **Maintenance Request** (WhatsApp texts + photos) and a link to **MachTrek**.
 
 MachTrek is a separate app and is **not modified** by this repo. Both use the **same Supabase project**; everything here uses new, `machinery_`-prefixed objects.
 
@@ -10,15 +10,16 @@ React 18 + Vite 5 (plain JSX), Tailwind, React Router (HashRouter), `@supabase/s
 
 The WhatsApp webhook is a **Supabase Edge Function** (`supabase/functions/whatsapp-webhook`), because GitHub Pages cannot run server code.
 
-## How a photo flows
+## How a WhatsApp message flows
 
 1. Phone → WhatsApp Cloud API test number → Meta POSTs to the Edge Function.
 2. Function checks `X-Hub-Signature-256` (HMAC with the app secret). Bad signature → 401.
 3. Each message is inserted into `machinery_whatsapp_messages` (unique `wa_message_id`) **before** replying 200. DB error → 500 so Meta retries.
 4. Images from allowlisted senders are downloaded via the Media API and uploaded to the private bucket `machinery_whatsapp_photos` (`YYYY/MM/<message-id>.jpg`).
-5. After a successful save, "Photo received" is sent back. A send failure is recorded in `ack_status` / `ack_error`; the photo stays saved.
-6. Non-image messages and non-allowlisted senders are stored with status `ignored` (logged only, no reply).
-7. Duplicate deliveries: a row is only processed when it can be atomically claimed from `received`/`failed` (max 5 attempts), so a saved photo is never downloaded or acknowledged twice. A failed save is retried when Meta redelivers.
+   Text messages from allowlisted senders are saved too; the text goes in the `caption` column.
+5. After a successful save, "Photo received" (photo) or "Message received" (text) is sent back. A send failure is recorded in `ack_status` / `ack_error`; the photo stays saved.
+6. Other message types (video, voice, documents, …) and non-allowlisted senders are stored with status `ignored` (logged only, no reply).
+7. Duplicate deliveries: a row is only processed when it can be atomically claimed from `received`/`failed` (max 5 attempts), so a saved message is never downloaded or acknowledged twice. A failed save is retried when Meta redelivers.
 
 ## Access rules
 

@@ -6,8 +6,7 @@ import { Button, Card, Spinner } from './components/ui.jsx'
 import PortalHome from './pages/PortalHome.jsx'
 import MachineryHome from './pages/machinery/MachineryHome.jsx'
 import MaintenanceRequest from './pages/machinery/MaintenanceRequest.jsx'
-import IncomingPhotos from './pages/machinery/IncomingPhotos.jsx'
-import PhotoDetail from './pages/machinery/PhotoDetail.jsx'
+import MessageDetail from './pages/machinery/MessageDetail.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -22,8 +21,10 @@ export default function App() {
           <Route path="/" element={<PortalHome />} />
           <Route path="/machinery" element={<MachineryHome />} />
           <Route path="/machinery/maintenance" element={<MaintenanceRequest />} />
-          <Route path="/machinery/photos" element={<IncomingPhotos />} />
-          <Route path="/machinery/photos/:id" element={<PhotoDetail />} />
+          <Route path="/machinery/maintenance/:id" element={<MessageDetail />} />
+          {/* Old Incoming Photos links */}
+          <Route path="/machinery/photos" element={<Navigate to="/machinery/maintenance" replace />} />
+          <Route path="/machinery/photos/:id" element={<MessageDetail />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

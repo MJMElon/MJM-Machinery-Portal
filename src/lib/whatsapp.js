@@ -6,10 +6,14 @@ export const SIGNED_URL_SECONDS = 600
 const LIST_COLUMNS =
   'id, wa_message_id, wa_from, sender_name, message_type, received_at, caption, storage_path, status, error_details, ack_status, reviewed_at'
 
+// Message types the inbox shows and the webhook saves. `caption` holds the
+// photo caption or the text message body.
+export const INBOX_TYPES = ['image', 'text']
+
 /** filter: all | todo | reviewed | problems */
 export async function listMessages({ filter = 'todo', limit = 100 } = {}) {
   let q = supabase.from(WA_TABLE).select(LIST_COLUMNS).order('received_at', { ascending: false }).limit(limit)
-  if (filter === 'todo') q = q.eq('message_type', 'image').eq('status', 'saved').is('reviewed_at', null)
+  if (filter === 'todo') q = q.in('message_type', INBOX_TYPES).eq('status', 'saved').is('reviewed_at', null)
   if (filter === 'reviewed') q = q.not('reviewed_at', 'is', null)
   if (filter === 'problems') q = q.or('status.eq.failed,status.eq.received,status.eq.processing,ack_status.eq.failed')
   const { data, error } = await q
@@ -21,7 +25,7 @@ export async function countToReview() {
   const { count, error } = await supabase
     .from(WA_TABLE)
     .select('id', { count: 'exact', head: true })
-    .eq('message_type', 'image')
+    .in('message_type', INBOX_TYPES)
     .eq('status', 'saved')
     .is('reviewed_at', null)
   if (error) throw error

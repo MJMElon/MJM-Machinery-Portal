@@ -20,6 +20,7 @@ const config = (over: Partial<Config> = {}): Config => ({
   allowedNumbers: parseAllowlist(`+60 12-345 6789, 60198765432`),
   graphVersion: 'v23.0',
   ackText: 'Photo received',
+  ackTextMessage: 'Message received',
   maxBytes: 1024,
   ...over,
 })
@@ -162,17 +163,59 @@ Deno.test('duplicate delivery does not download or reply twice', async () => {
   assertEquals(store.rows.size, 1)
 })
 
-Deno.test('text message and non-allowlisted sender are logged, not processed, no reply', async () => {
+Deno.test('text message from allowlisted sender: saved with its body, then "Message received" sent', async () => {
   const store = new MemStore()
   const f = fakeFetch({})
   const { d, flush } = deps(store, f)
-  const text = { from: ME, id: 'wamid.TXT', timestamp: '1790000000', type: 'text', text: { body: 'hi' } }
-  const res = await handle(await signedPost(payload([text, image('wamid.STRANGER', '60111111111')])), d)
+  const text = { from: ME, id: 'wamid.TXT', timestamp: '1790000000', type: 'text', text: { body: 'Excavator 3 hydraulic leak' } }
+  const res = await handle(await signedPost(payload([text])), d)
   assertEquals(res.status, 200)
   await flush()
-  assertEquals(store.rows.get('wamid.TXT')!.status, 'ignored')
-  assertEquals(store.rows.get('wamid.TXT')!.message_type, 'text')
+  const r = store.rows.get('wamid.TXT')!
+  assertEquals(r.status, 'saved')
+  assertEquals(r.message_type, 'text')
+  assertEquals(r.caption, 'Excavator 3 hydraulic leak')
+  assertEquals(r.ack_status, 'sent')
+  assertEquals(store.uploads.size, 0)
+  assertEquals(f.calls.length, 1)
+  const send = f.calls[0]
+  assert(send.startsWith('POST') && send.includes(`/${PNID}/messages`), 'reply was sent')
+
+  // A redelivery of the same text is not replied to twice.
+  await handle(await signedPost(payload([text])), d)
+  await flush()
+  assertEquals(f.calls.length, 1)
+})
+
+Deno.test('reply text differs for photos and text messages', async () => {
+  const store = new MemStore()
+  const bodies: string[] = []
+  const f = fakeFetch({
+    send: (_u, init) => {
+      bodies.push(JSON.parse(String(init?.body)).text.body)
+      return Response.json({ messages: [{ id: 'wamid.ACK' }] })
+    },
+  })
+  const { d, flush } = deps(store, f, { ackTextMessage: 'Message received' })
+  const text = { from: ME, id: 'wamid.TXT', timestamp: '1790000000', type: 'text', text: { body: 'hi' } }
+  await handle(await signedPost(payload([image(), text])), d)
+  await flush()
+  assertEquals(bodies.sort(), ['Message received', 'Photo received'])
+})
+
+Deno.test('unsupported type and non-allowlisted sender are logged, not processed, no reply', async () => {
+  const store = new MemStore()
+  const f = fakeFetch({})
+  const { d, flush } = deps(store, f)
+  const video = { from: ME, id: 'wamid.VID', timestamp: '1790000000', type: 'video', video: { id: 'MEDIA2' } }
+  const strangerText = { from: '60111111111', id: 'wamid.STRTXT', timestamp: '1790000000', type: 'text', text: { body: 'hi' } }
+  const res = await handle(await signedPost(payload([video, image('wamid.STRANGER', '60111111111'), strangerText])), d)
+  assertEquals(res.status, 200)
+  await flush()
+  assertEquals(store.rows.get('wamid.VID')!.status, 'ignored')
+  assertEquals(store.rows.get('wamid.VID')!.message_type, 'video')
   assertEquals(store.rows.get('wamid.STRANGER')!.status, 'ignored')
+  assertEquals(store.rows.get('wamid.STRTXT')!.status, 'ignored')
   assertEquals(f.calls.length, 0)
 })
 

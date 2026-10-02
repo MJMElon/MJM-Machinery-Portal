@@ -1,4 +1,4 @@
-// Supabase Edge Function: WhatsApp Cloud API webhook (Meta → photo inbox).
+// Supabase Edge Function: WhatsApp Cloud API webhook (Meta → photo + text inbox).
 //
 // Public URL: https://<project-ref>.supabase.co/functions/v1/whatsapp-webhook
 // Deploy with JWT verification OFF (Meta cannot send a Supabase JWT); every
@@ -12,6 +12,7 @@
 //   WHATSAPP_ALLOWED_NUMBERS  comma list, e.g. "60123456789,60198765432"
 //   WHATSAPP_GRAPH_VERSION    optional, default v23.0
 //   WHATSAPP_ACK_TEXT         optional, default "Photo received"
+//   WHATSAPP_ACK_TEXT_MESSAGE optional, default "Message received"
 // SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are injected by Supabase itself.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -32,6 +33,7 @@ function readConfig(): Config {
     allowedNumbers: parseAllowlist(env('WHATSAPP_ALLOWED_NUMBERS')),
     graphVersion: env('WHATSAPP_GRAPH_VERSION') || 'v23.0',
     ackText: env('WHATSAPP_ACK_TEXT') || 'Photo received',
+    ackTextMessage: env('WHATSAPP_ACK_TEXT_MESSAGE') || 'Message received',
     maxBytes: 16 * 1024 * 1024,
   }
 }

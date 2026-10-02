@@ -2,10 +2,19 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, SectionTitle, Spinner } from '../../components/ui.jsx'
-import { IconExternal, IconImage } from '../../components/icons.jsx'
-import { ackBadge, formatSender, formatTime, getMessage, setReviewed, signPaths, statusBadge } from '../../lib/whatsapp.js'
+import { IconChat, IconExternal, IconImage } from '../../components/icons.jsx'
+import {
+  ackBadge,
+  formatSender,
+  formatTime,
+  getMessage,
+  setReviewed,
+  signPaths,
+  statusBadge
+} from '../../lib/whatsapp.js'
 
-export default function PhotoDetail() {
+// One WhatsApp message: the photo (with caption) or the text body.
+export default function MessageDetail() {
   const { id } = useParams()
   const [row, setRow] = useState(null)
   const [url, setUrl] = useState(null)
@@ -52,11 +61,12 @@ export default function PhotoDetail() {
   if (!row)
     return (
       <div className="space-y-3">
-        <PageHeader title="Photo" />
+        <PageHeader title="Message" />
         <EmptyState title="Record not found" subtitle={error} />
       </div>
     )
 
+  const isText = row.message_type === 'text'
   const st = statusBadge(row.status)
   const ack = ackBadge(row.ack_status)
 
@@ -66,28 +76,44 @@ export default function PhotoDetail() {
         <PageHeader title={row.sender_name || formatSender(row.wa_from)} subtitle={formatTime(row.received_at)} />
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="flex min-h-[240px] items-center justify-center bg-slate-100 text-slate-500">
-          {url ? (
-            <img src={url} alt={row.caption || 'WhatsApp photo'} className="max-h-[75dvh] w-full object-contain" />
-          ) : (
-            <div className="flex flex-col items-center gap-1 p-6 text-sm">
-              <IconImage width={32} height={32} />
-              {row.message_type !== 'image' ? `${row.message_type} message (not a photo)` : 'Image not stored'}
-            </div>
+      {isText ? (
+        <Card className="p-6 lg:self-start">
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-brand">
+            <IconChat width={20} height={20} /> WhatsApp text message
+          </div>
+          <p className="whitespace-pre-wrap break-words text-lg leading-relaxed text-slate-800">
+            {row.caption || <span className="italic text-slate-400">(empty message)</span>}
+          </p>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="flex min-h-[240px] items-center justify-center bg-slate-100 text-slate-500">
+            {url ? (
+              <img src={url} alt={row.caption || 'WhatsApp photo'} className="max-h-[75dvh] w-full object-contain" />
+            ) : (
+              <div className="flex flex-col items-center gap-1 p-6 text-sm">
+                <IconImage width={32} height={32} />
+                {row.message_type !== 'image' ? `${row.message_type} message (not a photo)` : 'Image not stored'}
+              </div>
+            )}
+          </div>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-11 items-center justify-center gap-1.5 border-t border-slate-200 text-sm font-medium text-brand"
+            >
+              Open full size <IconExternal width={16} height={16} />
+            </a>
           )}
-        </div>
-        {url && (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex h-11 items-center justify-center gap-1.5 border-t border-slate-200 text-sm font-medium text-brand"
-          >
-            Open full size <IconExternal width={16} height={16} />
-          </a>
-        )}
-      </Card>
+          {row.caption && (
+            <p className="whitespace-pre-wrap break-words border-t border-slate-200 p-4 text-slate-800">
+              {row.caption}
+            </p>
+          )}
+        </Card>
+      )}
 
       <div className="space-y-3">
         {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
@@ -98,7 +124,7 @@ export default function PhotoDetail() {
             {ack && <Badge color={ack.color}>{ack.label}</Badge>}
             {row.reviewed_at && <Badge color="green">Reviewed</Badge>}
           </div>
-          {row.message_type === 'image' && row.status === 'saved' && (
+          {(row.message_type === 'image' || isText) && row.status === 'saved' && (
             <Button full variant={row.reviewed_at ? 'secondary' : 'primary'} disabled={busy} onClick={toggleReviewed}>
               {busy ? 'Saving…' : row.reviewed_at ? 'Mark as not reviewed' : 'Mark Reviewed'}
             </Button>
@@ -117,13 +143,13 @@ export default function PhotoDetail() {
             <Row label="Sender" value={formatSender(row.wa_from)} />
             {row.sender_name && <Row label="WhatsApp name" value={row.sender_name} />}
             <Row label="Received" value={formatTime(row.received_at)} />
-            <Row label="Caption" value={row.caption || '—'} />
+            <Row label={isText ? 'Message' : 'Caption'} value={row.caption || '—'} />
             <Row label="Type" value={row.message_type} />
             {row.error_details && <Row label="Error" value={row.error_details} tone="red" />}
             {row.ack_error && <Row label="Reply error" value={row.ack_error} tone="red" />}
-            <Row label="Media ID" value={row.media_id || '—'} mono />
+            {!isText && <Row label="Media ID" value={row.media_id || '—'} mono />}
             <Row label="Message ID" value={row.wa_message_id} mono />
-            <Row label="Stored at" value={row.storage_path || '—'} mono />
+            {!isText && <Row label="Stored at" value={row.storage_path || '—'} mono />}
           </dl>
         </Card>
       </div>
@@ -135,7 +161,12 @@ function Row({ label, value, mono, tone }) {
   return (
     <div className="grid grid-cols-[110px_1fr] gap-2">
       <dt className="text-slate-500">{label}</dt>
-      <dd className={[mono ? 'break-all font-mono text-xs' : 'break-words', tone === 'red' ? 'text-red-700' : 'text-slate-800'].join(' ')}>
+      <dd
+        className={[
+          mono ? 'break-all font-mono text-xs' : 'break-words',
+          tone === 'red' ? 'text-red-700' : 'text-slate-800'
+        ].join(' ')}
+      >
         {value}
       </dd>
     </div>
