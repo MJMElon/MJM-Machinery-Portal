@@ -8,8 +8,6 @@ export interface Config {
   phoneNumberId: string
   allowedNumbers: Set<string> // digits only, e.g. "60123456789"
   graphVersion: string // e.g. "v23.0"
-  ackText: string // reply to a saved photo
-  ackTextMessage: string // reply to a saved text message
   maxBytes: number
 }
 
@@ -31,6 +29,21 @@ export interface MessageRow {
   ack_status: AckStatus
   raw: unknown
   attempts?: number
+  case_id?: string | null
+}
+
+/** A maintenance case: groups the texts and photos about one breakdown. */
+export interface CaseRef {
+  id: string
+  case_no: number
+}
+
+export interface NewCase {
+  wa_from: string
+  sender_name: string | null
+  machine_name: string | null
+  problem: string | null
+  opened_at: string
 }
 
 export interface Store {
@@ -40,6 +53,14 @@ export interface Store {
   claim(waMessageId: string): Promise<MessageRow | null>
   update(waMessageId: string, patch: Record<string, unknown>): Promise<void>
   upload(path: string, bytes: Uint8Array, contentType: string): Promise<void>
+  /** Case by its number (#12), or null. */
+  findCaseByNo(caseNo: number): Promise<CaseRef | null>
+  /** Case of the WhatsApp message being replied to (our case reply, our ack, or an earlier message), or null. */
+  findCaseByReply(waMessageId: string): Promise<CaseRef | null>
+  /** Case this sender last added to since `sinceIso` (pending cases only), or null. */
+  recentCaseForSender(waFrom: string, sinceIso: string): Promise<CaseRef | null>
+  createCase(c: NewCase): Promise<CaseRef>
+  setCaseAck(caseId: string, ackMessageId: string | null): Promise<void>
 }
 
 export interface Deps {
@@ -52,6 +73,8 @@ export interface Deps {
 }
 
 export const MAX_ATTEMPTS = 5
+/** A captionless photo joins the sender's case if they added to it this recently. */
+export const PHOTO_FOLLOW_UP_MS = 30 * 60 * 1000
 
 export const digitsOnly = (s: string | null | undefined) => String(s ?? '').replace(/\D/g, '')
 
@@ -227,10 +250,10 @@ export function extractMessages(payload: any, config: Config, log: NonNullable<D
 }
 
 // ---------------------------------------------------------------------------
-// Save (photo: download from Meta → Storage) → acknowledge
+// Save (photo: download from Meta → Storage) → put in a case → acknowledge
 // ---------------------------------------------------------------------------
 export async function processMessage(waMessageId: string, deps: Deps): Promise<void> {
-  const { store, config } = deps
+  const { store } = deps
   const log = deps.log ?? (() => {})
   let row: MessageRow | null
   try {
@@ -243,24 +266,28 @@ export async function processMessage(waMessageId: string, deps: Deps): Promise<v
   const attempts = (row.attempts ?? 0) + 1
 
   const isText = row.message_type === 'text'
+  let placed: Placed | null = null
   try {
-    if (isText) {
-      await store.update(waMessageId, { status: 'saved', error_details: null, attempts })
-      log('text saved', { wa_message_id: waMessageId })
-    } else {
+    const patch: Record<string, unknown> = { error_details: null, attempts }
+    if (!isText) {
       const { bytes, mimeType } = await downloadMedia(row.media_id!, deps)
       const storagePath = buildStoragePath(row.wa_message_id, row.received_at, mimeType)
       await store.upload(storagePath, bytes, mimeType)
-      await store.update(waMessageId, {
-        status: 'saved',
-        storage_path: storagePath,
-        mime_type: mimeType,
-        file_size: bytes.byteLength,
-        error_details: null,
-        attempts,
-      })
-      log('photo saved', { wa_message_id: waMessageId, storage_path: storagePath })
+      Object.assign(patch, { storage_path: storagePath, mime_type: mimeType, file_size: bytes.byteLength })
     }
+    try {
+      placed = await placeInCase(row, store)
+    } catch (e) {
+      // Keep the message even if cases can't be used (e.g. the cases migration
+      // has not been run yet); the migration puts such messages into cases.
+      log('case assignment failed; message saved without a case', { wa_message_id: waMessageId, error: errText(e) })
+    }
+    await store.update(waMessageId, { ...patch, ...(placed ? { case_id: placed.ref.id } : {}), status: 'saved' })
+    log(placed ? (placed.created ? 'case created' : 'added to case') : 'saved', {
+      wa_message_id: waMessageId,
+      case_no: placed?.ref.case_no,
+      type: row.message_type,
+    })
   } catch (e) {
     const msg = errText(e)
     log('save failed', { wa_message_id: waMessageId, error: msg })
@@ -270,18 +297,114 @@ export async function processMessage(waMessageId: string, deps: Deps): Promise<v
 
   if (row.ack_status === 'sent') return
   try {
-    const ackId = await sendText(row.wa_from, isText ? config.ackTextMessage : config.ackText, deps)
+    const ackId = await sendText(row.wa_from, ackFor(placed, row.message_type), deps)
     await safeUpdate(
       store,
       waMessageId,
       { ack_status: 'sent', ack_message_id: ackId, ack_error: null, ack_sent_at: new Date().toISOString() },
       log,
     )
+    if (placed?.created) {
+      try {
+        await store.setCaseAck(placed.ref.id, ackId)
+      } catch (e) {
+        log('could not store case reply id', { case_no: placed.ref.case_no, error: errText(e) })
+      }
+    }
   } catch (e) {
     const msg = errText(e)
     log('acknowledgement failed (message is still saved)', { wa_message_id: waMessageId, error: msg })
     await safeUpdate(store, waMessageId, { ack_status: 'failed', ack_error: msg }, log)
   }
+}
+
+/**
+ * Which case a message belongs to, in this order:
+ * 1. it is a WhatsApp reply to one of our case messages (or to a message already in a case);
+ * 2. its text/caption mentions a case number (#12, "case 12", MR-12);
+ * 3. it is a photo without caption and the sender added to a pending case in the last 30 minutes;
+ * otherwise a new case is opened, with machine and problem read from the text.
+ */
+type Placed = { ref: CaseRef; created: boolean; machine: string | null; problem: string | null }
+
+export async function placeInCase(row: MessageRow, store: Store): Promise<Placed> {
+  const text = row.caption ?? ''
+  const none = { machine: null, problem: null }
+  if (row.case_id) {
+    // A retry of a message that was already placed: keep its case.
+    const ref = await store.findCaseByReply(row.wa_message_id)
+    if (ref) return { ref, created: false, ...none }
+  }
+  const replyTo = (row.raw as any)?.context?.id
+  if (replyTo) {
+    const ref = await store.findCaseByReply(String(replyTo))
+    if (ref) return { ref, created: false, ...none }
+  }
+  const no = findCaseNumber(text)
+  if (no) {
+    const ref = await store.findCaseByNo(no)
+    if (ref) return { ref, created: false, ...none }
+  }
+  if (row.message_type === 'image' && !text.trim()) {
+    const since = new Date(new Date(row.received_at).getTime() - PHOTO_FOLLOW_UP_MS).toISOString()
+    const ref = await store.recentCaseForSender(row.wa_from, since)
+    if (ref) return { ref, created: false, ...none }
+  }
+  const { machine, problem } = parseReport(text)
+  const ref = await store.createCase({
+    wa_from: row.wa_from,
+    sender_name: row.sender_name,
+    machine_name: machine,
+    problem,
+    opened_at: row.received_at,
+  })
+  return { ref, created: true, machine, problem }
+}
+
+/** "#12", "case 12", "case no: 12", "MR-12" → 12 */
+export function findCaseNumber(text: string | null | undefined): number | null {
+  const m = /(?:#\s*|\bcase\s*(?:no\.?|number|#)?\s*:?\s*|\bMR-?\s*)(\d{1,7})\b/i.exec(String(text ?? ''))
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * Machine name + problem from a report:
+ *   "Machine: EX-03\nProblem: hydraulic leak"  (also Mesin / Masalah)
+ *   "EX-03 hydraulic leak", "EX03: hydraulic leak", "TR 11 - flat tyre"
+ * Anything else: the whole text is the problem and the machine is left empty
+ * (it can be filled in on the portal).
+ */
+export function parseReport(text: string | null | undefined): { machine: string | null; problem: string | null } {
+  const clean = String(text ?? '').trim()
+  if (!clean) return { machine: null, problem: null }
+  const lines = clean.split('\n')
+  const labelled = (names: string) => {
+    const re = new RegExp(`^\\s*(?:${names})\\s*[:\\-]\\s*(.*)$`, 'i')
+    const i = lines.findIndex((l) => re.test(l))
+    return i < 0 ? null : { i, value: re.exec(lines[i])![1].trim() || null }
+  }
+  const lm = labelled('machine name|machine|mesin|unit')
+  const lp = labelled('problem|masalah|issue|kerosakan')
+  if (lm || lp) {
+    const rest = lines.filter((_, i) => i !== lm?.i && i !== lp?.i).join('\n').trim() || null
+    return { machine: lm?.value ?? null, problem: lp?.value ?? rest }
+  }
+  const code = /^\s*([A-Za-z]{1,5}[- ]?\d{1,5}[A-Za-z]?)\b\s*[:\-–,.]?\s+([\s\S]+)$/.exec(clean)
+  if (code) return { machine: code[1].toUpperCase().replace(' ', '-'), problem: code[2].trim() }
+  return { machine: null, problem: clean }
+}
+
+export function ackFor(placed: Placed | null, type: string): string {
+  if (!placed) return 'Received ✅'
+  const n = placed.ref.case_no
+  if (!placed.created) return `${type === 'image' ? '📷 Photo' : '📝 Update'} added to case #${n}`
+  return [
+    `✅ Case #${n} created`,
+    `Machine: ${placed.machine ?? '-'}`,
+    `Problem: ${placed.problem ?? (type === 'image' ? '(photo)' : '-')}`,
+    '',
+    `To add photos or updates to this case, reply to this message or write #${n}.`,
+  ].join('\n')
 }
 
 async function safeUpdate(store: Store, id: string, patch: Record<string, unknown>, log: NonNullable<Deps['log']>) {

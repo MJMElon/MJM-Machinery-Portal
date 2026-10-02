@@ -20,9 +20,20 @@ The WhatsApp webhook is a **Supabase Edge Function** (`supabase/functions/whatsa
 3. Each message is inserted into `machinery_whatsapp_messages` (unique `wa_message_id`) **before** replying 200. DB error → 500 so Meta retries.
 4. Images from allowlisted senders are downloaded via the Media API and uploaded to the private bucket `machinery_whatsapp_photos` (`YYYY/MM/<message-id>.jpg`).
    Text messages from allowlisted senders are saved too; the text goes in the `caption` column.
-5. After a successful save, "Photo received" (photo) or "Message received" (text) is sent back. A send failure is recorded in `ack_status` / `ack_error`; the photo stays saved.
+5. The message is put in a **case** (see below) and the sender gets a reply: "✅ Case #12 created …" for a new report, or "📷 Photo / 📝 Update added to case #12". A send failure is recorded in `ack_status` / `ack_error`; the photo stays saved.
 6. Other message types (video, voice, documents, …) and non-allowlisted senders are stored with status `ignored` (logged only, no reply).
 7. Duplicate deliveries: a row is only processed when it can be atomically claimed from `received`/`failed` (max 5 attempts), so a saved message is never downloaded or acknowledged twice. A failed save is retried when Meta redelivers.
+
+## Cases (CMMS 2)
+
+A case groups the WhatsApp texts and photos about one breakdown (`machinery_cases`, one row per case, numbered #1, #2, …). For each saved message the webhook picks the case in this order:
+
+1. The message is a WhatsApp **reply** to our case message (or to any message already in a case) → that case.
+2. The text or caption mentions a **case number**: `#12`, `case 12`, `case no: 12`, `MR-12` → that case.
+3. A **photo without caption** from someone who added to a pending case in the last 30 minutes → that case.
+4. Otherwise a **new case** is opened. Machine and problem are read from the text: `EX-03 hydraulic leak`, `TR 11 - flat tyre`, or `Machine: …` / `Problem: …` lines (also `Mesin:` / `Masalah:`). Anything else becomes the problem; both can be edited on the portal.
+
+Portal: CMMS 2 → Maintenance Work Manage lists cases (Case No. · Machine · Problem · Photo · Sent by) under Pending / Solved; the case page shows all photos and messages, edits machine/problem, and marks it solved.
 
 ## Access rules
 
@@ -40,7 +51,7 @@ The WhatsApp webhook is a **Supabase Edge Function** (`supabase/functions/whatsa
 ### 1. Database (once)
 Edit the e-mail in section 5 of `supabase/migrations/20260929120000_whatsapp_photo_inbox.sql`, then paste the whole file into **Supabase → SQL Editor** and Run. The final `select` must list your admin. Safe to re-run.
 
-Then do the same with `supabase/migrations/20261002120000_companies.sql` (companies for Company Settings / CMMS 2). Safe to re-run.
+Then do the same, in order, with `supabase/migrations/20261002120000_companies.sql` (companies for Settings / CMMS 2) and `supabase/migrations/20261003120000_cases.sql` (cases; also puts earlier messages into cases). All are safe to re-run.
 
 ### 2. Edge Function (no terminal)
 Deployed by GitHub Actions (`.github/workflows/deploy-webhook.yml`).

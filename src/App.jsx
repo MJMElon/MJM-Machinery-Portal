@@ -7,7 +7,7 @@ import PortalHome from './pages/PortalHome.jsx'
 import CmmsHome from './pages/machinery/CmmsHome.jsx'
 import WorkManage from './pages/machinery/WorkManage.jsx'
 import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
-import MessageDetail from './pages/machinery/MessageDetail.jsx'
+import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import CompanySettings from './pages/settings/CompanySettings.jsx'
 
 export default function App() {
@@ -25,13 +25,10 @@ export default function App() {
           <Route path="/cmms" element={<CmmsHome />} />
           <Route path="/cmms/work" element={<WorkManage />} />
           <Route path="/cmms/work/all" element={<WorkConsolidated />} />
-          <Route path="/cmms/work/case/:id" element={<MessageDetail />} />
+          <Route path="/cmms/work/case/:id" element={<CaseDetail />} />
           {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
           <Route path="/machinery" element={<Navigate to="/cmms" replace />} />
-          <Route path="/machinery/maintenance" element={<Navigate to="/cmms/work" replace />} />
-          <Route path="/machinery/photos" element={<Navigate to="/cmms/work" replace />} />
-          <Route path="/machinery/maintenance/:id" element={<MessageDetail />} />
-          <Route path="/machinery/photos/:id" element={<MessageDetail />} />
+          <Route path="/machinery/*" element={<Navigate to="/cmms/work" replace />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

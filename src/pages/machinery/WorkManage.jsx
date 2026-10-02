@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card, EmptyState, Select, Spinner } from '../../components/ui.jsx'
+import { Button, Card, Select, Spinner } from '../../components/ui.jsx'
 import { IconConsolidate, IconRefresh, IconWarning } from '../../components/icons.jsx'
-import { CaseRow } from '../../components/CaseRow.jsx'
+import { CaseTableHeader, CaseTableRow } from '../../components/CaseTable.jsx'
+import { formatSender, formatTime } from '../../lib/whatsapp.js'
 import { UNASSIGNED, useCases } from '../../lib/useCases.js'
 
 const TABS = [
@@ -41,18 +42,33 @@ export default function WorkManage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        backTo="/cmms"
-        backLabel="Back to CMMS 2"
+        backTo="/"
+        backLabel="Back to main page"
         title={company?.label}
         right={
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => reload()} aria-label="Refresh">
+            {options.length > 1 && (
+              <div className="w-56 sm:w-72">
+                <Select
+                  aria-label="Company"
+                  value={company?.key}
+                  onChange={(e) => setParams({ company: e.target.value }, { replace: true })}
+                >
+                  {options.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            <Button variant="secondary" onClick={() => reload()} aria-label="Refresh" className="w-12 px-0">
               <IconRefresh width={18} height={18} />
             </Button>
             <Link
               to="/cmms/work/all"
               title="All companies (consolidated view)"
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-brand px-3 text-sm font-medium text-white hover:bg-brand-dark"
+              className="inline-flex h-12 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark"
             >
               <IconConsolidate width={20} height={20} />
               <span className="hidden sm:inline">All companies</span>
@@ -60,46 +76,6 @@ export default function WorkManage() {
           </div>
         }
       />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
-          {TABS.map((t) => {
-            const n = t.key === 'pending' ? pendingRows.length : solvedRows.length
-            const active = tab === t.key
-            return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition ${
-                  active ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {t.label}
-                <span
-                  className={`rounded-full px-2 text-xs ${active ? 'bg-white/20' : t.key === 'pending' && n ? 'bg-amber-100 text-amber-700' : 'bg-slate-100'}`}
-                >
-                  {n}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        {options.length > 1 && (
-          <label className="flex items-center gap-2 text-sm text-slate-600 sm:w-80">
-            <span className="shrink-0">Company</span>
-            <span className="flex-1">
-              <Select value={company?.key} onChange={(e) => setParams({ company: e.target.value }, { replace: true })}>
-                {options.map((o) => (
-                  <option key={o.key} value={o.key}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </span>
-          </label>
-        )}
-      </div>
 
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
@@ -113,26 +89,66 @@ export default function WorkManage() {
         </p>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-12 text-brand">
-          <Spinner className="h-7 w-7" />
+      <Card className="overflow-hidden">
+        {/* Tabs: full width, joined to the table below */}
+        <div className="grid grid-cols-2 border-b border-slate-200" role="tablist">
+          {TABS.map((t) => {
+            const n = t.key === 'pending' ? pendingRows.length : solvedRows.length
+            const active = tab === t.key
+            return (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t.key)}
+                className={`relative flex h-14 items-center justify-center gap-2.5 text-[15px] font-semibold transition ${
+                  active ? 'bg-white text-brand' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                }`}
+              >
+                {t.label}
+                <span
+                  className={`min-w-[1.75rem] rounded-full px-2 py-0.5 text-xs tabular-nums ${
+                    active
+                      ? 'bg-brand text-white'
+                      : t.key === 'pending' && n
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {n}
+                </span>
+                {active && <span className="absolute inset-x-0 bottom-0 h-[3px] bg-brand" />}
+              </button>
+            )
+          })}
         </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title={tab === 'pending' ? 'No pending cases' : 'No solved cases yet'}
-          subtitle={
-            tab === 'pending'
-              ? 'WhatsApp texts and photos from this company’s numbers appear here.'
-              : 'Cases marked as solved appear here.'
-          }
-        />
-      ) : (
-        <Card className="divide-y divide-slate-100 overflow-hidden">
-          {rows.map((r) => (
-            <CaseRow key={r.id} row={r} url={urls[r.storage_path]} />
-          ))}
-        </Card>
-      )}
+
+        {loading ? (
+          <div className="flex justify-center py-16 text-brand">
+            <Spinner className="h-7 w-7" />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <p className="font-medium text-slate-700">
+              {tab === 'pending' ? 'No pending cases' : 'No solved cases yet'}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              {tab === 'pending'
+                ? 'New WhatsApp reports from this company’s numbers appear here as cases.'
+                : 'Cases marked as solved appear here.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <CaseTableHeader />
+            <div className="divide-y divide-slate-100">
+              {rows.map((c) => (
+                <CaseTableRow key={c.id} c={c} urls={urls} />
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
 
       {problems.length > 0 && (
         <div className="space-y-2">
@@ -145,9 +161,14 @@ export default function WorkManage() {
             {showProblems ? ' · hide' : ' · show'}
           </button>
           {showProblems && (
-            <Card className="divide-y divide-slate-100 overflow-hidden">
-              {problems.map((r) => (
-                <CaseRow key={r.id} row={r} url={urls[r.storage_path]} />
+            <Card className="divide-y divide-slate-100 overflow-hidden text-sm">
+              {problems.map((m) => (
+                <div key={m.id} className="px-4 py-3">
+                  <p className="font-medium text-slate-800">
+                    {m.sender_name || formatSender(m.wa_from)} · {m.message_type} · {formatTime(m.received_at)}
+                  </p>
+                  <p className="mt-0.5 break-words text-red-700">{m.error_details || m.ack_error || m.status}</p>
+                </div>
               ))}
             </Card>
           )}

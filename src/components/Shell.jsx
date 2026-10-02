@@ -10,7 +10,7 @@ export function Shell() {
   return (
     <div className="flex min-h-[100dvh] w-full flex-col">
       <TopBar title={title} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 pt-6 sm:px-8 sm:pt-8">
+      <main className="w-full flex-1 px-4 pb-12 pt-6 sm:px-8 sm:pt-8 lg:px-10">
         <Outlet />
       </main>
     </div>
@@ -21,8 +21,7 @@ export function Shell() {
 function pageTitle(path) {
   if (path === '/') return ''
   if (path.startsWith('/cmms/work/all')) return 'All Companies'
-  if (path.startsWith('/cmms/work/case') || /^\/machinery\/(maintenance|photos)\/./.test(path))
-    return 'Maintenance Case'
+  if (path.startsWith('/cmms/work/case')) return 'Maintenance Case'
   if (path.startsWith('/cmms/work')) return 'Maintenance Work Manage'
   if (path.startsWith('/cmms')) return 'CMMS 2'
   if (path.startsWith('/settings')) return 'Settings'
@@ -54,7 +53,7 @@ function TopBar({ title }) {
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div
-        className={`mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-8 ${home ? 'h-24' : 'h-16 sm:h-[72px]'}`}
+        className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-8 lg:px-10 ${home ? 'h-24' : 'h-16 sm:h-[72px]'}`}
       >
         <div className="min-w-0">
           {!home && (

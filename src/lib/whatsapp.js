@@ -4,7 +4,7 @@ import { supabase, WA_TABLE, WA_BUCKET } from './supabase.js'
 export const SIGNED_URL_SECONDS = 600
 
 const LIST_COLUMNS =
-  'id, wa_message_id, wa_from, sender_name, message_type, received_at, caption, storage_path, status, error_details, ack_status, reviewed_at'
+  'id, wa_message_id, wa_from, sender_name, message_type, received_at, caption, storage_path, status, error_details, ack_status, ack_error, reviewed_at'
 
 // Message types the inbox shows and the webhook saves. `caption` holds the
 // photo caption or the text message body.

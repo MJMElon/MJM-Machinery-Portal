@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { companyByNumber, listCompanies } from './companies.js'
+import { casePhotos, listCases } from './cases.js'
 import { listMessages, signPaths } from './whatsapp.js'
 
 const POLL_MS = 15000
 export const UNASSIGNED = 'unassigned'
 
 // Loads companies + pending/solved cases and keeps them fresh.
-// A case belongs to a company when the sender's number is in that company's
-// WhatsApp numbers and the company has CMMS 2 access. Senders not listed under
-// any company are "unassigned".
+// A case belongs to a company when the number that opened it is in that
+// company's WhatsApp numbers and the company has CMMS 2 access. Cases opened by
+// numbers not listed under any company are "unassigned".
 export function useCases() {
   const [companies, setCompanies] = useState([])
   const [pending, setPending] = useState([])
@@ -22,20 +23,22 @@ export function useCases() {
     setError('')
     try {
       const [cos, p, s, pr] = await Promise.all([
-        listCompanies().catch((e) => {
-          // Cases still show (as unassigned) before the companies migration is run.
-          setError(e.message || 'Could not load companies.')
-          return []
-        }),
-        listMessages({ filter: 'pending' }),
-        listMessages({ filter: 'solved' }),
-        listMessages({ filter: 'problems', limit: 50 })
+        listCompanies().catch(() => []),
+        listCases({ status: 'pending' }),
+        listCases({ status: 'solved' }),
+        listMessages({ filter: 'problems', limit: 50 }).catch(() => [])
       ])
       setCompanies(cos)
       setPending(p)
       setSolved(s)
       setProblems(pr)
-      setUrls(await signPaths([...p, ...s, ...pr].map((r) => r.storage_path)))
+      // Thumbnails: the first few photos of each case.
+      const paths = [...p, ...s].flatMap((c) =>
+        casePhotos(c)
+          .slice(0, 3)
+          .map((m) => m.storage_path)
+      )
+      setUrls(await signPaths(paths))
     } catch (e) {
       setError(e.message || 'Could not load cases.')
     } finally {

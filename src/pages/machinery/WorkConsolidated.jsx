@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, Spinner } from '../../components/ui.jsx'
 import { IconBuilding, IconChevron, IconRefresh } from '../../components/icons.jsx'
-import { CaseRow } from '../../components/CaseRow.jsx'
+import { CaseCompactRow } from '../../components/CaseTable.jsx'
 import { UNASSIGNED, useCases } from '../../lib/useCases.js'
 
 // All companies at a glance (like Mission Control): one section per company
@@ -73,7 +73,7 @@ export default function WorkConsolidated() {
               ) : (
                 <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
                   {s.rows.map((r) => (
-                    <CaseRow key={r.id} row={r} url={urls[r.storage_path]} compact />
+                    <CaseCompactRow key={r.id} c={r} urls={urls} />
                   ))}
                 </div>
               )}
