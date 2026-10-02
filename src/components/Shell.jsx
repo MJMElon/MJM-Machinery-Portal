@@ -93,7 +93,7 @@ function TopBar({ title }) {
               to="/admin/companies"
               title="Super admin: manage companies"
               aria-label="Super admin: manage companies"
-              className="shrink-0 rounded-xl transition hover:scale-105 hover:shadow-md hover:shadow-amber-400/40"
+              className="shrink-0 transition hover:scale-110 hover:drop-shadow-md"
             >
               <SuperAdminIcon />
             </Link>
@@ -182,35 +182,37 @@ function CompanySwitcher({ wide = false }) {
   )
 }
 
-// Super admin button: a bright red gear on Superman yellow.
+// Super admin button: a hero-style shield — red rim, yellow field, bold red S.
 function SuperAdminIcon() {
-  const teeth = Array.from({ length: 8 }, (_, i) => i * 45)
   return (
-    <svg viewBox="0 0 40 40" className="h-10 w-10" aria-hidden="true">
+    <svg viewBox="0 0 44 36" className="h-10 w-12" aria-hidden="true">
       <defs>
-        <linearGradient id="superadmin-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fde047" />
+        <linearGradient id="superadmin-red" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ef4444" />
+          <stop offset="1" stopColor="#b91c1c" />
+        </linearGradient>
+        <linearGradient id="superadmin-yellow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#fde68a" />
           <stop offset="1" stopColor="#facc15" />
         </linearGradient>
       </defs>
-      <rect width="40" height="40" rx="11" fill="url(#superadmin-bg)" />
-      <rect x="0.5" y="0.5" width="39" height="39" rx="10.5" fill="none" stroke="#eab308" />
-      <g transform="translate(20 20)">
-        {teeth.map((deg) => (
-          <rect
-            key={deg}
-            x="-2.4"
-            y="-12.5"
-            width="4.8"
-            height="6"
-            rx="1.3"
-            fill="#ff2d2d"
-            transform={`rotate(${deg})`}
-          />
-        ))}
-        <circle r="8.6" fill="#ff2d2d" />
-        <circle r="3.6" fill="#fde047" />
-      </g>
+      {/* shield: red rim, then yellow field */}
+      <path d="M8 1.5 H36 L43 10.5 L22 34.5 L1 10.5Z" fill="url(#superadmin-red)" strokeLinejoin="round" />
+      <path d="M9.6 4.6 H34.4 L39 10.6 L22 30 L5 10.6Z" fill="url(#superadmin-yellow)" />
+      <text
+        x="22.4"
+        y="22.4"
+        textAnchor="middle"
+        fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
+        fontWeight="800"
+        fontSize="19"
+        fontStyle="italic"
+        fill="url(#superadmin-red)"
+        stroke="#991b1b"
+        strokeWidth="0.4"
+      >
+        S
+      </text>
     </svg>
   )
 }
