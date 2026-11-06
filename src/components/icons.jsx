@@ -254,3 +254,45 @@ export const IconPushpin = (p) => (
     <path d="M12 13v8" />
   </svg>
 )
+
+export const IconFuel = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16" />
+    <path d="M3 21h12M6 7h6v4H6z" />
+    <path d="M14 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-2.5-2.5" />
+  </svg>
+)
+
+export const IconCard = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+    <path d="M2.5 10h19M6 15h4" />
+  </svg>
+)
+
+export const IconReceipt = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 2.5h12v19l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z" />
+    <path d="M9 8h6M9 12h6M9 16h3" />
+  </svg>
+)
+
+export const IconDownload = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3v12M7 10l5 5 5-5" />
+    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+  </svg>
+)
+
+export const IconSearch = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.2-4.2" />
+  </svg>
+)
+
+export const IconX = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+)

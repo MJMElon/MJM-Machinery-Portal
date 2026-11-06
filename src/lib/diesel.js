@@ -1,0 +1,269 @@
+import { useEffect, useState } from 'react'
+import { supabase, DIESEL } from './supabase.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+
+// Diesel Manage: vehicles, cash fuel claims (receipt photos), fleet cards
+// (reloads + card fill-ups), reports and user access — all per company.
+// Ported from the Intranet's Diesel Claims module; every rule is enforced by
+// the database (RLS + triggers), this file only talks to it.
+
+export const VEHICLE_TYPES = [
+  ['car', 'Car'],
+  ['pickup', 'Pickup'],
+  ['van', 'Van'],
+  ['lorry', 'Lorry'],
+  ['motorcycle', 'Motorcycle'],
+  ['machinery', 'Machinery'],
+  ['other', 'Other']
+]
+export const FUEL_TYPES = [
+  ['diesel', 'Diesel'],
+  ['petrol', 'Petrol']
+]
+export const CLAIM_STATUS = {
+  pending: { label: 'Pending', color: 'amber' },
+  approved: { label: 'Approved', color: 'green' },
+  rejected: { label: 'Rejected', color: 'red' },
+  paid: { label: 'Paid', color: 'blue' }
+}
+export const CARD_STATUS = {
+  active: { label: 'Active', color: 'green' },
+  blocked: { label: 'Blocked', color: 'amber' },
+  cancelled: { label: 'Cancelled', color: 'slate' }
+}
+
+export const vehicleLabel = (v) => (v ? v.plate_no + (v.name ? ' · ' + v.name : '') : '—')
+export const personLabel = (p) => (p ? p.full_name || p.email : '—')
+
+// ---- access ------------------------------------------------------------------
+
+const NONE = { use: false, admin: false, claim: false, report: false }
+const ALL = { use: true, admin: true, claim: true, report: true }
+
+/** What the signed-in user may do in Diesel Manage for a company. */
+export function useDieselAccess(companyId) {
+  const { user, isSuperAdmin } = useAuth()
+  const [access, setAccess] = useState({ ...NONE, loaded: false })
+  useEffect(() => {
+    if (isSuperAdmin) return setAccess({ ...ALL, loaded: true })
+    if (!companyId || !user) return setAccess({ ...NONE, loaded: true })
+    let active = true
+    supabase
+      .from(DIESEL.members)
+      .select('is_admin, can_claim, can_report')
+      .eq('company_id', companyId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error || !data) return setAccess({ ...NONE, loaded: true, error: error ? friendly(error).message : '' })
+        setAccess({
+          use: true,
+          admin: data.is_admin,
+          claim: data.is_admin || data.can_claim,
+          report: data.is_admin || data.can_report,
+          loaded: true
+        })
+      })
+    return () => {
+      active = false
+    }
+  }, [companyId, user, isSuperAdmin])
+  return access
+}
+
+/** Portal users with their Diesel access for a company (admins see everyone). */
+export async function listPeople(companyId) {
+  const { data, error } = await supabase.rpc('machinery_diesel_people', { p_company: companyId })
+  if (error) throw friendly(error)
+  return data || []
+}
+
+export async function setMember(companyId, userId, { is_admin, can_claim, can_report }) {
+  const { error } = await supabase
+    .from(DIESEL.members)
+    .upsert({ company_id: companyId, user_id: userId, is_admin, can_claim, can_report }, { onConflict: 'company_id,user_id' })
+  if (error) throw friendly(error)
+}
+
+export async function removeMember(companyId, userId) {
+  const { error } = await supabase.from(DIESEL.members).delete().eq('company_id', companyId).eq('user_id', userId)
+  if (error) throw friendly(error)
+}
+
+// ---- vehicles ----------------------------------------------------------------
+
+export async function listVehicles(companyId) {
+  const { data, error } = await supabase.from(DIESEL.vehicles).select('*').eq('company_id', companyId).order('plate_no')
+  if (error) throw friendly(error)
+  return data || []
+}
+
+export async function saveVehicle(companyId, { id, ...fields }) {
+  const q = id
+    ? supabase.from(DIESEL.vehicles).update(fields).eq('id', id)
+    : supabase.from(DIESEL.vehicles).insert({ company_id: companyId, ...fields })
+  const { error } = await q
+  if (error) throw friendly(error, { '23505': 'A vehicle with this plate number already exists.' })
+}
+
+export async function deleteVehicle(id) {
+  const { error } = await supabase.from(DIESEL.vehicles).delete().eq('id', id)
+  if (error)
+    throw friendly(error, { '23503': 'This vehicle has claims or card records, so it cannot be deleted. Set it to Inactive instead.' })
+}
+
+// ---- cash claims -------------------------------------------------------------
+
+/** filter: { mine, from, to } */
+export async function listClaims(companyId, filter = {}) {
+  let q = supabase
+    .from(DIESEL.claims)
+    .select('*')
+    .eq('company_id', companyId)
+    .order('fill_date', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (filter.mine) q = q.eq('claimant_id', filter.mine)
+  if (filter.from) q = q.gte('fill_date', filter.from)
+  if (filter.to) q = q.lte('fill_date', filter.to)
+  const { data, error } = await q.limit(2000)
+  if (error) throw friendly(error)
+  return data || []
+}
+
+/** Last odometer reading recorded for a vehicle before a date (claims + card fill-ups). */
+export async function lastOdometer(vehicleId, beforeDate) {
+  const pick = (table) =>
+    supabase
+      .from(table)
+      .select('odometer_km')
+      .eq('vehicle_id', vehicleId)
+      .lt('fill_date', beforeDate)
+      .not('odometer_km', 'is', null)
+      .order('fill_date', { ascending: false })
+      .limit(1)
+      .then((r) => r.data?.[0]?.odometer_km ?? null)
+  const [a, b] = await Promise.all([pick(DIESEL.claims), pick(DIESEL.usage).catch(() => null)])
+  return Math.max(a ?? -1, b ?? -1) < 0 ? null : Math.max(a ?? 0, b ?? 0)
+}
+
+export async function insertClaim(companyId, userId, row) {
+  const { error } = await supabase.from(DIESEL.claims).insert({ company_id: companyId, claimant_id: userId, ...row })
+  if (error) throw friendly(error)
+}
+
+export async function updateClaim(id, row) {
+  const { error } = await supabase.from(DIESEL.claims).update(row).eq('id', id)
+  if (error) throw friendly(error)
+}
+
+export async function deleteClaim(id) {
+  const { error } = await supabase.from(DIESEL.claims).delete().eq('id', id)
+  if (error) throw friendly(error)
+}
+
+/** Admin review: pending → approved / rejected, approved → paid, back to pending. */
+export async function reviewClaim(id, status, note) {
+  const { data, error } = await supabase
+    .from(DIESEL.claims)
+    .update({ status, review_note: note || null })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw friendly(error)
+  return data
+}
+
+// ---- receipts (private bucket: <company>/<user>/<uuid>.<ext>) --------------------
+
+/** Phone photos are shrunk to 1600px JPEG before upload; PDFs go as they are. */
+export async function compressReceipt(file) {
+  if (!file.type.startsWith('image/')) return file
+  try {
+    const bmp = await createImageBitmap(file)
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bmp.width * scale)
+    canvas.height = Math.round(bmp.height * scale)
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82))
+    return blob ? new File([blob], 'receipt.jpg', { type: 'image/jpeg' }) : file
+  } catch {
+    return file
+  }
+}
+
+export async function uploadReceipt(companyId, userId, file) {
+  const upload = await compressReceipt(file)
+  if (upload.size > 10 * 1024 * 1024) throw new Error('The receipt file is too big (max 10 MB).')
+  const ext =
+    upload.type === 'application/pdf' ? 'pdf' : upload.type === 'image/png' ? 'png' : upload.type === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${companyId}/${userId}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(DIESEL.bucket).upload(path, upload, { contentType: upload.type })
+  if (error) throw new Error('Could not upload the receipt. Please try again.')
+  return path
+}
+
+export function removeReceipt(path) {
+  if (path) supabase.storage.from(DIESEL.bucket).remove([path]).catch(() => {})
+}
+
+/** Opens a receipt in a new tab with a 60-second signed link. */
+export async function openReceipt(path) {
+  const { data, error } = await supabase.storage.from(DIESEL.bucket).createSignedUrl(path, 60)
+  if (error || !data) throw new Error('Could not open the receipt.')
+  window.open(data.signedUrl, '_blank', 'noopener')
+}
+
+// ---- fleet cards ---------------------------------------------------------------
+
+export async function listCardData(companyId, from) {
+  const usageQ = supabase.from(DIESEL.usage).select('*').eq('company_id', companyId).order('fill_date', { ascending: false })
+  const reloadQ = supabase.from(DIESEL.reloads).select('*').eq('company_id', companyId).order('reload_date', { ascending: false })
+  const [cards, usage, reloads] = await Promise.all([
+    supabase.from(DIESEL.cards).select('*').eq('company_id', companyId).order('card_no').then(check),
+    (from ? usageQ.gte('fill_date', from) : usageQ).limit(5000).then(check),
+    (from ? reloadQ.gte('reload_date', from) : reloadQ).limit(5000).then(check)
+  ])
+  return { cards, usage, reloads }
+}
+
+export async function saveCard(companyId, { id, ...fields }) {
+  const q = id
+    ? supabase.from(DIESEL.cards).update(fields).eq('id', id)
+    : supabase.from(DIESEL.cards).insert({ company_id: companyId, ...fields })
+  const { error } = await q
+  if (error) throw friendly(error, { '23505': 'A card with this number already exists.' })
+}
+
+export async function addReload(companyId, row) {
+  const { error } = await supabase.from(DIESEL.reloads).insert({ company_id: companyId, ...row })
+  if (error) throw friendly(error)
+}
+
+export async function addUsage(companyId, row) {
+  const { error } = await supabase.from(DIESEL.usage).insert({ company_id: companyId, ...row })
+  if (error) throw friendly(error)
+}
+
+export async function deleteCardRecord(kind, id) {
+  const { error } = await supabase.from(kind === 'reload' ? DIESEL.reloads : DIESEL.usage).delete().eq('id', id)
+  if (error) throw friendly(error)
+}
+
+// ---- helpers -------------------------------------------------------------------
+
+function check({ data, error }) {
+  if (error) throw friendly(error)
+  return data || []
+}
+
+function friendly(error, custom = {}) {
+  if (custom[error?.code]) return new Error(custom[error.code])
+  if (error?.code === '23505') return new Error('That value is already used.')
+  if (error?.code === '42501' || error?.code === '23514') return new Error(error.message || 'You do not have access to do this.')
+  if (['42P01', 'PGRST205', '42703', 'PGRST204', 'PGRST202', '42883'].includes(error?.code)) {
+    return new Error('Database not up to date. Run the Diesel SQL migration (…diesel.sql) in Supabase.')
+  }
+  return error instanceof Error ? error : new Error(error?.message || 'Could not save. Please try again.')
+}

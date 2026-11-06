@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useOutletContext } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext.jsx'
 import Login from './auth/Login.jsx'
 import { Shell } from './components/Shell.jsx'
@@ -13,6 +13,13 @@ import SupplierList from './pages/machinery/SupplierList.jsx'
 import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
 import CompanySettings from './pages/settings/CompanySettings.jsx'
 import ManageCompanies from './pages/admin/ManageCompanies.jsx'
+import DieselLayout from './pages/diesel/DieselLayout.jsx'
+import CashClaim from './pages/diesel/CashClaim.jsx'
+import Vehicles from './pages/diesel/Vehicles.jsx'
+import AllClaims from './pages/diesel/AllClaims.jsx'
+import FleetCard from './pages/diesel/FleetCard.jsx'
+import DieselReport from './pages/diesel/DieselReport.jsx'
+import DieselUsers from './pages/diesel/DieselUsers.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -35,6 +42,15 @@ export default function App() {
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="suppliers" element={<SupplierList />} />
             <Route path="users" element={<CmmsUsers />} />
+          </Route>
+          <Route path="/diesel" element={<DieselLayout />}>
+            <Route index element={<DieselIndex />} />
+            <Route path="claims" element={<CashClaim />} />
+            <Route path="vehicles" element={<Vehicles />} />
+            <Route path="all" element={<AllClaims />} />
+            <Route path="cards" element={<FleetCard />} />
+            <Route path="report" element={<DieselReport />} />
+            <Route path="users" element={<DieselUsers />} />
           </Route>
           {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
           <Route path="/machinery" element={<Navigate to="/cmms" replace />} />
@@ -70,6 +86,12 @@ function RequirePortalAdmin() {
     )
   }
   return <Outlet />
+}
+
+// Diesel Manage opens on Cash Claim when the user has it, else on Vehicles.
+function DieselIndex() {
+  const { access } = useOutletContext()
+  return <Navigate to={access.claim ? '/diesel/claims' : '/diesel/vehicles'} replace />
 }
 
 function FullSpinner() {

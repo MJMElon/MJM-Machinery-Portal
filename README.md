@@ -1,15 +1,62 @@
-# MJM Machinery Portal
+# MJM Machinery Portal (CMMS)
 
-Company portal (HQ admin login). The **company switcher** (top right) picks the company you work in; the main page shows that company's modules:
+Company portal (HQ admin login), linked from **MJM Connect** (the Intranet): the portal is one of its icons
+and the top bar has an "MJM Connect" link back. The **company switcher** (top left) picks the company you work in;
+companies are listed under their **business**, with the same names and codes as in MJM Connect. The main page shows
+that company's modules:
 
 - **CMMS 2** (only for companies with CMMS 2 access):
   - **Maintenance Work Manage**: WhatsApp texts + photos grouped into numbered cases, Pending / Solved, with supplier, sent-out date and Solve / Edit / Delete (per-user access). The consolidate button shows every company's pending cases at once.
   - **Machinery Profile**: the company's machines.
   - **Supplier Workshop List**: suppliers/workshops and the machines each handles (suppliers that handle a case's machine are proposed first).
-  - **CMMS User Setting**: per company, who may Solve, Edit, Delete and Manage lists (super admins set it; super admins can do everything).
+  - **CMMS User Setting**: per company, who may Solve, Edit, Delete and Manage lists (super admins set it; super admins can do everything). Also where portal users are added and their display name set.
   - **MachTrek** link.
+- **Diesel Manage** (only for companies with Diesel Manage access) — the Intranet's Diesel Claims module, now per company (see [Diesel Manage](#diesel-manage)).
 - **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
-- **Companies** (top right, **super admins only**) → create companies, switch on CMMS 2 access, and list each company's staff WhatsApp numbers. A case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
+- **Businesses & Companies** (gear, top right, **super admins only**) → businesses, the companies under them (code, short name, registration no., active), module access per company (CMMS 2, Diesel Manage) and each company's staff WhatsApp numbers. A case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
+
+## Businesses and companies (same as MJM Connect)
+
+Master data mirrors the Intranet so both systems name things alike:
+
+| MJM Connect (Intranet) | This portal |
+| --- | --- |
+| Business (`gw_groups`) | `machinery_businesses` |
+| Company (`gw_companies`: code, short name, registration no.) | `machinery_companies` (+ `code`, `short_name`, `registration_no`, `is_active`) |
+| Business ↔ Company (`gw_business_companies`, many-to-many) | `machinery_business_companies` |
+
+The two systems use **different Supabase projects**, so there is no live sync: a super admin enters the businesses and
+companies here with the same name and code as in MJM Connect (Master Manage → Business / Company). To link the portal
+from MJM Connect, add it there as an Icon (Master Manage → Module, kind = **Link**, URL = this portal) and tag it with
+the businesses / companies that use it.
+
+## Diesel Manage
+
+Vehicles, cash fuel claims with receipt photos, fleet cards and reports — per company. Ported from the Intranet's
+Diesel Claims module (`MJM-Intranet/shared/diesel.js`); same pages and rules, React UI, `machinery_diesel_*` tables.
+
+Access is set per company under **Diesel Manage → User Access** (and super admins can do everything):
+
+| Tick | Can |
+| --- | --- |
+| Access | Open Diesel Manage for that company (vehicle list only) |
+| Cash Claim | Submit own claims (vehicle, date, odometer, litres, amount, station, receipt photo); edit / delete while pending |
+| Report | Report page (all vehicles, drivers, cash + card), this month's fuel on the vehicle cards, export CSV |
+| Admin | Module admin: vehicles, All Claims (approve / reject with reason / mark paid), Fleet Card, User Access. Only a **super admin** can tick Admin |
+
+Pages: **Cash Claim** (my claims + this month's totals), **Vehicles**, **All Claims** (admin), **Fleet Card** (admin:
+cards, reloads, card fill-ups, card use by driver), **Report** (per month: totals, by vehicle with km/L and
+over-tank flags, by driver, CSV export), **User Access** (admin).
+
+Rules (enforced in the database): a reviewer cannot review their own claim (super admins can); the reviewer and time
+are recorded automatically; approved claims can no longer be edited by the claimant; the vehicle, card and claim must be
+in the same company. Receipts are compressed on the phone (max 1600 px) and kept in the private bucket
+`machinery_diesel_receipts/<company>/<user>/…`, opened with 60-second links by the owner, Report users and admins.
+Fleet card balance = reloads − card fill-ups; over the monthly limit shows red.
+
+Set-up: Businesses & Companies → turn on **Diesel Manage** for the company → Diesel Manage → User Access: tick Access
+and Cash Claim for drivers, Report for managers; a super admin ticks Admin for the fleet supervisor → the admin adds
+Vehicles (with usual driver) and Fleet Cards.
 
 MachTrek is a separate app and is **not modified** by this repo. Both use the **same Supabase project**; everything here uses new, `machinery_`-prefixed objects.
 
@@ -71,6 +118,8 @@ Then do the same, in order, with:
 - `supabase/migrations/20261004120000_company_admin.sql` (super admins, company area, blocks).
 - `supabase/migrations/20261005120000_cmms_setup.sql` (CMMS user access, machinery profile, suppliers, supplier + sent-out date on cases; case changes go through access-checked functions). The first run makes every existing portal admin a super admin; later admins are added as normal admins (`update machinery_portal_admins set is_super_admin = true where email = '…'` to promote).
 - `supabase/migrations/20261006120000_case_workflow.sql` (case timeline: messages to suppliers, notes, closed/reopened milestones; pinned cases).
+- `supabase/migrations/20261107120000_businesses.sql` (businesses, business ↔ company links, company code / short name / registration no. / active, Diesel Manage access flag, user display names).
+- `supabase/migrations/20261108120000_diesel.sql` (Diesel Manage: members, vehicles, claims, fleet cards, reloads, card fill-ups, access functions, RLS, receipts bucket).
 
 All are safe to re-run.
 
@@ -96,7 +145,7 @@ Logs: Supabase → Edge Functions → whatsapp-webhook → Logs.
 ### 3. Web portal
 ```bash
 npm install
-cp .env.example .env     # public Supabase URL + anon key (same as MachTrek)
+cp .env.example .env     # public Supabase URL + anon key (same as MachTrek); VITE_INTRANET_URL = MJM Connect
 npm run dev
 npm run build            # the build check
 ```

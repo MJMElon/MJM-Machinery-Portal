@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
-import { IconCheck, IconCog, IconLogout } from './icons.jsx'
+import { INTRANET_URL } from '../lib/supabase.js'
+import { IconCheck, IconCog, IconExternal, IconLogout } from './icons.jsx'
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
@@ -31,8 +32,9 @@ export function Shell() {
 function pageTitle(path) {
   if (path === '/') return ''
   if (path.startsWith('/cmms')) return 'CMMS 2'
+  if (path.startsWith('/diesel')) return 'Diesel Manage'
   if (path.startsWith('/settings')) return 'Settings'
-  if (path.startsWith('/admin/companies')) return 'Manage Companies'
+  if (path.startsWith('/admin/companies')) return 'Businesses & Companies'
   return ''
 }
 
@@ -85,6 +87,16 @@ function TopBar({ title, gutter }) {
 
         <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
           <span className="mx-1 hidden max-w-[220px] truncate text-sm text-slate-500 lg:block">{user?.email}</span>
+          <a
+            href={INTRANET_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open MJM Connect (Intranet)"
+            className="hidden h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200 md:flex"
+          >
+            MJM Connect
+            <IconExternal width={14} height={14} className="text-slate-400" />
+          </a>
           {isSuperAdmin && (
             <Link
               to="/admin/companies"
@@ -118,8 +130,9 @@ function TopBar({ title, gutter }) {
 }
 
 // "Working in: <company> ▾" — picks the company every module works on.
+// Companies are listed under their business, as in MJM Connect.
 function CompanySwitcher({ wide = false }) {
-  const { companies, current, select } = useCompany()
+  const { groups, current, select, businessesOf } = useCompany()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -141,7 +154,14 @@ function CompanySwitcher({ wide = false }) {
         title="Change company"
       >
         <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-        <span className="min-w-0 flex-1 truncate text-left">{current.name}</span>
+        <span className="min-w-0 flex-1 truncate text-left">
+          {current.name}
+          {businessesOf(current).length > 0 && (
+            <span className="ml-1.5 font-normal text-slate-400">
+              · {businessesOf(current).map((b) => b.name).join(', ')}
+            </span>
+          )}
+        </span>
         <svg
           viewBox="0 0 24 24"
           className="h-4 w-4 shrink-0 text-slate-400"
@@ -155,23 +175,34 @@ function CompanySwitcher({ wide = false }) {
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 z-30 mt-2 w-72 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-300/40"
+          className="absolute left-0 z-30 mt-2 max-h-[70vh] w-80 max-w-[calc(100vw-2.5rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-300/40"
         >
-          <p className="px-4 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Company</p>
-          {companies.map((c) => (
-            <button
-              key={c.id}
-              role="option"
-              aria-selected={c.id === current.id}
-              onClick={() => {
-                select(c.id)
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-50"
-            >
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{c.name}</span>
-              {c.id === current.id && <IconCheck width={18} height={18} className="text-brand" />}
-            </button>
+          {groups.map((g) => (
+            <div key={g.id}>
+              <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.name}</p>
+              {g.companies.map((c) => (
+                <button
+                  key={`${g.id}:${c.id}`}
+                  role="option"
+                  aria-selected={c.id === current.id}
+                  onClick={() => {
+                    select(c.id)
+                    setOpen(false)
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-slate-800">{c.name}</span>
+                    {(c.code || c.short_name) && (
+                      <span className="block truncate text-xs text-slate-400">
+                        {[c.code, c.short_name].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                  {c.id === current.id && <IconCheck width={18} height={18} className="shrink-0 text-brand" />}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}

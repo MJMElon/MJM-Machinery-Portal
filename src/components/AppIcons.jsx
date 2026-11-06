@@ -473,3 +473,130 @@ export function SettingsScene({ className }) {
     </svg>
   )
 }
+
+// Diesel Manage button picture (no box): a fuel-station canopy on two columns
+// with "DIESEL MANAGE" as a sign on the fascia, a diesel pump under it, a
+// pickup filling up on the left and a jerrycan + fleet card on the right
+// breaking out of the outline.
+export function DieselScene({ className }) {
+  return (
+    <svg viewBox="0 0 256 170" className={className} role="img" aria-label="Diesel Manage">
+      <defs>
+        <linearGradient id="dsl-canopy" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#f8fafc" />
+          <stop offset="1" stopColor="#cbd5e1" />
+        </linearGradient>
+        <linearGradient id="dsl-under" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#64748b" />
+          <stop offset="1" stopColor="#94a3b8" />
+        </linearGradient>
+        <linearGradient id="dsl-pump" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#f1f5f9" />
+          <stop offset="1" stopColor="#c7d0dc" />
+        </linearGradient>
+        <linearGradient id="dsl-green" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#34d399" />
+          <stop offset="1" stopColor="#059669" />
+        </linearGradient>
+        <linearGradient id="dsl-truck" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffd34d" />
+          <stop offset="1" stopColor="#f2a500" />
+        </linearGradient>
+        <linearGradient id="dsl-glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#bfe3ff" />
+          <stop offset="1" stopColor="#5b86b5" />
+        </linearGradient>
+        <linearGradient id="dsl-card" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#3b82f6" />
+          <stop offset="1" stopColor="#1e3a8a" />
+        </linearGradient>
+        <filter id="dsl-blur">
+          <feGaussianBlur stdDeviation="2" />
+        </filter>
+        <filter id="dsl-lift" x="-10%" y="-20%" width="120%" height="150%">
+          <feDropShadow dx="0" dy="1.6" stdDeviation="1" floodColor="#1e293b" floodOpacity="0.55" />
+        </filter>
+      </defs>
+
+      {/* ground shadow + forecourt slab */}
+      <ellipse cx="128" cy="153" rx="118" ry="7" fill="#1e293b" opacity="0.22" filter="url(#dsl-blur)" />
+      <path d="M22 150 L46 128 H224 L240 150Z" fill="#94a3b8" />
+      <path d="M46 128 H224 L232 140 H38Z" fill="#b4bfcd" />
+      <path d="M62 146 H214" stroke="#fff" strokeWidth="1.2" strokeDasharray="8 6" opacity="0.7" />
+
+      {/* canopy columns */}
+      <rect x="84" y="70" width="7" height="60" fill="url(#dsl-under)" />
+      <rect x="178" y="70" width="7" height="60" fill="url(#dsl-under)" />
+      {/* canopy underside and top */}
+      <path d="M52 70 H216 L222 80 H46Z" fill="url(#dsl-under)" />
+      <path d="M46 52 H222 V70 H46Z" fill="url(#dsl-canopy)" />
+      <rect x="46" y="52" width="176" height="5" fill="#2563eb" />
+      <rect x="46" y="56.4" width="176" height="0.8" fill="#1d4ed8" />
+      <path d="M46 70 H222" stroke="#94a3b8" strokeWidth="1" />
+
+      {/* sign: DIESEL MANAGE on the fascia */}
+      <text
+        x="134"
+        y="66.5"
+        textAnchor="middle"
+        fontFamily="'Sora','Plus Jakarta Sans',system-ui,sans-serif"
+        fontWeight="800"
+        fontSize="10.5"
+        letterSpacing="1.4"
+        fill="#0f172a"
+      >
+        DIESEL MANAGE
+      </text>
+
+      {/* diesel pump */}
+      <g filter="url(#dsl-lift)">
+        <rect x="118" y="84" width="34" height="46" rx="3" fill="url(#dsl-pump)" />
+        <rect x="118" y="84" width="34" height="7" rx="3" fill="url(#dsl-green)" />
+        <rect x="123" y="95" width="24" height="12" rx="1.5" fill="#0f172a" />
+        <text x="135" y="104" textAnchor="middle" fontFamily="monospace" fontWeight="700" fontSize="7.5" fill="#86efac">
+          48.20
+        </text>
+        <rect x="123" y="110" width="24" height="3" rx="1" fill="#cbd5e1" />
+        <rect x="123" y="115" width="16" height="3" rx="1" fill="#cbd5e1" />
+        <rect x="113" y="128" width="44" height="5" rx="1.5" fill="#64748b" />
+        {/* nozzle holster + hose to the pickup */}
+        <rect x="150" y="96" width="5" height="12" rx="1" fill="#0f172a" />
+        <path d="M152 108 C152 124 110 118 106 124" stroke="#0f172a" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+      </g>
+
+      {/* pickup filling up (left), nose to the left */}
+      <g filter="url(#dsl-lift)">
+        <path d="M30 128 V116 L40 104 H78 V96 H96 L104 110 H110 V128Z" fill="url(#dsl-truck)" />
+        <path d="M80 98 H94 L100 108 H80Z" fill="url(#dsl-glass)" />
+        <path d="M82 100 L86 100 L82 106Z" fill="#fff" opacity="0.55" />
+        <rect x="40" y="106" width="36" height="2" fill="#b45309" opacity="0.45" />
+        <rect x="104" y="112" width="6" height="8" rx="1" fill="#0f172a" opacity="0.55" />
+        <rect x="30" y="118" width="80" height="3" fill="#b45309" opacity="0.45" />
+        <circle cx="48" cy="129" r="7.5" fill="#1e293b" />
+        <circle cx="48" cy="129" r="3.4" fill="#cbd5e1" />
+        <circle cx="96" cy="129" r="7.5" fill="#1e293b" />
+        <circle cx="96" cy="129" r="3.4" fill="#cbd5e1" />
+        <rect x="26" y="120" width="5" height="4" rx="1" fill="#fde68a" />
+      </g>
+
+      {/* jerrycan + fleet card + receipt (right), breaking the outline */}
+      <g filter="url(#dsl-lift)">
+        <rect x="196" y="100" width="24" height="30" rx="3" fill="url(#dsl-green)" />
+        <rect x="201" y="94" width="8" height="8" rx="1.5" fill="#047857" />
+        <path d="M200 108 H216 M200 114 H216 M200 120 H216" stroke="#064e3b" strokeWidth="1.2" opacity="0.5" />
+        <text x="208" y="127" textAnchor="middle" fontFamily="system-ui,sans-serif" fontWeight="800" fontSize="6" fill="#ecfdf5">
+          20L
+        </text>
+        <g transform="rotate(-12 236 118)">
+          <rect x="222" y="108" width="30" height="19" rx="2.5" fill="url(#dsl-card)" />
+          <rect x="222" y="112" width="30" height="3.5" fill="#0f172a" opacity="0.6" />
+          <rect x="226" y="119" width="9" height="5" rx="1" fill="#fcd34d" />
+        </g>
+        <g transform="rotate(8 10 98)">
+          <rect x="4" y="86" width="20" height="26" fill="#fff" stroke="#cbd5e1" strokeWidth="0.8" />
+          <path d="M8 92 H20 M8 96 H20 M8 100 H16 M8 106 H20" stroke="#94a3b8" strokeWidth="1" />
+        </g>
+      </g>
+    </svg>
+  )
+}

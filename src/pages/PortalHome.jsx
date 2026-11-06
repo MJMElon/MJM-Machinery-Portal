@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ModuleTile, TileGrid } from '../components/ModuleTile.jsx'
-import { CmmsScene, SettingsScene } from '../components/AppIcons.jsx'
+import { CmmsScene, DieselScene, SettingsScene } from '../components/AppIcons.jsx'
 import { Card, Spinner } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useCompany } from '../lib/CompanyContext.jsx'
@@ -48,6 +48,14 @@ export default function PortalHome() {
           Art={CmmsScene}
           disabled={!current.cmms_enabled}
           note={current.cmms_enabled ? null : 'Not enabled'}
+        />
+        <ModuleTile
+          key="diesel"
+          to="/diesel"
+          label="Diesel Manage"
+          Art={DieselScene}
+          disabled={!current.diesel_enabled}
+          note={current.diesel_enabled ? null : 'Not enabled'}
         />
         <ModuleTile key="settings" to="/settings" label="Settings" Art={SettingsScene} />
       </TileGrid>

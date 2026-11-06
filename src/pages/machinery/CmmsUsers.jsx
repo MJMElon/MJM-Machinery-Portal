@@ -9,6 +9,7 @@ import {
   listPortalUsers,
   removePortalUser,
   setMember,
+  setUserName,
   useCmmsAccess
 } from '../../lib/cmms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
@@ -125,10 +126,11 @@ function AccessTable({ companyId, me }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-2.5">User</th>
+                  <th className="px-3 py-2.5">Name</th>
                   {PERMISSIONS.map((p) => (
                     <th key={p.key} className="px-3 py-2.5 text-center" title={p.hint}>
                       {p.label}
@@ -149,6 +151,9 @@ function AccessTable({ companyId, me }) {
                             Super admin
                           </Badge>
                         )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <NameCell user={u} disabled={busy} onSave={(name) => run(() => setUserName(u.user_id, name))} />
                       </td>
                       {PERMISSIONS.map((p) => (
                         <td key={p.key} className="px-3 py-3 text-center">
@@ -193,8 +198,27 @@ function AccessTable({ companyId, me }) {
       </Card>
       <p className="text-xs text-slate-500">
         Access is per company: switch company (top left) to set it for another company. New logins are created in
-        Supabase → Authentication → Users, then added here.
+        Supabase → Authentication → Users, then added here. The name is shown in Diesel Manage lists and reports.
       </p>
     </>
+  )
+}
+
+// Display name, saved when you leave the field (Enter also saves).
+function NameCell({ user, disabled, onSave }) {
+  const [value, setValue] = useState(user.full_name || '')
+  useEffect(() => setValue(user.full_name || ''), [user.full_name])
+  const dirty = value.trim() !== (user.full_name || '')
+  return (
+    <TextInput
+      value={value}
+      disabled={disabled}
+      placeholder="Full name"
+      aria-label={`Name of ${user.email}`}
+      className="h-10 min-w-[160px] rounded-lg border-transparent bg-transparent px-2 hover:border-slate-200 focus:bg-white"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => dirty && onSave(value)}
+      onKeyDown={(e) => e.key === 'Enter' && dirty && e.currentTarget.blur()}
+    />
   )
 }

@@ -131,6 +131,15 @@ export async function addPortalUser(email) {
   if (error) throw friendly(error)
 }
 
+/** Display name shown in Diesel Manage lists / reports (super admin, or your own). */
+export async function setUserName(userId, name) {
+  const { error } = await supabase.rpc('machinery_set_user_name', { p_user: userId, p_name: name })
+  if (error) throw friendly(error)
+}
+
+/** Name to show for a portal user: full name, else the e-mail. */
+export const userLabel = (u) => (u ? u.full_name || u.email || u.user_id : '—')
+
 export async function removePortalUser(userId) {
   const { error } = await supabase.rpc('machinery_remove_portal_user', { p_user: userId })
   if (error) throw friendly(error)
@@ -177,7 +186,7 @@ function friendly(error) {
     return new Error(error.message || 'You do not have access to do this.')
   if (['42P01', 'PGRST205', '42703', 'PGRST204', 'PGRST202', '42883'].includes(error?.code)) {
     return new Error(
-      'Database not up to date. Run the latest SQL migrations (…cmms_setup.sql, …case_workflow.sql) in Supabase.'
+      'Database not up to date. Run the latest SQL migrations (…cmms_setup.sql, …case_workflow.sql, …businesses.sql) in Supabase.'
     )
   }
   return error

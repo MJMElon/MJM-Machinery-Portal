@@ -1,20 +1,24 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { listCompanies } from './companies.js'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { groupByBusiness, listBusinesses, listCompanies } from './companies.js'
 
 // The company the user is working in (chosen in the top bar). Every module on
-// the main page works on this company.
+// the main page works on this company. Companies are grouped by business, the
+// same way MJM Connect (the Intranet) shows them.
 const CompanyContext = createContext(null)
 const KEY = 'portal.company'
 
 export function CompanyProvider({ children }) {
   const [companies, setCompanies] = useState([])
+  const [businesses, setBusinesses] = useState([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [currentId, setCurrentId] = useState(() => read())
 
   const reload = useCallback(async () => {
     try {
-      setCompanies(await listCompanies())
+      const [cos, biz] = await Promise.all([listCompanies(), listBusinesses()])
+      setCompanies(cos)
+      setBusinesses(biz)
       setError('')
     } catch (e) {
       setError(e.message || 'Could not load companies.')
@@ -27,14 +31,23 @@ export function CompanyProvider({ children }) {
     reload()
   }, [reload])
 
-  const current = companies.find((c) => c.id === currentId) || companies[0] || null
+  // Inactive companies are kept for history but not offered in the switcher.
+  const active = useMemo(() => companies.filter((c) => c.is_active !== false), [companies])
+  const groups = useMemo(() => groupByBusiness(businesses, active), [businesses, active])
+  const current = companies.find((c) => c.id === currentId) || active[0] || null
+  const businessesOf = useCallback(
+    (c) => businesses.filter((b) => (c?.business_ids || []).includes(b.id)),
+    [businesses]
+  )
   const select = useCallback((id) => {
     setCurrentId(id)
     write(id)
   }, [])
 
   return (
-    <CompanyContext.Provider value={{ companies, current, select, reload, loaded, error }}>
+    <CompanyContext.Provider
+      value={{ companies, businesses, groups, current, businessesOf, select, reload, loaded, error }}
+    >
       {children}
     </CompanyContext.Provider>
   )
