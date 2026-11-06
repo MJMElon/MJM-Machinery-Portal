@@ -1,4 +1,4 @@
-# Deploys the WhatsApp webhook (Supabase Edge Function) from GitHub —
+# Deploys the Edge Functions (WhatsApp webhook, case-action, gw-login) from GitHub —
 # no terminal needed.
 #
 # One-time setup: add a repository secret named SUPABASE_ACCESS_TOKEN
@@ -68,6 +68,13 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           supabase functions deploy case-action \
+            --project-ref "${{ steps.check.outputs.ref }}" \
+            --no-verify-jwt
+
+      - name: Deploy gw-login (sign in from MJM Connect)
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          supabase functions deploy gw-login \
             --project-ref "${{ steps.check.outputs.ref }}" \
             --no-verify-jwt
           {

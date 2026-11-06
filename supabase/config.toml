@@ -11,3 +11,9 @@ verify_jwt = false
 # Called from the portal. The function checks the user's Supabase token itself
 # (so the browser's CORS preflight is answered too) and their edit access.
 verify_jwt = false
+
+[functions.gw-login]
+# Called by the portal BEFORE it has a session (it turns the MJM Connect token
+# into one), so there is no Supabase JWT to verify. The token itself is
+# verified by MJM Connect's gw-check-access.
+verify_jwt = false

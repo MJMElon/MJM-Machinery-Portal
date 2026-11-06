@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate, Outlet, useOutletContext } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext.jsx'
-import Login from './auth/Login.jsx'
+import DevLogin from './auth/DevLogin.jsx'
+import { INTRANET_URL } from './lib/supabase.js'
 import { Shell } from './components/Shell.jsx'
 import { Button, Card, Spinner } from './components/ui.jsx'
 import PortalHome from './pages/PortalHome.jsx'
@@ -28,7 +30,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      {import.meta.env.DEV && <Route path="/login" element={user ? <Navigate to="/" replace /> : <DevLogin />} />}
       <Route element={<RequirePortalAdmin />}>
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
@@ -62,11 +64,17 @@ export default function App() {
   )
 }
 
-// Signed in (Supabase Auth) AND listed in machinery_portal_admins.
+// Signed in (via MJM Connect) AND listed in machinery_portal_admins.
 // The database enforces the same rule with RLS; this is just the UI gate.
+// Without a session the person is sent to MJM Connect to log in there.
 function RequirePortalAdmin() {
-  const { user, access, logout } = useAuth()
-  if (!user) return <Navigate to="/login" replace />
+  const { user, access, handoff, handoffError, logout } = useAuth()
+  if (!user) {
+    if (handoff === 'pending') return <FullSpinner label="Signing in from MJM Connect…" />
+    if (handoff === 'failed') return <GoToIntranet title="Could not sign in" body={handoffError} />
+    if (import.meta.env.DEV) return <Navigate to="/login" replace />
+    return <RedirectToIntranet />
+  }
   if (access === 'unknown') return <FullSpinner />
   if (access !== 'granted') {
     return (
@@ -76,10 +84,10 @@ function RequirePortalAdmin() {
           <p className="mt-1 text-sm text-slate-500">
             {access === 'error'
               ? 'Could not check access. Has the database migration been run?'
-              : `${user.email} is signed in but is not a portal admin. Ask the system admin to add you.`}
+              : `${user.email} is signed in but is not a portal user. Open the portal from MJM Connect to be added.`}
           </p>
           <Button className="mt-4" variant="secondary" onClick={logout}>
-            Log out
+            Back to MJM Connect
           </Button>
         </Card>
       </div>
@@ -88,16 +96,42 @@ function RequirePortalAdmin() {
   return <Outlet />
 }
 
+// No session and no token: this portal is reached from MJM Connect only.
+function RedirectToIntranet() {
+  useEffect(() => {
+    window.location.replace(INTRANET_URL)
+  }, [])
+  return <GoToIntranet title="Please log in at MJM Connect" body="Taking you to MJM Connect… open the portal from there." />
+}
+
+function GoToIntranet({ title, body }) {
+  return (
+    <div className="mx-auto flex min-h-[100dvh] max-w-app items-center px-5">
+      <Card className="w-full p-6 text-center">
+        <p className="text-base font-semibold text-slate-800">{title}</p>
+        <p className="mt-1 text-sm text-slate-500">{body}</p>
+        <a
+          href={INTRANET_URL}
+          className="mt-4 inline-flex h-11 items-center rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark"
+        >
+          Go to MJM Connect
+        </a>
+      </Card>
+    </div>
+  )
+}
+
 // Diesel Manage opens on Cash Claim when the user has it, else on Vehicles.
 function DieselIndex() {
   const { access } = useOutletContext()
   return <Navigate to={access.claim ? '/diesel/claims' : '/diesel/vehicles'} replace />
 }
 
-function FullSpinner() {
+function FullSpinner({ label }) {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center text-brand">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 text-brand">
       <Spinner className="h-8 w-8" />
+      {label && <p className="text-sm text-slate-500">{label}</p>}
     </div>
   )
 }

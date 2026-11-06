@@ -1,7 +1,7 @@
 # MJM Machinery Portal (CMMS)
 
-Company portal (HQ admin login), linked from **MJM Connect** (the Intranet): the portal is one of its icons
-and the top bar has an "MJM Connect" link back. The **company switcher** (top left) picks the company you work in;
+Company portal opened from **MJM Connect** (the Intranet): people log in there and the portal is one of its icons
+(no login page here, see [Sign-in](#sign-in-from-mjm-connect-only-no-login-page)); the top bar has an "MJM Connect" link back. The **company switcher** (top left) picks the company you work in;
 companies are listed under their **business**, with the same names and codes as in MJM Connect. The main page shows
 that company's modules:
 
@@ -96,12 +96,40 @@ WhatsApp only allows free text to people who messaged the business number in the
 
 Hold a case number for 3 seconds to pin it to the top (max 3 per company); hold again to unpin.
 
-## Access rules
+## Sign-in: from MJM Connect only (no login page)
 
-- Sign in with the same Supabase Auth email/password as MachTrek's **HQ admin**.
-- The account must also be in `machinery_portal_admins` (the Supabase project is shared with other apps, so "any logged-in user" is not enough).
-- RLS: portal admins can read messages and sign photo URLs (10-minute signed URLs). The browser cannot insert/update/delete; "Mark Reviewed" goes through the `machinery_set_whatsapp_reviewed` RPC, which records the real reviewer.
+The portal has **no login page**. People log in at **MJM Connect** (the Intranet) and open the portal from its icon;
+anyone who comes to the portal URL directly (no session) is sent to MJM Connect to log in there first.
+
+How it works (MJM Connect's "level 2 · Token" hand-off, see `MJM-Intranet/docs/integration.md`):
+
+1. MJM Connect checks the person may use the portal icon, then opens `https://…/MJM-Machinery-Portal/?gw_token=<60-second token>`.
+2. The portal posts the token to its `gw-login` Edge Function, which redeems it at MJM Connect's `gw-check-access`
+   (server to server, with the icon's API key; each token works once).
+3. `gw-login` makes sure the person has a login in this Supabase project (created on first visit, no e-mail sent),
+   adds / updates them in `machinery_portal_admins` (e-mail and display name from MJM Connect), and returns a one-time
+   magic-link token hash; the browser turns it into a normal Supabase session (`verifyOtp`).
+4. From then on the portal works as before: RLS, super admins, per-company access. Log out = sign out + back to MJM Connect.
+
+Set-up (once):
+
+- MJM Connect → Master Manage → Module: add the portal as an Icon (kind **Link**, URL = the portal address,
+  access **2 · Token**), tag it with the businesses that use it, and **Generate API key** (shown once).
+- Supabase (this project) → Edge Functions → Secrets: `GW_API_KEY` = that key. Optional `GW_CHECK_ACCESS_URL` if
+  MJM Connect moves project. Then deploy the functions (GitHub → Actions → Deploy WhatsApp webhook → Run workflow;
+  it deploys `gw-login` too).
+- MJM Connect → User & Group Manage → Module access: tick Access on the portal icon for the people who may use it.
+  Who is a portal **super admin** is still set in the database (`machinery_portal_admins.is_super_admin`).
+
+Access rules inside the portal:
+
+- The account must be in `machinery_portal_admins` (the Supabase project is shared with other apps, so "any logged-in
+  user" is not enough); `gw-login` adds it automatically for people arriving from MJM Connect.
+- RLS: portal admins can read messages and sign photo URLs (10-minute signed URLs). The browser cannot insert/update/delete;
+  "Mark Reviewed" goes through the `machinery_set_whatsapp_reviewed` RPC, which records the real reviewer.
 - MachTrek operators/site admins (PIN logins) have no access, since they are not Supabase users.
+- Development (`npm run dev`) only: `/#/login` shows a developer e-mail/password form so the portal can be worked on
+  without MJM Connect. It is not in the production build.
 
 ## Future linking
 
@@ -121,6 +149,8 @@ Then do the same, in order, with:
 - `supabase/migrations/20261107120000_businesses.sql` (businesses, business ↔ company links, company code / short name / registration no. / active, Diesel Manage access flag, user display names).
 - `supabase/migrations/20261108120000_diesel.sql` (Diesel Manage: members, vehicles, claims, fleet cards, reloads, card fill-ups, access functions, RLS, receipts bucket).
 
+Then link the portal to MJM Connect (API key → `GW_API_KEY` secret), see [Sign-in](#sign-in-from-mjm-connect-only-no-login-page).
+
 All are safe to re-run.
 
 ### 2. Edge Function (no terminal)
@@ -131,7 +161,8 @@ Deployed by GitHub Actions (`.github/workflows/deploy-webhook.yml`).
 3. GitHub → **Actions → Deploy WhatsApp webhook → Run workflow**. The run summary shows the webhook URL:
    `https://<project-ref>.supabase.co/functions/v1/whatsapp-webhook`
 4. Supabase → **Edge Functions → Secrets** → add each (see `supabase/functions/.env.example` for where to find them):
-   `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ALLOWED_NUMBERS`.
+   `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ALLOWED_NUMBERS`,
+   and `GW_API_KEY` (sign-in from MJM Connect).
    `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are provided automatically.
 
 Replace the expiring Meta token: Supabase → Edge Functions → Secrets → edit `WHATSAPP_ACCESS_TOKEN`. No redeploy needed.

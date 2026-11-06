@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
 import { INTRANET_URL } from '../lib/supabase.js'
@@ -58,7 +58,6 @@ function Brand({ size }) {
 
 function TopBar({ title, gutter }) {
   const { user, logout, isSuperAdmin } = useAuth()
-  const navigate = useNavigate()
   const home = !title
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -108,10 +107,7 @@ function TopBar({ title, gutter }) {
             </Link>
           )}
           <button
-            onClick={async () => {
-              await logout()
-              navigate('/login', { replace: true })
-            }}
+            onClick={logout}
             className="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200"
             aria-label="Log out"
             title={user?.email ? `Log out ${user.email}` : 'Log out'}
