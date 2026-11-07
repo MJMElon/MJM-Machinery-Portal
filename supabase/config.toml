@@ -13,7 +13,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.gw-login]
-# Called by the portal BEFORE it has a session (it turns the MJM Connect token
+# Called by the portal BEFORE it has a session (it turns the MJM Intranet token
 # into one), so there is no Supabase JWT to verify. The token itself is
-# verified by MJM Connect's gw-check-access.
+# verified by MJM Intranet's gw-check-access.
 verify_jwt = false

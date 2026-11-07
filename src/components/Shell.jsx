@@ -90,10 +90,10 @@ function TopBar({ title, gutter }) {
             href={INTRANET_URL}
             target="_blank"
             rel="noopener noreferrer"
-            title="Open MJM Connect (Intranet)"
+            title="Open MJM Intranet"
             className="hidden h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200 md:flex"
           >
-            MJM Connect
+            MJM Intranet
             <IconExternal width={14} height={14} className="text-slate-400" />
           </a>
           {isSuperAdmin && (
@@ -126,7 +126,7 @@ function TopBar({ title, gutter }) {
 }
 
 // "Working in: <company> ▾" — picks the company every module works on.
-// Companies are listed under their business, as in MJM Connect.
+// Companies are listed under their business, as in MJM Intranet.
 function CompanySwitcher({ wide = false }) {
   const { groups, current, select, businessesOf } = useCompany()
   const [open, setOpen] = useState(false)

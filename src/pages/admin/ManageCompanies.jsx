@@ -20,7 +20,7 @@ import {
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
-// Super admin: businesses and companies (same master data as MJM Connect:
+// Super admin: businesses and companies (same master data as MJM Intranet:
 // Business → Company, with the company code / short name / registration no.),
 // module access per company (CMMS 2, Diesel Manage) and the WhatsApp numbers
 // whose messages belong to each company.
@@ -74,7 +74,7 @@ export default function ManageCompanies() {
         backTo="/"
         backLabel="Back to main page"
         title="Businesses & Companies"
-        subtitle="Same structure as MJM Connect: each business has its companies. Turn on module access and link WhatsApp numbers per company."
+        subtitle="Same structure as MJM Intranet: each business has its companies. Turn on module access and link WhatsApp numbers per company."
       />
 
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
@@ -93,7 +93,7 @@ export default function ManageCompanies() {
           ) : companies.length === 0 ? (
             <EmptyState
               title="No companies yet"
-              subtitle="Add a business (left), then the companies under it, with the same names and codes as in MJM Connect."
+              subtitle="Add a business (left), then the companies under it, with the same names and codes as in MJM Intranet."
             />
           ) : (
             groups.map((g) => (
@@ -144,7 +144,7 @@ function BusinessesCard({ businesses, onChanged, onError }) {
     <Card className="overflow-hidden">
       <div className="border-b border-slate-200 px-5 py-4">
         <p className="font-semibold text-slate-800">Businesses</p>
-        <p className="text-sm text-slate-500">As in MJM Connect → Master Manage → Business.</p>
+        <p className="text-sm text-slate-500">As in MJM Intranet → Master Manage → Business.</p>
       </div>
       <form
         onSubmit={async (e) => {
@@ -269,7 +269,7 @@ function AddCompanyCard({ businesses, onAdded, onError }) {
   return (
     <Card className="p-4 sm:p-5">
       <p className="font-semibold text-slate-800">New company</p>
-      <p className="mb-3 text-sm text-slate-500">Use the same name and code as in MJM Connect.</p>
+      <p className="mb-3 text-sm text-slate-500">Use the same name and code as in MJM Intranet.</p>
       <form onSubmit={add} className="space-y-3">
         <Field label="Company name" required>
           <TextInput value={form.name} onChange={set('name')} placeholder="e.g. MJM Plantation Sdn Bhd" />
@@ -433,7 +433,7 @@ function CompanyCard({ company, businesses, onChanged }) {
         </Field>
       </div>
 
-      <Field label="Businesses" hint="A company can belong to more than one business, as in MJM Connect.">
+      <Field label="Businesses" hint="A company can belong to more than one business, as in MJM Intranet.">
         {businesses.length === 0 ? (
           <p className="text-sm text-slate-400">Add a business first (left).</p>
         ) : (

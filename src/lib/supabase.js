@@ -36,5 +36,5 @@ export const DIESEL = {
   bucket: 'machinery_diesel_receipts'
 }
 
-// Where MJM Connect (the Intranet) lives; the portal is one of its icons.
+// Where MJM Intranet lives; the portal is one of its icons.
 export const INTRANET_URL = import.meta.env.VITE_INTRANET_URL || 'https://mjmelon.github.io/MJM-Intranet/'

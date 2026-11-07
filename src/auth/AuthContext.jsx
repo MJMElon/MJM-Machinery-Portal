@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase, supabaseEnabled, ADMIN_TABLE, INTRANET_URL } from '../lib/supabase.js'
 
-// The portal has no login page: people sign in at MJM Connect (the Intranet)
-// and open the portal from there. MJM Connect appends a 60-second token
+// The portal has no login page: people sign in at MJM Intranet
+// and open the portal from there. MJM Intranet appends a 60-second token
 // (?gw_token=…) to the portal URL; the gw-login Edge Function redeems it at
-// MJM Connect, makes sure the person has a login + portal user row in this
+// MJM Intranet, makes sure the person has a login + portal user row in this
 // project, and the browser turns the answer into a normal Supabase session.
-// Anyone who arrives without a token or a session is sent to MJM Connect.
+// Anyone who arrives without a token or a session is sent to MJM Intranet.
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [fullName, setFullName] = useState('')
   const [ready, setReady] = useState(false)
-  // Token hand-off from MJM Connect: none | pending | failed
+  // Token hand-off from MJM Intranet: none | pending | failed
   const [handoff, setHandoff] = useState(() => (peekGwToken() ? 'pending' : 'none'))
   const [handoffError, setHandoffError] = useState('')
 
@@ -75,7 +75,7 @@ export function AuthProvider({ children }) {
   }, [uid])
 
   // Development only (`npm run dev`): sign in with a Supabase e-mail/password
-  // so the portal can be worked on without going through MJM Connect.
+  // so the portal can be worked on without going through MJM Intranet.
   const login = useCallback(async (email, password) => {
     if (!supabaseEnabled) throw new Error('Supabase is not configured for this build.')
     const { error } = await supabase.auth.signInWithPassword({
@@ -85,7 +85,7 @@ export function AuthProvider({ children }) {
     if (error) throw new Error(/invalid/i.test(error.message || '') ? 'Wrong email or password.' : error.message)
   }, [])
 
-  // Log out of the portal and go back to MJM Connect.
+  // Log out of the portal and go back to MJM Intranet.
   const logout = useCallback(async () => {
     await supabase?.auth.signOut()
     window.location.replace(INTRANET_URL)
@@ -102,9 +102,9 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthContext)
 
-// ---- MJM Connect token hand-off --------------------------------------------------
+// ---- MJM Intranet token hand-off --------------------------------------------------
 
-// MJM Connect redirects to  <portal url>?gw_token=<jwt>  (before the #/ route).
+// MJM Intranet redirects to  <portal url>?gw_token=<jwt>  (before the #/ route).
 // Accept it from the query string or, just in case, from the hash part.
 function gwTokenLocation() {
   const search = new URLSearchParams(window.location.search)
@@ -153,7 +153,7 @@ function handoffOnce() {
       ? Promise.resolve(null)
       : signInWithGatewayToken(token)
           .then(() => ({ ok: true }))
-          .catch((e) => ({ ok: false, error: e.message || 'Could not sign in from MJM Connect.' }))
+          .catch((e) => ({ ok: false, error: e.message || 'Could not sign in from MJM Intranet.' }))
   }
   return handoffPromise
 }
@@ -161,17 +161,17 @@ function handoffOnce() {
 async function signInWithGatewayToken(token) {
   const { data, error } = await supabase.functions.invoke('gw-login', { body: { token } })
   if (error) throw new Error(await describeFunctionError(error))
-  if (!data?.token_hash) throw new Error('MJM Connect did not return a sign-in token.')
+  if (!data?.token_hash) throw new Error('MJM Intranet did not return a sign-in token.')
   const { error: verifyError } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'magiclink' })
   if (verifyError) throw new Error(verifyError.message)
 }
 
 const REASONS = {
-  invalid_token: 'The link from MJM Connect has expired (it lasts 60 seconds). Open the portal again from MJM Connect.',
-  token_already_used: 'This link from MJM Connect was already used. Open the portal again from MJM Connect.',
-  not_allowed: 'Your MJM Connect account no longer has access to this portal.',
-  not_configured: 'The portal is not linked to MJM Connect yet (GW_API_KEY secret missing).',
-  gateway_unreachable: 'Could not reach MJM Connect to check the link. Please try again.'
+  invalid_token: 'The link from MJM Intranet has expired (it lasts 60 seconds). Open the portal again from MJM Intranet.',
+  token_already_used: 'This link from MJM Intranet was already used. Open the portal again from MJM Intranet.',
+  not_allowed: 'Your MJM Intranet account no longer has access to this portal.',
+  not_configured: 'The portal is not linked to MJM Intranet yet (GW_API_KEY secret missing).',
+  gateway_unreachable: 'Could not reach MJM Intranet to check the link. Please try again.'
 }
 
 async function describeFunctionError(error) {
@@ -185,5 +185,5 @@ async function describeFunctionError(error) {
   if (/Failed to send a request|FunctionsFetchError|Function not found|404/i.test(error.message || '')) {
     return 'The gw-login function is not deployed yet (GitHub → Actions → Deploy WhatsApp webhook).'
   }
-  return error.message || 'Could not sign in from MJM Connect.'
+  return error.message || 'Could not sign in from MJM Intranet.'
 }

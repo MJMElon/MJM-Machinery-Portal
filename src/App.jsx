@@ -64,13 +64,13 @@ export default function App() {
   )
 }
 
-// Signed in (via MJM Connect) AND listed in machinery_portal_admins.
+// Signed in (via MJM Intranet) AND listed in machinery_portal_admins.
 // The database enforces the same rule with RLS; this is just the UI gate.
-// Without a session the person is sent to MJM Connect to log in there.
+// Without a session the person is sent to MJM Intranet to log in there.
 function RequirePortalAdmin() {
   const { user, access, handoff, handoffError, logout } = useAuth()
   if (!user) {
-    if (handoff === 'pending') return <FullSpinner label="Signing in from MJM Connect…" />
+    if (handoff === 'pending') return <FullSpinner label="Signing in from MJM Intranet…" />
     if (handoff === 'failed') return <GoToIntranet title="Could not sign in" body={handoffError} />
     if (import.meta.env.DEV) return <Navigate to="/login" replace />
     return <RedirectToIntranet />
@@ -84,10 +84,10 @@ function RequirePortalAdmin() {
           <p className="mt-1 text-sm text-slate-500">
             {access === 'error'
               ? 'Could not check access. Has the database migration been run?'
-              : `${user.email} is signed in but is not a portal user. Open the portal from MJM Connect to be added.`}
+              : `${user.email} is signed in but is not a portal user. Open the portal from MJM Intranet to be added.`}
           </p>
           <Button className="mt-4" variant="secondary" onClick={logout}>
-            Back to MJM Connect
+            Back to MJM Intranet
           </Button>
         </Card>
       </div>
@@ -96,12 +96,12 @@ function RequirePortalAdmin() {
   return <Outlet />
 }
 
-// No session and no token: this portal is reached from MJM Connect only.
+// No session and no token: this portal is reached from MJM Intranet only.
 function RedirectToIntranet() {
   useEffect(() => {
     window.location.replace(INTRANET_URL)
   }, [])
-  return <GoToIntranet title="Please log in at MJM Connect" body="Taking you to MJM Connect… open the portal from there." />
+  return <GoToIntranet title="Please log in at MJM Intranet" body="Taking you to MJM Intranet… open the portal from there." />
 }
 
 function GoToIntranet({ title, body }) {
@@ -114,7 +114,7 @@ function GoToIntranet({ title, body }) {
           href={INTRANET_URL}
           className="mt-4 inline-flex h-11 items-center rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark"
         >
-          Go to MJM Connect
+          Go to MJM Intranet
         </a>
       </Card>
     </div>

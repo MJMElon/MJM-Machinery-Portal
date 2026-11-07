@@ -71,7 +71,7 @@ jobs:
             --project-ref "${{ steps.check.outputs.ref }}" \
             --no-verify-jwt
 
-      - name: Deploy gw-login (sign in from MJM Connect)
+      - name: Deploy gw-login (sign in from MJM Intranet)
         if: steps.check.outputs.skip != 'true'
         run: |
           supabase functions deploy gw-login \

@@ -3,7 +3,7 @@ import { supabase, BLOCK_TABLE, BUSINESS_COMPANY_TABLE, BUSINESS_TABLE, COMPANY_
 // Businesses and companies follow the Intranet's master data: a Business
 // (e.g. Plantation, Machinery) has companies under it, and a company can sit
 // under more than one business. Companies carry the same code / short name /
-// registration number as in MJM Connect, so both systems name them alike.
+// registration number as in MJM Intranet, so both systems name them alike.
 // A WhatsApp message belongs to the company whose `whatsapp_numbers` list
 // contains the sender's number.
 

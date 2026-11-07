@@ -1,6 +1,12 @@
 -- =====================================================================
+-- >>> RUN THIS IN THE **MACHINERY PORTAL** DATABASE <<<
+-- >>> Supabase project qcvbzzdbbqmnrljfnxjp (shared with MachTrek)   <<<
+-- >>> NOT the MJM Intranet database (briqzyxfxsvulyizzbiu)            <<<
+-- Supabase dashboard → (Machinery project) → SQL Editor → paste all → Run.
+-- =====================================================================
+-- =====================================================================
 -- MJM Portal · Businesses and company master data (same structure as
--- MJM Connect / Intranet: Business → Company, a company can sit under
+-- MJM Intranet: Business → Company, a company can sit under
 -- more than one business), Diesel Manage access flag, user display names.
 -- Target: the SAME Supabase project as MachTrek. Safe to run more than once.
 --

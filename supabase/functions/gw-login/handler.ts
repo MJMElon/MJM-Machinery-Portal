@@ -1,5 +1,5 @@
-// Core logic for the gw-login Edge Function: turn a 60-second MJM Connect
-// (Intranet) token into a portal session.
+// Core logic for the gw-login Edge Function: turn a 60-second MJM Intranet
+// token into a portal session.
 //
 // Flow: the Intranet opens the portal as  <portal url>?gw_token=<JWT>.
 // The browser posts that token here; we redeem it at the Intranet's
@@ -15,11 +15,11 @@ export interface GatewayUser {
 }
 
 export interface Deps {
-  /** Redeem the token at MJM Connect. Returns the user when allowed, null otherwise. */
+  /** Redeem the token at MJM Intranet. Returns the user when allowed, null otherwise. */
   checkAccess(token: string): Promise<{ allowed: boolean; user?: GatewayUser | null; error?: string }>
   /** Make sure a login exists for this e-mail (no e-mail is sent) and return a one-time token hash. */
   issueSession(email: string, fullName: string | null): Promise<{ userId: string; tokenHash: string }>
-  /** Keep the portal user list in step with MJM Connect (adds the row, updates name/e-mail). */
+  /** Keep the portal user list in step with MJM Intranet (adds the row, updates name/e-mail). */
   enrol(userId: string, email: string, fullName: string | null): Promise<void>
 }
 

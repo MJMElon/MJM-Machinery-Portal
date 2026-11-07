@@ -3,7 +3,7 @@ import { groupByBusiness, listBusinesses, listCompanies } from './companies.js'
 
 // The company the user is working in (chosen in the top bar). Every module on
 // the main page works on this company. Companies are grouped by business, the
-// same way MJM Connect (the Intranet) shows them.
+// same way MJM Intranet shows them.
 const CompanyContext = createContext(null)
 const KEY = 'portal.company'
 

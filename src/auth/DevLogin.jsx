@@ -4,7 +4,7 @@ import { supabaseEnabled } from '../lib/supabase.js'
 import { Button, Card, Field, TextInput } from '../components/ui.jsx'
 
 // DEVELOPMENT ONLY (`npm run dev`). The real portal has no login page: people
-// sign in at MJM Connect and open the portal from there. This form lets a
+// sign in at MJM Intranet and open the portal from there. This form lets a
 // developer sign in with a Supabase e-mail/password on localhost; it is not
 // part of the production build (see App.jsx).
 export default function DevLogin() {
@@ -39,7 +39,7 @@ export default function DevLogin() {
           <form onSubmit={submit} className="space-y-4">
             <p className="text-sm font-semibold text-slate-700">Developer sign in</p>
             <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
-              In production people arrive from MJM Connect with a token; there is no login page.
+              In production people arrive from MJM Intranet with a token; there is no login page.
             </p>
             {!supabaseEnabled && (
               <p className="rounded-xl bg-amber-100 p-3 text-sm text-amber-700">

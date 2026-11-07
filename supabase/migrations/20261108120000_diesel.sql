@@ -1,4 +1,10 @@
 -- =====================================================================
+-- >>> RUN THIS IN THE **MACHINERY PORTAL** DATABASE <<<
+-- >>> Supabase project qcvbzzdbbqmnrljfnxjp (shared with MachTrek)   <<<
+-- >>> NOT the MJM Intranet database (briqzyxfxsvulyizzbiu)            <<<
+-- Supabase dashboard → (Machinery project) → SQL Editor → paste all → Run.
+-- =====================================================================
+-- =====================================================================
 -- MJM Portal · Diesel Manage (ported from the Intranet's Diesel Claims
 -- module, now per company): vehicles, cash fuel claims with receipt
 -- photos, fleet cards (reloads + card fill-ups), reports.

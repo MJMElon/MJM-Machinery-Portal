@@ -1,10 +1,10 @@
-// Supabase Edge Function: sign a person into the portal with an MJM Connect
-// (Intranet) token — the portal has no login page of its own.
+// Supabase Edge Function: sign a person into the portal with an MJM Intranet
+// token — the portal has no login page of its own.
 //
 // Called by the portal with { token } (the gw_token from the URL). Secrets:
-//   GW_API_KEY            API key of this portal's Icon in MJM Connect
+//   GW_API_KEY            API key of this portal's Icon in MJM Intranet
 //                         (Master Manage → Module → "2 · Token" → Generate API key)
-//   GW_CHECK_ACCESS_URL   optional; default is the MJM Connect project's
+//   GW_CHECK_ACCESS_URL   optional; default is the MJM Intranet project's
 //                         gw-check-access function.
 // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 
