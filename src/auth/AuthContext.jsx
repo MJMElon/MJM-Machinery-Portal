@@ -175,15 +175,20 @@ const REASONS = {
 }
 
 async function describeFunctionError(error) {
+  console.error('gw-login failed', error, error?.context)
   let body = null
+  let status = error?.context?.status
   try {
     body = await error.context?.json?.()
   } catch {
     // not JSON
   }
   if (body?.error) return REASONS[body.error] || `${body.error}${body.detail ? `: ${body.detail}` : ''}`
-  if (/Failed to send a request|FunctionsFetchError|Function not found|404/i.test(error.message || '')) {
-    return 'The gw-login function is not deployed yet (GitHub → Actions → Deploy WhatsApp webhook).'
+  if (body?.message) return `gw-login answered ${status || ''}: ${body.message}`
+  if (error?.name === 'FunctionsFetchError' || /Failed to send a request/i.test(error?.message || '')) {
+    return `The browser could not reach the gw-login function (no answer, often CORS or a start-up error). Details: ${
+      error?.context?.message || error?.message || 'none'
+    }`
   }
-  return error.message || 'Could not sign in from MJM Intranet.'
+  return `${error?.name || 'Error'}${status ? ` ${status}` : ''}: ${error?.message || 'Could not sign in from MJM Intranet.'}`
 }
