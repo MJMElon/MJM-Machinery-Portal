@@ -12,8 +12,9 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
 
 // Fuel Claims: a dashboard of the year (litres and RM per month) and the claim
-// list (No. · Description · Claim amount · Action), latest first. Each person
-// sees their own claims; people with "see all users' claims" see everyone's.
+// list (No. · Description · Claim amount · Action), latest first — always the
+// person's OWN claims only. Reviewers reach other people's claims through the
+// separate "Review claims" page.
 export default function DieselClaims() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
@@ -24,11 +25,11 @@ export default function DieselClaims() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
-  const all = access.viewAll
+  const all = false
 
   const load = useCallback(async () => {
     try {
-      const [c, p] = await Promise.all([listClaims(company.id, all ? {} : { mine: user.id }), all ? listPeople(company.id) : []])
+      const [c, p] = await Promise.all([listClaims(company.id, { mine: user.id }), []])
       const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
       setClaims(c)
       setLines(ls)
@@ -39,7 +40,7 @@ export default function DieselClaims() {
     } finally {
       setLoading(false)
     }
-  }, [company.id, user.id, all])
+  }, [company.id, user.id])
 
   useEffect(() => {
     setLoading(true)
@@ -97,6 +98,11 @@ export default function DieselClaims() {
       <PageHeader
         right={
           <div className="flex flex-wrap gap-2">
+            {(access.admin || access.pay || access.viewAll) && (
+              <Button variant="secondary" onClick={() => navigate('/diesel/claims/review')}>
+                Review claims
+              </Button>
+            )}
             <Button variant="secondary" onClick={exportCsv} disabled={!rows.length}>
               <IconDownload width={18} height={18} /> Export CSV
             </Button>
@@ -110,7 +116,7 @@ export default function DieselClaims() {
       />
       <ErrorBox>{error}</ErrorBox>
 
-      {!loading && <FuelDashboard lines={liveLines} title={all ? 'Fuel history — all users' : 'Your fuel history'} />}
+      {!loading && <FuelDashboard lines={liveLines} title="Fuel history" />}
 
       <Card className="overflow-hidden">
         <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">Claim list</h3>

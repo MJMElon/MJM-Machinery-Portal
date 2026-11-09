@@ -41,7 +41,7 @@ export function FuelDashboard({ lines, title }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="font-semibold text-slate-800">{title || 'Fuel history'}</p>
+        <p className="text-sm font-semibold text-slate-800">{title || 'Fuel history'}</p>
         <div className="w-28">
           <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="h-9" aria-label="Year">
             {years.map((y) => (
@@ -118,10 +118,10 @@ export function FuelDashboard({ lines, title }) {
 function Chart({ title, series, data, fmt }) {
   const [hover, setHover] = useState(null)
   const W = 520
-  const H = 220
-  const padL = 44
-  const padB = 26
-  const padT = 10
+  const H = 150
+  const padL = 40
+  const padB = 22
+  const padT = 8
   const innerW = W - padL - 10
   const innerH = H - padT - padB
   const totals = data.map((d) => series.reduce((s, x) => s + d[x.key], 0))
@@ -130,15 +130,15 @@ function Chart({ title, series, data, fmt }) {
   const top = Math.ceil(max / step) * step
   const y = (v) => padT + innerH - (v / top) * innerH
   const slot = innerW / 12
-  const barW = Math.min(22, slot * 0.55)
+  const barW = Math.min(18, slot * 0.5)
   const ticks = []
   for (let v = 0; v <= top; v += step) ticks.push(v)
 
   return (
-    <Card className="p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
-        <div className="flex gap-3 text-xs text-slate-600">
+    <Card className="p-3">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700">{title}</p>
+        <div className="flex gap-3 text-[11px] text-slate-600">
           {series.map((s) => (
             <span key={s.key} className="inline-flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: s.color }} />

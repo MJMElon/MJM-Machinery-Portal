@@ -28,11 +28,46 @@ async function getWorker() {
   return worker
 }
 
-/** Reads the text from a receipt image (PDFs are skipped). Returns '' on failure. */
+// Receipts photographed on a phone read much better after a clean-up:
+// upscale small shots, drop colour, stretch the contrast.
+async function prepare(file) {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(2.5, Math.max(1, 1800 / Math.max(bmp.width, bmp.height)))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bmp.width * scale)
+  canvas.height = Math.round(bmp.height * scale)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const d = img.data
+  let min = 255
+  let max = 0
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    d[i] = d[i + 1] = d[i + 2] = g
+    if (g < min) min = g
+    if (g > max) max = g
+  }
+  const range = Math.max(1, max - min)
+  for (let i = 0; i < d.length; i += 4) {
+    const g = ((d[i] - min) / range) * 255
+    d[i] = d[i + 1] = d[i + 2] = g
+  }
+  ctx.putImageData(img, 0, 0)
+  return canvas
+}
+
+/** Reads the text from a receipt image (PDFs are skipped). Throws on failure. */
 export async function readReceiptText(file) {
   if (!file || !file.type.startsWith('image/')) return ''
   const w = await getWorker()
-  const { data } = await w.recognize(file)
+  let source = file
+  try {
+    source = await prepare(file)
+  } catch {
+    // e.g. HEIC the browser cannot decode: let Tesseract try the raw file
+  }
+  const { data } = await w.recognize(source)
   return data?.text || ''
 }
 
@@ -95,12 +130,15 @@ export function parseReceipt(text) {
   return out
 }
 
-/** Scan one receipt file → draft line fields (empty object if nothing readable). */
+/** Scan one receipt file → draft line fields; `_text` is what was read, `_error` why it failed. */
 export async function scanReceipt(file) {
   try {
     const text = await readReceiptText(file)
-    return { ...parseReceipt(text), _text: text }
+    const draft = parseReceipt(text)
+    console.info('[receipt scan]', file.name, draft, text)
+    return { ...draft, _text: text }
   } catch (e) {
-    return { _error: e.message || 'Scan failed' }
+    console.error('[receipt scan] failed', file?.name, e)
+    return { _error: e?.message || 'Scan failed' }
   }
 }

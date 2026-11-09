@@ -95,12 +95,20 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
       const onlyBlank = ls.length === 1 && !ls[0].file && !ls[0].amount && !ls[0].litres && !ls[0].receipt_path
       return onlyBlank ? fresh : [...ls, ...fresh]
     })
-    for (const row of fresh) {
-      if (row.scan !== 'scanning') continue
-      const small = await compressReceipt(row.file)
-      const draft = await scanReceipt(small)
+    for (const row of fresh) if (row.scan === 'scanning') await readRow(row)
+  }
+
+  // Read one row's photo and fill the draft figures (never overwrites typed values with blanks).
+  async function readRow(row) {
+    update(row.key, { scan: 'scanning', scanText: '', scanError: '' })
+    const small = await compressReceipt(row.file)
+    const draft = await scanReceipt(small)
+    const found = ['fill_date', 'litres', 'unit_price', 'amount', 'receipt_no', 'station'].some((k) => draft[k])
+    {
       update(row.key, {
-        scan: draft._error ? 'failed' : 'done',
+        scan: draft._error ? 'failed' : found ? 'done' : 'empty',
+        scanText: draft._text || '',
+        scanError: draft._error || '',
         ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
         ...(draft.litres ? { litres: String(draft.litres) } : {}),
         ...(draft.unit_price ? { unit_price: String(draft.unit_price) } : {}),
@@ -148,9 +156,16 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
     <form onSubmit={save} className="space-y-4">
       {error && <p className="rounded-lg bg-red-100 p-2.5 text-sm text-red-700">{error}</p>}
 
-      {/* Header */}
-      <Card className="p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Header: submission date, company, name, totals and the receipt upload */}
+      <Card
+        className="p-4 sm:p-5"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault()
+          addFiles(e.dataTransfer.files)
+        }}
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <F label="Submission date">
             <input type="date" required max={today()} value={submittedOn} onChange={(e) => setSubmittedOn(e.target.value)} className={inputCls} />
           </F>
@@ -166,29 +181,16 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
           <F label="Payable amount" hint="Cash receipts only">
             <input value={money(payable)} disabled className={`${inputCls} font-bold text-brand-dark`} />
           </F>
-        </div>
-      </Card>
-
-      {/* Upload */}
-      <Card
-        className="border-2 border-dashed border-brand/40 bg-brand-light/30 p-5 text-center"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault()
-          addFiles(e.dataTransfer.files)
-        }}
-      >
-        <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
-        <IconCamera width={28} height={28} className="mx-auto text-brand" />
-        <p className="mt-2 font-semibold text-slate-800">Upload fuel receipts</p>
-        <p className="text-xs text-slate-500">Photos or PDFs, several at once. Each receipt becomes a row below; photos are read automatically — check the figures.</p>
-        <div className="mt-3 flex justify-center gap-2">
-          <Button type="button" variant="secondary" onClick={() => fileInput.current?.click()}>
-            Choose files
-          </Button>
-          <Button type="button" variant="ghost" onClick={addRow}>
-            <IconPlus width={18} height={18} /> Add row without receipt
-          </Button>
+          <F label="Fuel receipts" hint="Each photo becomes a row">
+            <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-brand/50 bg-brand-light/40 text-sm font-semibold text-brand-dark hover:border-brand"
+            >
+              <IconCamera width={18} height={18} /> Upload
+            </button>
+          </F>
         </div>
       </Card>
 
@@ -206,7 +208,9 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                 <th className="w-28 px-2 py-2.5 text-right">Unit price</th>
                 <th className="w-28 px-2 py-2.5 text-right">Amount (RM)</th>
                 <th className="w-40 px-2 py-2.5">Payment</th>
-                <th className="w-20 px-2 py-2.5 text-center">Subsidy</th>
+                <th className="w-20 px-2 py-2.5 text-center" title="Subsidised (KPDN) fuel — ticked automatically for fleet-card fill-ups on a KPDN vehicle; used in the litres dashboard">
+                  KPDN
+                </th>
                 <th className="px-2 py-2.5">Remark</th>
                 <th className="w-44 px-2 py-2.5">Attachment</th>
                 <th className="w-12 px-2 py-2.5" />
@@ -257,7 +261,25 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                     </label>
                     {l.scan === 'scanning' && <Badge color="amber" className="mt-1">Reading…</Badge>}
                     {l.scan === 'done' && <Badge color="green" className="mt-1">Read — please check</Badge>}
-                    {l.scan === 'failed' && <Badge color="red" className="mt-1">Could not read</Badge>}
+                    {l.scan === 'empty' && <Badge color="amber" className="mt-1">Nothing recognised — type it in</Badge>}
+                    {l.scan === 'failed' && (
+                      <Badge color="red" className="mt-1" title={l.scanError}>
+                        Could not read
+                      </Badge>
+                    )}
+                    {l.file && l.file.type.startsWith('image/') && l.scan !== 'scanning' && (
+                      <span className="mt-1 flex gap-2 text-[11px]">
+                        <button type="button" onClick={() => readRow(l)} className="text-brand hover:underline">
+                          Read again
+                        </button>
+                        {l.scanText && (
+                          <button type="button" onClick={() => update(l.key, { showText: !l.showText })} className="text-slate-500 hover:underline">
+                            {l.showText ? 'Hide text' : 'Show text'}
+                          </button>
+                        )}
+                      </span>
+                    )}
+                    {l.showText && <pre className="mt-1 max-h-28 max-w-[14rem] overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-1.5 text-[10px] text-slate-600">{l.scanText}</pre>}
                   </td>
                   <td className="px-2 py-2">
                     <button type="button" onClick={() => remove(l.key)} className="mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove row">
@@ -284,12 +306,6 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
             </tfoot>
           </table>
         </div>
-      </Card>
-
-      <Card className="p-4">
-        <F label="Notes for the whole claim">
-          <textarea maxLength={500} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={`${inputCls} h-auto py-2`} />
-        </F>
       </Card>
 
       <div className="flex justify-end gap-2">
