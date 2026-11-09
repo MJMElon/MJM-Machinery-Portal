@@ -177,14 +177,14 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
           <F label="Payable amount" hint="Cash receipts only">
             <input value={money(payable)} disabled className={`${inputCls} font-bold text-brand-dark`} />
           </F>
-          <F label="Fuel receipts" hint="Each photo becomes a row">
+          <F label="Fuel receipts" hint="Drop files here or click · PDF or photo">
             <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
             <button
               type="button"
               onClick={() => fileInput.current?.click()}
               className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-brand/50 bg-brand-light/40 text-sm font-semibold text-brand-dark hover:border-brand"
             >
-              Upload PDF or photo
+              Drag to upload fuel receipts
             </button>
           </F>
         </div>
