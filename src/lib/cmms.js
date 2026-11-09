@@ -25,7 +25,14 @@ export async function listMachines(companyId) {
   return data || []
 }
 export const saveMachine = (companyId, m) => save(MACHINES, companyId, m)
-export const deleteMachine = (id) => remove(MACHINES, id)
+export async function deleteMachine(id) {
+  try {
+    await remove(MACHINES, id)
+  } catch (e) {
+    if (e?.code === '23503') throw new Error('This machine / vehicle has diesel claims or card records, so it cannot be deleted. Set it to Inactive instead.')
+    throw e
+  }
+}
 
 // ---- suppliers / workshops ---------------------------------------------------
 
@@ -135,6 +142,16 @@ export async function addPortalUser(email) {
 export async function setUserName(userId, name) {
   const { error } = await supabase.rpc('machinery_set_user_name', { p_user: userId, p_name: name })
   if (error) throw friendly(error)
+}
+
+/** Portal users (name + e-mail) for drop-downs; any portal user may call it. */
+export async function listPortalPeople() {
+  const { data, error } = await supabase.rpc('machinery_portal_people')
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) return [] // before the vehicles migration
+    throw friendly(error)
+  }
+  return data || []
 }
 
 /** Name to show for a portal user: full name, else the e-mail. */

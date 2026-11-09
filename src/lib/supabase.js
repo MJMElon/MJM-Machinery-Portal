@@ -28,7 +28,6 @@ export const BLOCK_TABLE = 'machinery_company_blocks'
 // Diesel Manage (ported from the Intranet's Diesel Claims; per company here)
 export const DIESEL = {
   members: 'machinery_diesel_members',
-  vehicles: 'machinery_diesel_vehicles',
   claims: 'machinery_diesel_claims',
   cards: 'machinery_diesel_cards',
   reloads: 'machinery_diesel_card_reloads',

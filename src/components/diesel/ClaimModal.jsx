@@ -9,7 +9,7 @@ import { money, today } from '../../lib/format.js'
 // on the phone and uploaded to the private bucket before the row is saved.
 export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved }) {
   const usable = useMemo(
-    () => vehicles.filter((v) => v.status === 'active' || (claim && v.id === claim.vehicle_id)),
+    () => vehicles.filter((v) => v.is_active || (claim && v.id === claim.vehicle_id)),
     [vehicles, claim]
   )
   const mineFirst = usable.find((v) => v.driver_id === userId) || usable[0]
@@ -78,7 +78,7 @@ export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved 
   if (!usable.length)
     return (
       <Modal open onClose={onClose} title="New claim">
-        <p className="text-sm text-slate-600">No vehicles yet. A Diesel admin adds them under Vehicles.</p>
+        <p className="text-sm text-slate-600">No vehicles yet. Add them under Machinery Manage → Machinery Profile.</p>
         <Button className="mt-4" variant="secondary" onClick={onClose}>
           Close
         </Button>

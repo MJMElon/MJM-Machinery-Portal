@@ -113,8 +113,8 @@ export default function DieselReport() {
       [
         { header: 'Date', value: (r) => r.fill_date },
         { header: 'Type', value: (r) => (r.source === 'cash' ? 'Cash Claim' : 'Fleet Card') },
-        { header: 'Plate no.', value: (r) => vById.get(r.vehicle_id)?.plate_no },
         { header: 'Vehicle', value: (r) => vById.get(r.vehicle_id)?.name },
+        { header: 'Reg. no.', value: (r) => vById.get(r.vehicle_id)?.reg_no },
         { header: 'Driver', value: (r) => (r.driver ? personLabel(person.get(r.driver)) : '') },
         { header: 'Odometer (km)', value: (r) => r.odometer_km },
         { header: 'Litres', value: (r) => Number(r.litres) },
@@ -178,8 +178,8 @@ export default function DieselReport() {
                       <tr key={r.v.id}>
                         {td(
                           <>
-                            <span className="font-medium text-slate-800">{r.v.plate_no}</span>
-                            {r.v.name && <span className="text-slate-500"> · {r.v.name}</span>}
+                            <span className="font-medium text-slate-800">{r.v.name}</span>
+                            {r.v.reg_no && <span className="text-slate-500"> · {r.v.reg_no}</span>}
                           </>
                         )}
                         {td(r.cashL ? `${num(r.cashL)} L · ${money(r.cashRM)}` : '—', 1)}

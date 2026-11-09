@@ -14,6 +14,16 @@ import {
 } from '../../lib/cmms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
+import { listPeople as listDieselPeople, removeMember as removeDieselMember, setMember as setDieselMember } from '../../lib/diesel.js'
+
+// Diesel Manage access, per company (Access = may open Diesel Manage;
+// Cash Claim / Report = its modules; Admin = vehicles review, cards, everything).
+const DIESEL_COLS = [
+  { key: 'has_access', label: 'Access', hint: 'May open Diesel Manage' },
+  { key: 'can_claim', label: 'Cash Claim', hint: 'Submit own fuel claims (Diesel Claims → My claims)' },
+  { key: 'can_report', label: 'Report', hint: 'All claims, Diesel Usage, Fleet Card Manage, Report (view)' },
+  { key: 'is_admin', label: 'Admin', hint: 'Review claims, record reloads / fill-ups, manage cards' }
+]
 
 // Who may do what in CMMS 2 for the selected company. Super admins set it;
 // other users see their own access.
@@ -24,7 +34,7 @@ export default function CmmsUsers() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="CMMS User Setting" subtitle={`${current?.name || ''} · who can do what in CMMS 2`} />
+      <PageHeader title="CMMS User Setting" subtitle={`${current?.name || ''} · who can do what in Machinery Manage and Diesel Manage`} />
       {isSuperAdmin ? (
         <AccessTable companyId={current?.id} me={user?.id} />
       ) : (
@@ -51,6 +61,8 @@ export default function CmmsUsers() {
 function AccessTable({ companyId, me }) {
   const [users, setUsers] = useState([])
   const [members, setMembers] = useState({})
+  const [diesel, setDiesel] = useState({})
+  const [dieselReady, setDieselReady] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [email, setEmail] = useState('')
@@ -59,9 +71,15 @@ function AccessTable({ companyId, me }) {
   const load = useCallback(async () => {
     if (!companyId) return
     try {
-      const [u, m] = await Promise.all([listPortalUsers(), listMembers(companyId)])
+      const [u, m, d] = await Promise.all([
+        listPortalUsers(),
+        listMembers(companyId),
+        listDieselPeople(companyId).catch(() => null) // null = diesel migration not run yet
+      ])
       setUsers(u)
       setMembers(Object.fromEntries(m.map((x) => [x.user_id, x])))
+      setDieselReady(d !== null)
+      setDiesel(Object.fromEntries((d || []).map((x) => [x.user_id, x])))
       setError('')
     } catch (e) {
       setError(e.message || 'Could not load users.')
@@ -95,6 +113,19 @@ function AccessTable({ companyId, me }) {
     return Object.fromEntries(PERMISSIONS.map((p) => [p.key, Boolean(m?.[p.key])]))
   }
 
+  // Diesel columns: Access adds/removes the member row; the others flip one flag.
+  const toggleDiesel = (u, key) => {
+    const d = diesel[u.user_id] || { has_access: false, is_admin: false, can_claim: false, can_report: false }
+    return run(async () => {
+      if (key === 'has_access') {
+        if (d.has_access) await removeDieselMember(companyId, u.user_id)
+        else await setDieselMember(companyId, u.user_id, { is_admin: false, can_claim: false, can_report: false })
+      } else {
+        await setDieselMember(companyId, u.user_id, { is_admin: d.is_admin, can_claim: d.can_claim, can_report: d.can_report, [key]: !d[key] })
+      }
+    })
+  }
+
   return (
     <>
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
@@ -126,14 +157,29 @@ function AccessTable({ companyId, me }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  <th className="px-5 pt-2.5" colSpan={2} />
+                  <th className="px-3 pt-2.5 text-center" colSpan={PERMISSIONS.length}>
+                    Machinery Manage
+                  </th>
+                  <th className="border-l border-slate-200 px-3 pt-2.5 text-center" colSpan={DIESEL_COLS.length}>
+                    Diesel Manage
+                  </th>
+                  <th />
+                </tr>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-2.5">User</th>
                   <th className="px-3 py-2.5">Name</th>
                   {PERMISSIONS.map((p) => (
                     <th key={p.key} className="px-3 py-2.5 text-center" title={p.hint}>
                       {p.label}
+                    </th>
+                  ))}
+                  {DIESEL_COLS.map((c, i) => (
+                    <th key={c.key} className={`px-3 py-2.5 text-center ${i === 0 ? 'border-l border-slate-200' : ''}`} title={c.hint}>
+                      {c.label}
                     </th>
                   ))}
                   <th className="w-14 px-3 py-2.5" />
@@ -173,6 +219,36 @@ function AccessTable({ companyId, me }) {
                           )}
                         </td>
                       ))}
+                      {DIESEL_COLS.map((c, i) => {
+                        const d = diesel[u.user_id]
+                        const on = Boolean(d?.[c.key])
+                        const locked = c.key !== 'has_access' && (!d?.has_access || (c.key !== 'is_admin' && d?.is_admin))
+                        return (
+                          <td key={c.key} className={`px-3 py-3 text-center ${i === 0 ? 'border-l border-slate-200' : ''}`}>
+                            {u.is_super_admin ? (
+                              <span className="text-xs font-medium text-slate-400">All</span>
+                            ) : !dieselReady ? (
+                              <span className="text-xs text-slate-300">—</span>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                className="h-5 w-5 cursor-pointer accent-[#059669] disabled:cursor-not-allowed disabled:opacity-40"
+                                checked={on}
+                                disabled={busy || locked}
+                                onChange={() => toggleDiesel(u, c.key)}
+                                aria-label={`Diesel ${c.label} for ${u.email}`}
+                                title={
+                                  !d?.has_access && c.key !== 'has_access'
+                                    ? 'Tick Access first'
+                                    : d?.is_admin && c.key !== 'has_access' && c.key !== 'is_admin'
+                                      ? 'Admins have every module'
+                                      : c.hint
+                                }
+                              />
+                            )}
+                          </td>
+                        )
+                      })}
                       <td className="px-3 py-3 text-right">
                         {u.user_id !== me && !u.is_super_admin && (
                           <button
@@ -197,8 +273,9 @@ function AccessTable({ companyId, me }) {
         )}
       </Card>
       <p className="text-xs text-slate-500">
-        Access is per company: switch company (top left) to set it for another company. New logins are created in
-        Supabase → Authentication → Users, then added here. The name is shown in Diesel Manage lists and reports.
+        Access is per company: switch company (top left) to set it for another company. People arriving from MJM
+        Intranet are added here automatically; the name is shown in Diesel Manage lists and reports. Diesel: tick Access
+        first, then Cash Claim and/or Report; Admin covers everything (review claims, cards, reloads, fill-ups).
       </p>
     </>
   )

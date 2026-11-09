@@ -59,3 +59,49 @@ export function SettingsIcon({ className }) {
     </span>
   )
 }
+
+// ---- Diesel Manage sub-module icons ---------------------------------------
+
+export function DieselClaimsIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-dcl" from="#f59e0b" to="#d97706" label="Diesel Claims">
+        <path d="M20 12h24v40l-4-3-4 3-4-3-4 3-4-3-4 3z" />
+        <path d="M26 22h12M26 29h12M26 36h7" />
+      </Tile>
+    </span>
+  )
+}
+
+export function DieselUsageIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-dus" from="#0ea5e9" to="#0369a1" label="Diesel Usage">
+        <path d="M32 13c-8 10-13 16-13 23a13 13 0 0 0 26 0c0-7-5-13-13-23z" />
+        <path d="M25 38a7 7 0 0 0 7 7" />
+      </Tile>
+    </span>
+  )
+}
+
+export function FleetCardIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-fcd" from="#10b981" to="#047857" label="Fleet Card Manage">
+        <rect x="12" y="18" width="40" height="28" rx="4" />
+        <path d="M12 27h40M19 38h9" />
+      </Tile>
+    </span>
+  )
+}
+
+export function ReportIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-rpt" from="#8b5cf6" to="#5b21b6" label="Report">
+        <path d="M14 50h36" />
+        <path d="M20 44V32M30 44V22M40 44V28M50 44V16" />
+      </Tile>
+    </span>
+  )
+}

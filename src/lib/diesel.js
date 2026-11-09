@@ -32,7 +32,10 @@ export const CARD_STATUS = {
   cancelled: { label: 'Cancelled', color: 'slate' }
 }
 
-export const vehicleLabel = (v) => (v ? v.plate_no + (v.name ? ' · ' + v.name : '') : '—')
+// Vehicles and machines are one list (Machinery Manage → Machinery Profile).
+export const vehicleLabel = (v) =>
+  v ? v.name + (v.reg_no && v.reg_no.trim().toUpperCase() !== String(v.name).trim().toUpperCase() ? ' · ' + v.reg_no : '') : '—'
+export const MACHINES = 'machinery_machines'
 export const personLabel = (p) => (p ? p.full_name || p.email : '—')
 
 // ---- access ------------------------------------------------------------------
@@ -91,26 +94,13 @@ export async function removeMember(companyId, userId) {
   if (error) throw friendly(error)
 }
 
-// ---- vehicles ----------------------------------------------------------------
+// ---- vehicles (= machines of the company, managed in Machinery Manage) ----------
 
 export async function listVehicles(companyId) {
-  const { data, error } = await supabase.from(DIESEL.vehicles).select('*').eq('company_id', companyId).order('plate_no')
+  const { data, error } = await supabase.from(MACHINES).select('*').eq('company_id', companyId).order('name')
   if (error) throw friendly(error)
-  return data || []
-}
-
-export async function saveVehicle(companyId, { id, ...fields }) {
-  const q = id
-    ? supabase.from(DIESEL.vehicles).update(fields).eq('id', id)
-    : supabase.from(DIESEL.vehicles).insert({ company_id: companyId, ...fields })
-  const { error } = await q
-  if (error) throw friendly(error, { '23505': 'A vehicle with this plate number already exists.' })
-}
-
-export async function deleteVehicle(id) {
-  const { error } = await supabase.from(DIESEL.vehicles).delete().eq('id', id)
-  if (error)
-    throw friendly(error, { '23503': 'This vehicle has claims or card records, so it cannot be deleted. Set it to Inactive instead.' })
+  // Before the vehicles migration these columns do not exist: treat every machine as an active vehicle.
+  return (data || []).map((m) => ({ ...m, is_active: m.is_active !== false, kpdn_subsidy: Boolean(m.kpdn_subsidy) }))
 }
 
 // ---- cash claims -------------------------------------------------------------

@@ -83,9 +83,14 @@ export function CardModal({ company, card, vehicles, onClose, onSaved }) {
               {opt(Object.entries(CARD_STATUS).map(([k, v]) => [k, v.label]))}
             </select>
           </F>
-          <F label="Linked vehicle" span>
+          <F label="Linked vehicle" hint="Vehicles ticked “KPDN diesel subsidy” in Machinery Profile are listed first." span>
             <select value={f.vehicle_id} onChange={set('vehicle_id')} className={inputCls}>
-              {opt(vehicles.map((v) => [v.id, vehicleLabel(v)]), 'No vehicle linked')}
+              {opt(
+                [...vehicles]
+                  .sort((a, b) => Number(Boolean(b.kpdn_subsidy)) - Number(Boolean(a.kpdn_subsidy)) || a.name.localeCompare(b.name))
+                  .map((v) => [v.id, (v.kpdn_subsidy ? '★ ' : '') + vehicleLabel(v)]),
+                'No vehicle linked'
+              )}
             </select>
           </F>
           <F label="Notes" span>
@@ -144,7 +149,7 @@ export function ReloadModal({ company, cards, onClose, onSaved }) {
 
 export function UsageModal({ company, cards, vehicles, people, onClose, onSaved }) {
   const active = cards.filter((c) => c.status === 'active')
-  const activeVehicles = vehicles.filter((v) => v.status === 'active')
+  const activeVehicles = vehicles.filter((v) => v.is_active)
   const [f, setF] = useState({
     card_id: active[0]?.id || '',
     vehicle_id: active[0]?.vehicle_id || activeVehicles[0]?.id || '',

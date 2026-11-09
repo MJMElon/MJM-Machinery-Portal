@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   IconBack,
   IconExcavator,
@@ -22,9 +22,7 @@ const NAV = [
 // Phones: the list becomes a scrollable row of tabs above the content.
 export default function CmmsLayout() {
   const navigate = useNavigate()
-  const location = useLocation()
-  // One page back; if CMMS 2 was opened directly (no earlier page), go to the main page.
-  const back = () => (location.key === 'default' ? navigate('/') : navigate(-1))
+  const back = () => navigate('/')
   const item = (active) =>
     `flex items-center gap-3 rounded-xl px-3.5 py-2.5 font-display text-[14px] font-semibold tracking-tight transition whitespace-nowrap ${
       active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -40,7 +38,7 @@ export default function CmmsLayout() {
             onClick={back}
             className="-ml-2 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand"
           >
-            <IconBack width={16} height={16} /> Back
+            <IconBack width={16} height={16} /> Back to CMMS main page
           </button>
         </div>
         {/* Same card style as the content blocks on the right */}

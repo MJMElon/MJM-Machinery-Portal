@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
 import { INTRANET_URL } from '../lib/supabase.js'
-import { IconCheck, IconCog, IconExternal, IconLogout } from './icons.jsx'
+import { IconBack, IconCheck, IconCog, IconLogout } from './icons.jsx'
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
@@ -38,69 +38,58 @@ function pageTitle(path) {
   return ''
 }
 
-function Brand({ size }) {
-  const big = size === 'lg'
-  return (
-    <span className={`flex flex-col ${big ? 'items-center' : 'items-start'}`}>
-      <span
-        className={`text-silver font-extrabold leading-none tracking-tight ${big ? 'text-4xl sm:text-5xl' : 'text-2xl'}`}
-      >
-        MJM
-      </span>
-      <span
-        className={`mt-1.5 whitespace-nowrap font-semibold uppercase text-slate-500 ${big ? 'text-[11px] tracking-[0.32em] sm:text-xs' : 'hidden text-[9px] tracking-[0.24em] sm:block'}`}
-      >
-        CMMS 2
-      </span>
-    </span>
-  )
-}
-
+// Top bar.
+// Main page: "Back to MJM Intranet" button (left), "CMMS 2" (centre), user tools (right).
+// Inner pages: company switcher (left), "CMMS 2" above the section name (centre).
 function TopBar({ title, gutter }) {
   const { user, logout, isSuperAdmin } = useAuth()
   const home = !title
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div
-        className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${gutter} ${home ? 'h-24' : 'h-16 sm:h-[72px]'}`}
+        className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${gutter} ${home ? 'h-20 sm:h-24' : 'h-16 sm:h-[76px]'}`}
       >
-        {/* Left: (MJM on inner pages) + the company switcher */}
-        <div className="flex min-w-0 items-center gap-4">
-          {!home && (
-            <Link to="/" aria-label="Main page" className="shrink-0">
-              <Brand />
-            </Link>
+        {/* Left: back to the Intranet (main page only) + the company switcher */}
+        <div className="flex min-w-0 items-center gap-3">
+          {home && (
+            <a
+              href={INTRANET_URL}
+              className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand hover:text-brand active:bg-slate-100"
+              title="Back to MJM Intranet"
+            >
+              <IconBack width={16} height={16} />
+              <span className="hidden sm:inline">Back to MJM Intranet</span>
+              <span className="sm:hidden">Intranet</span>
+            </a>
           )}
           <div className="hidden min-w-0 sm:block">
             <CompanySwitcher />
           </div>
         </div>
 
-        {home ? (
-          <Brand size="lg" />
-        ) : (
-          <h1 className="max-w-[40vw] truncate text-center font-display text-lg font-extrabold tracking-tight text-slate-900 sm:max-w-none sm:text-[28px]">
-            {title}
-          </h1>
-        )}
+        {/* Centre: CMMS 2, with the section name under it on inner pages */}
+        <Link to="/" className="flex flex-col items-center text-center" aria-label="CMMS 2 main page">
+          {home ? (
+            <span className="font-display text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">CMMS 2</span>
+          ) : (
+            <>
+              <span className="font-display text-[11px] font-bold uppercase tracking-[0.3em] text-slate-400 sm:text-xs">
+                CMMS 2
+              </span>
+              <h1 className="max-w-[40vw] truncate font-display text-lg font-extrabold tracking-tight text-slate-900 sm:max-w-none sm:text-[26px]">
+                {title}
+              </h1>
+            </>
+          )}
+        </Link>
 
         <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
           <span className="mx-1 hidden max-w-[220px] truncate text-sm text-slate-500 lg:block">{user?.email}</span>
-          <a
-            href={INTRANET_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open MJM Intranet"
-            className="hidden h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200 md:flex"
-          >
-            MJM Intranet
-            <IconExternal width={14} height={14} className="text-slate-400" />
-          </a>
           {isSuperAdmin && (
             <Link
               to="/admin/companies"
-              title="Super admin: manage companies"
-              aria-label="Super admin: manage companies"
+              title="Super admin: businesses & companies"
+              aria-label="Super admin: businesses & companies"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 active:bg-slate-200"
             >
               <IconCog width={20} height={20} />
