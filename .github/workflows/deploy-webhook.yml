@@ -62,21 +62,21 @@ jobs:
         run: |
           supabase functions deploy whatsapp-webhook \
             --project-ref "${{ steps.check.outputs.ref }}" \
-            --no-verify-jwt
+            --no-verify-jwt --yes
 
       - name: Deploy case-action (portal → supplier WhatsApp)
         if: steps.check.outputs.skip != 'true'
         run: |
           supabase functions deploy case-action \
             --project-ref "${{ steps.check.outputs.ref }}" \
-            --no-verify-jwt
+            --no-verify-jwt --yes
 
       - name: Deploy gw-login (sign in from MJM Intranet)
         if: steps.check.outputs.skip != 'true'
         run: |
           supabase functions deploy gw-login \
             --project-ref "${{ steps.check.outputs.ref }}" \
-            --no-verify-jwt
+            --no-verify-jwt --yes
           {
             echo "### WhatsApp webhook deployed"
             echo ""
