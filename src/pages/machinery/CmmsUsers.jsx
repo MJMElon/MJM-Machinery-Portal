@@ -16,12 +16,12 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { listPeople as listDieselPeople, removeMember as removeDieselMember, setMember as setDieselMember } from '../../lib/diesel.js'
 
-// Diesel Manage access, per company (Access = may open Diesel Manage;
+// Fuel Manage access, per company (Access = may open Fuel Manage;
 // Cash Claim / Report = its modules; Admin = vehicles review, cards, everything).
 const DIESEL_COLS = [
-  { key: 'has_access', label: 'Access', hint: 'May open Diesel Manage' },
-  { key: 'can_claim', label: 'Cash Claim', hint: 'Submit own fuel claims (Diesel Claims → My claims)' },
-  { key: 'can_report', label: 'Report', hint: 'All claims, Diesel Usage, Fleet Card Manage, Report (view)' },
+  { key: 'has_access', label: 'Access', hint: 'May open Fuel Manage' },
+  { key: 'can_claim', label: 'Cash Claim', hint: 'Submit own fuel claims (Fuel Claims)' },
+  { key: 'can_report', label: 'Report', hint: 'All claims, Fuel Usage, Fleet Card Manage, Report (view)' },
   { key: 'is_admin', label: 'Admin', hint: 'Review claims, record reloads / fill-ups, manage cards' }
 ]
 
@@ -34,7 +34,7 @@ export default function CmmsUsers() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="CMMS User Setting" subtitle={`${current?.name || ''} · who can do what in Machinery Manage and Diesel Manage`} />
+      <PageHeader title="CMMS User Setting" subtitle={`${current?.name || ''} · who can do what in Machinery Manage and Fuel Manage`} />
       {isSuperAdmin ? (
         <AccessTable companyId={current?.id} me={user?.id} />
       ) : (
@@ -165,7 +165,7 @@ function AccessTable({ companyId, me }) {
                     Machinery Manage
                   </th>
                   <th className="border-l border-slate-200 px-3 pt-2.5 text-center" colSpan={DIESEL_COLS.length}>
-                    Diesel Manage
+                    Fuel Manage
                   </th>
                   <th />
                 </tr>
@@ -236,7 +236,7 @@ function AccessTable({ companyId, me }) {
                                 checked={on}
                                 disabled={busy || locked}
                                 onChange={() => toggleDiesel(u, c.key)}
-                                aria-label={`Diesel ${c.label} for ${u.email}`}
+                                aria-label={`Fuel ${c.label} for ${u.email}`}
                                 title={
                                   !d?.has_access && c.key !== 'has_access'
                                     ? 'Tick Access first'
@@ -274,7 +274,7 @@ function AccessTable({ companyId, me }) {
       </Card>
       <p className="text-xs text-slate-500">
         Access is per company: switch company (top left) to set it for another company. People arriving from MJM
-        Intranet are added here automatically; the name is shown in Diesel Manage lists and reports. Diesel: tick Access
+        Intranet are added here automatically; the name is shown in Fuel Manage lists and reports. Fuel: tick Access
         first, then Cash Claim and/or Report; Admin covers everything (review claims, cards, reloads, fill-ups).
       </p>
     </>

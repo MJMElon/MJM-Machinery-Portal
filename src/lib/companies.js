@@ -149,6 +149,27 @@ export function groupByBusiness(businesses, companies) {
   return groups
 }
 
+// ---- sync from MJM Intranet ---------------------------------------------------
+
+/** Pull businesses / companies from MJM Intranet (super admins; Edge Function sync-intranet). */
+export async function syncFromIntranet() {
+  const { data, error } = await supabase.functions.invoke('sync-intranet', { body: {} })
+  if (error) {
+    let msg = error.message
+    try {
+      const body = await error.context?.json?.()
+      if (body?.detail || body?.error) msg = body.detail || body.error
+    } catch {
+      // keep
+    }
+    if (/Failed to send a request|FunctionsFetchError/i.test(msg)) msg = 'The sync-intranet function is not deployed yet (GitHub → Actions → Deploy WhatsApp webhook).'
+    throw new Error(msg)
+  }
+  return data
+}
+
+export const fromIntranet = (row) => Boolean(row?.intranet_id)
+
 // ---- blocks of a company ---------------------------------------------------
 
 export async function listBlocks(companyId) {

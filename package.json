@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "test:webhook": "deno test --allow-env supabase/functions/whatsapp-webhook/ supabase/functions/case-action/ supabase/functions/gw-login/",
-    "check:webhook": "deno check supabase/functions/whatsapp-webhook/index.ts supabase/functions/case-action/index.ts supabase/functions/gw-login/index.ts"
+    "check:webhook": "deno check supabase/functions/whatsapp-webhook/index.ts supabase/functions/case-action/index.ts supabase/functions/gw-login/index.ts supabase/functions/sync-intranet/index.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

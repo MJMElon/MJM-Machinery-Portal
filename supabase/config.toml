@@ -17,3 +17,8 @@ verify_jwt = false
 # into one), so there is no Supabase JWT to verify. The token itself is
 # verified by MJM Intranet's gw-check-access.
 verify_jwt = false
+
+[functions.sync-intranet]
+# Called from the portal with the user's token; the function checks super
+# admin itself (so the browser's CORS preflight is answered too).
+verify_jwt = false

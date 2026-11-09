@@ -14,6 +14,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { CORS, handle, type GatewayUser } from './handler.ts'
+import { syncMasterData } from '../_shared/intranet.ts'
 
 const env = (k: string) => (Deno.env.get(k) ?? '').trim()
 const DEFAULT_CHECK_URL = 'https://briqzyxfxsvulyizzbiu.supabase.co/functions/v1/gw-check-access'
@@ -99,6 +100,13 @@ Deno.serve(async (req) => {
         ;({ error } = await db.from('machinery_portal_admins').upsert({ user_id: userId, email }, { onConflict: 'user_id' }))
       }
       if (error) throw new Error(`enrol: ${error.message}`)
+      // Keep businesses / companies in step with the Intranet. Best effort:
+      // a sync problem must never block the sign-in.
+      try {
+        await syncMasterData(db, env('GW_API_KEY'))
+      } catch (e) {
+        console.error('intranet master data sync failed', e)
+      }
     },
   })
 })

@@ -77,6 +77,13 @@ jobs:
           supabase functions deploy gw-login \
             --project-ref "${{ steps.check.outputs.ref }}" \
             --no-verify-jwt --yes
+
+      - name: Deploy sync-intranet (businesses / companies from MJM Intranet)
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          supabase functions deploy sync-intranet \
+            --project-ref "${{ steps.check.outputs.ref }}" \
+            --no-verify-jwt --yes
           {
             echo "### WhatsApp webhook deployed"
             echo ""

@@ -37,7 +37,7 @@ export function MachineryIcon({ className }) {
 export function DieselIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-dsl" from="#10b981" to="#047857" label="Diesel Manage">
+      <Tile id="ic-dsl" from="#10b981" to="#047857" label="Fuel Manage">
         <path d="M17 50V18a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v32" />
         <path d="M14 50h26" />
         <rect x="22" y="21" width="10" height="9" rx="1.5" />
@@ -65,7 +65,7 @@ export function SettingsIcon({ className }) {
 export function DieselClaimsIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-dcl" from="#f59e0b" to="#d97706" label="Diesel Claims">
+      <Tile id="ic-dcl" from="#f59e0b" to="#d97706" label="Fuel Claims">
         <path d="M20 12h24v40l-4-3-4 3-4-3-4 3-4-3-4 3z" />
         <path d="M26 22h12M26 29h12M26 36h7" />
       </Tile>
@@ -76,7 +76,7 @@ export function DieselClaimsIcon({ className }) {
 export function DieselUsageIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-dus" from="#0ea5e9" to="#0369a1" label="Diesel Usage">
+      <Tile id="ic-dus" from="#0ea5e9" to="#0369a1" label="Fuel Usage">
         <path d="M32 13c-8 10-13 16-13 23a13 13 0 0 0 26 0c0-7-5-13-13-23z" />
         <path d="M25 38a7 7 0 0 0 7 7" />
       </Tile>

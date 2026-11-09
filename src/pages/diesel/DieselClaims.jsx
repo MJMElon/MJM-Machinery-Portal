@@ -1,53 +1,30 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card, Modal, Select } from '../../components/ui.jsx'
-import { IconCheck, IconDownload, IconPlus, IconX } from '../../components/icons.jsx'
-import {
-  ClaimRow,
-  Empty,
-  ErrorBox,
-  Loading,
-  MonthSelect,
-  OwnClaimActions,
-  ReceiptButton,
-  Stats,
-  inputCls,
-  monthsOf
-} from '../../components/diesel/shared.jsx'
-import { ClaimModal } from '../../components/diesel/ClaimModal.jsx'
-import {
-  CLAIM_STATUS,
-  deleteClaim,
-  listClaims,
-  listPeople,
-  listVehicles,
-  personLabel,
-  removeReceipt,
-  reviewClaim,
-  vehicleLabel
-} from '../../lib/diesel.js'
-import { downloadCsv, money, num, sum, thisMonth, today } from '../../lib/format.js'
+import { Button, Card, Select } from '../../components/ui.jsx'
+import { IconDownload, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
+import { Empty, ErrorBox, Loading, MonthSelect, StatusBadge, monthsOf } from '../../components/diesel/shared.jsx'
+import { CLAIM_STATUS, deleteClaim, listClaims, listPeople, listVehicles, personLabel, removeReceipt, vehicleLabel } from '../../lib/diesel.js'
+import { day, downloadCsv, money, num, sum, today } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
-// Diesel Claims: cash fuel claims with receipt photos.
-//   My claims  — your own claims (Cash Claim access): new, edit/delete while pending
-//   All claims — every claim of the company (Report access to view; Diesel admins
-//                approve, reject with a reason, mark paid, export)
+export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
+
+// Fuel Claims: each person's own claim list (No. · Description · Claim amount ·
+// Action: view / edit / print / delete). Fuel admins can switch to every
+// claim of the company to review them (approve / reject / pay on the view page).
 export default function DieselClaims() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
-  const tabs = [...(access.claim ? [['mine', 'My claims']] : []), ...(access.report ? [['all', 'All claims']] : [])]
-  const [tab, setTab] = useState(tabs[0]?.[0] || 'mine')
+  const navigate = useNavigate()
+  const [scope, setScope] = useState('mine') // mine | all (admins / report)
   const [claims, setClaims] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [modal, setModal] = useState(null) // 'new' | claim
-  const [rejecting, setRejecting] = useState(null)
+  const [filter, setFilter] = useState({ status: '', month: '' })
   const [busyId, setBusyId] = useState(null)
-  const [filter, setFilter] = useState({ status: 'pending', vehicle: '', month: '' })
 
   const load = useCallback(async () => {
     try {
@@ -74,57 +51,44 @@ export default function DieselClaims() {
 
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const person = new Map(people.map((p) => [p.user_id, p]))
-  const mine = claims.filter((c) => c.claimant_id === user.id)
-  const month = thisMonth()
-  const mineMonth = mine.filter((c) => c.fill_date.startsWith(month) && c.status !== 'rejected')
-  const months = monthsOf(claims.map((c) => c.fill_date))
-  const rows = claims.filter(
-    (c) =>
-      (!filter.status || c.status === filter.status) &&
-      (!filter.vehicle || c.vehicle_id === filter.vehicle) &&
-      (!filter.month || c.fill_date.startsWith(filter.month))
+  const base = scope === 'all' ? claims : claims.filter((c) => c.claimant_id === user.id)
+  const months = monthsOf(base.map((c) => c.fill_date))
+  const rows = base.filter(
+    (c) => (!filter.status || c.status === filter.status) && (!filter.month || c.fill_date.startsWith(filter.month))
   )
 
-  async function act(id, fn) {
-    setBusyId(id)
+  async function remove(c) {
+    if (!window.confirm(`Delete claim ${claimNo(c, 0)}? This cannot be undone.`)) return
+    setBusyId(c.id)
     setError('')
     try {
-      await fn()
+      await deleteClaim(c.id)
+      removeReceipt(c.receipt_path)
+      await load()
     } catch (e) {
       setError(e.message)
     } finally {
       setBusyId(null)
     }
   }
-  const remove = (c) =>
-    window.confirm('Delete this claim? This cannot be undone.') &&
-    act(c.id, async () => {
-      await deleteClaim(c.id)
-      removeReceipt(c.receipt_path)
-      await load()
-    })
-  const review = (c, status, note) =>
-    act(c.id, async () => {
-      const data = await reviewClaim(c.id, status, note ?? c.review_note)
-      setClaims((list) => list.map((x) => (x.id === c.id ? { ...x, ...data } : x)))
-    })
+
+  const canEdit = (c) => c.status === 'pending' && c.claimant_id === user.id
+  const canDelete = (c) => (c.status === 'pending' && c.claimant_id === user.id) || isSuperAdmin
 
   const exportCsv = () =>
     downloadCsv(
-      `diesel-claims-${company.code || company.name}-${today()}.csv`,
+      `fuel-claims-${company.code || company.name}-${today()}.csv`,
       [
+        { header: 'No.', value: (c) => claimNo(c, 0) },
         { header: 'Date', value: (c) => c.fill_date },
-        { header: 'Vehicle', value: (c) => vById.get(c.vehicle_id)?.name },
-        { header: 'Reg. no.', value: (c) => vById.get(c.vehicle_id)?.reg_no },
+        { header: 'Vehicle', value: (c) => vehicleLabel(vById.get(c.vehicle_id)) },
         { header: 'Claimant', value: (c) => personLabel(person.get(c.claimant_id)) },
         { header: 'Odometer (km)', value: (c) => c.odometer_km },
         { header: 'Litres', value: (c) => Number(c.litres) },
-        { header: 'Amount (RM)', value: (c) => Number(c.amount) },
+        { header: 'Claim amount (RM)', value: (c) => Number(c.amount) },
         { header: 'Station', value: (c) => c.station },
         { header: 'Status', value: (c) => CLAIM_STATUS[c.status]?.label || c.status },
-        { header: 'Reviewed by', value: (c) => personLabel(person.get(c.reviewed_by)) },
-        { header: 'Review note', value: (c) => c.review_note },
-        { header: 'Notes', value: (c) => c.notes }
+        { header: 'Review note', value: (c) => c.review_note }
       ],
       rows
     )
@@ -132,203 +96,126 @@ export default function DieselClaims() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Diesel Claims"
-        subtitle={`${company.name} · cash fuel claims`}
+        title="Fuel Claims"
+        subtitle={`${company.name} · ${scope === 'all' ? 'all claims of the company' : 'your claims'}`}
         right={
-          tab === 'mine' ? (
-            <Button onClick={() => setModal('new')}>
-              <IconPlus width={18} height={18} /> New claim
-            </Button>
-          ) : (
+          <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={exportCsv} disabled={!rows.length}>
               <IconDownload width={18} height={18} /> Export CSV
             </Button>
-          )
+            {access.claim && (
+              <Button onClick={() => navigate('/diesel/claims/new')}>
+                <IconPlus width={18} height={18} /> New claim
+              </Button>
+            )}
+          </div>
         }
       />
       <ErrorBox>{error}</ErrorBox>
 
-      {tabs.length > 1 && (
-        <div className="inline-flex rounded-xl bg-slate-200/70 p-1" role="tablist">
-          {tabs.map(([k, l]) => (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={tab === k}
-              onClick={() => setTab(k)}
-              className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${tab === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {tab === 'mine' ? (
-        <>
-          <Stats
-            items={[
-              ['Waiting for approval', mine.filter((c) => c.status === 'pending').length],
-              ['Litres this month', num(sum(mineMonth, 'litres')) + ' L'],
-              ['Spent this month', money(sum(mineMonth))],
-              ['Approved, not yet paid', money(sum(mine.filter((c) => c.status === 'approved')))]
-            ]}
-          />
-          <Card className="overflow-hidden">
-            {loading ? (
-              <Loading />
-            ) : mine.length === 0 ? (
-              <Empty>No claims yet. Tap New claim after filling up.</Empty>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {mine.map((c) => (
-                  <ClaimRow
-                    key={c.id}
-                    claim={c}
-                    vehicle={vById.get(c.vehicle_id)}
-                    actions={
-                      <>
-                        {c.receipt_path && <ReceiptButton path={c.receipt_path} />}
-                        <OwnClaimActions claim={c} busy={busyId === c.id} onEdit={() => setModal(c)} onDelete={() => remove(c)} />
-                      </>
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </Card>
-        </>
-      ) : (
-        <>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="sm:w-44">
-              <Select value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} className="h-10" aria-label="Status">
-                <option value="">All statuses</option>
-                {Object.entries(CLAIM_STATUS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="sm:w-56">
-              <Select value={filter.vehicle} onChange={(e) => setFilter({ ...filter, vehicle: e.target.value })} className="h-10" aria-label="Vehicle">
-                <option value="">All vehicles</option>
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {vehicleLabel(v)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <MonthSelect months={months} value={filter.month} onChange={(m) => setFilter({ ...filter, month: m })} allLabel="All months" />
-            <span className="text-sm text-slate-500 sm:ml-auto">
-              {rows.length} claims · {num(sum(rows, 'litres'))} L · {money(sum(rows))}
-            </span>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {access.report && (
+          <div className="sm:w-48">
+            <Select value={scope} onChange={(e) => setScope(e.target.value)} className="h-10" aria-label="Whose claims">
+              <option value="mine">My claims</option>
+              <option value="all">All users (review)</option>
+            </Select>
           </div>
-          <Card className="overflow-hidden">
-            {loading ? (
-              <Loading />
-            ) : rows.length === 0 ? (
-              <Empty>No claims match these filters.</Empty>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {rows.map((c) => {
-                  const own = c.claimant_id === user.id && !isSuperAdmin
-                  const busy = busyId === c.id
-                  const reviewer = person.get(c.reviewed_by)
-                  return (
-                    <ClaimRow
-                      key={c.id}
-                      claim={c}
-                      vehicle={vById.get(c.vehicle_id)}
-                      meta={`${personLabel(person.get(c.claimant_id))}${reviewer ? ` · reviewed by ${personLabel(reviewer)}` : ''}`}
-                      actions={
-                        <>
-                          <ReceiptButton path={c.receipt_path} />
-                          {!access.admin ? null : own ? (
-                            <span className="self-center text-xs text-slate-400">Your own claim — another admin reviews it</span>
-                          ) : c.status === 'pending' ? (
-                            <>
-                              <Button size="sm" disabled={busy} onClick={() => review(c, 'approved')}>
-                                <IconCheck width={16} height={16} /> Approve
-                              </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600" disabled={busy} onClick={() => setRejecting(c)}>
-                                <IconX width={16} height={16} /> Reject
-                              </Button>
-                            </>
-                          ) : c.status === 'approved' ? (
-                            <>
-                              <Button size="sm" variant="secondary" disabled={busy} onClick={() => review(c, 'paid')}>
-                                Mark paid
-                              </Button>
-                              <Button size="sm" variant="ghost" disabled={busy} onClick={() => review(c, 'pending')}>
-                                Back to pending
-                              </Button>
-                            </>
-                          ) : c.status === 'rejected' ? (
-                            <Button size="sm" variant="ghost" disabled={busy} onClick={() => review(c, 'pending', null)}>
-                              Back to pending
-                            </Button>
-                          ) : null}
-                        </>
-                      }
-                    />
-                  )
-                })}
-              </div>
-            )}
-          </Card>
-        </>
-      )}
+        )}
+        <div className="sm:w-44">
+          <Select value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} className="h-10" aria-label="Status">
+            <option value="">All statuses</option>
+            {Object.entries(CLAIM_STATUS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <MonthSelect months={months} value={filter.month} onChange={(m) => setFilter({ ...filter, month: m })} allLabel="All months" />
+        <span className="text-sm text-slate-500 sm:ml-auto">
+          {rows.length} claim{rows.length === 1 ? '' : 's'} · {num(sum(rows, 'litres'))} L · {money(sum(rows))}
+        </span>
+      </div>
 
-      {modal && (
-        <ClaimModal
-          company={company}
-          userId={user.id}
-          vehicles={vehicles}
-          claim={modal === 'new' ? null : modal}
-          onClose={() => setModal(null)}
-          onSaved={load}
-        />
-      )}
-      {rejecting && (
-        <RejectModal
-          onClose={() => setRejecting(null)}
-          onReject={(note) => {
-            review(rejecting, 'rejected', note)
-            setRejecting(null)
-          }}
-        />
-      )}
+      <Card className="overflow-hidden">
+        <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">Claim list</h3>
+        {loading ? (
+          <Loading />
+        ) : rows.length === 0 ? (
+          <Empty>{base.length ? 'No claims match these filters.' : 'No claims yet. Press New claim after filling up.'}</Empty>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="w-20 px-5 py-2.5">No.</th>
+                  <th className="px-3 py-2.5">Description</th>
+                  <th className="w-40 px-3 py-2.5 text-right">Claim amount</th>
+                  <th className="w-44 px-3 py-2.5 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((c, i) => (
+                  <tr key={c.id} className="hover:bg-slate-50/60">
+                    <td className="px-5 py-3 font-semibold tabular-nums text-slate-800">{claimNo(c, i)}</td>
+                    <td className="px-3 py-3">
+                      <Link to={`/diesel/claims/${c.id}`} className="font-medium text-slate-800 hover:text-brand">
+                        Fuel claim
+                      </Link>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                        <span>{day(c.fill_date)}</span>
+                        <span>· {vehicleLabel(vById.get(c.vehicle_id))}</span>
+                        <span>· {num(c.litres, 2)} L</span>
+                        {scope === 'all' && <span>· {personLabel(person.get(c.claimant_id))}</span>}
+                        <StatusBadge status={c.status} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900">{money(c.amount)}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
+                        <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
+                        <ActionButton to={`/diesel/claims/${c.id}?print=1`} label="Print" Icon={IconPrint} />
+                        <ActionButton
+                          onClick={canDelete(c) ? () => remove(c) : null}
+                          label="Delete"
+                          Icon={IconTrash}
+                          danger
+                          disabled={busyId === c.id}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }
 
-function RejectModal({ onClose, onReject }) {
-  const [note, setNote] = useState('')
+function ActionButton({ to, onClick, label, Icon, danger, disabled }) {
+  const cls = `flex h-9 w-9 items-center justify-center rounded-lg ${
+    danger ? 'text-slate-400 hover:bg-red-50 hover:text-red-600' : 'text-slate-500 hover:bg-slate-100 hover:text-brand'
+  } disabled:cursor-not-allowed disabled:opacity-30`
+  if (!to && !onClick)
+    return (
+      <span className={`${cls} cursor-not-allowed opacity-30`} title={`${label} not available`} aria-hidden="true">
+        <Icon width={18} height={18} />
+      </span>
+    )
+  if (to)
+    return (
+      <Link to={to} className={cls} title={label} aria-label={label}>
+        <Icon width={18} height={18} />
+      </Link>
+    )
   return (
-    <Modal open onClose={onClose} title="Reject claim">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (note.trim()) onReject(note.trim())
-        }}
-        className="space-y-3"
-      >
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Reason (the claimant will see this)</span>
-          <input autoFocus required maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} />
-        </label>
-        <div className="flex justify-end gap-2">
-          <Button type="button" size="sm" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" size="sm" variant="danger" disabled={!note.trim()}>
-            Reject
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    <button onClick={onClick} disabled={disabled} className={cls} title={label} aria-label={label}>
+      <Icon width={18} height={18} />
+    </button>
   )
 }

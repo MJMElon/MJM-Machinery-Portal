@@ -121,6 +121,20 @@ export async function listClaims(companyId, filter = {}) {
   return data || []
 }
 
+export async function getClaim(id) {
+  const { data, error } = await supabase.from(DIESEL.claims).select('*').eq('id', id).maybeSingle()
+  if (error) throw friendly(error)
+  return data
+}
+
+/** Signed link (10 min) to show a receipt image on the page; null for PDFs. */
+export async function receiptUrl(path, seconds = 600) {
+  if (!path) return null
+  const { data, error } = await supabase.storage.from(DIESEL.bucket).createSignedUrl(path, seconds)
+  if (error || !data) return null
+  return data.signedUrl
+}
+
 /** Last odometer reading recorded for a vehicle before a date (claims + card fill-ups). */
 export async function lastOdometer(vehicleId, beforeDate) {
   const pick = (table) =>
@@ -253,7 +267,7 @@ function friendly(error, custom = {}) {
   if (error?.code === '23505') return new Error('That value is already used.')
   if (error?.code === '42501' || error?.code === '23514') return new Error(error.message || 'You do not have access to do this.')
   if (['42P01', 'PGRST205', '42703', 'PGRST204', 'PGRST202', '42883'].includes(error?.code)) {
-    return new Error('Database not up to date. Run the Diesel SQL migration (…diesel.sql) in Supabase.')
+    return new Error('Database not up to date. Run the Fuel SQL migrations (…diesel.sql, …vehicles_into_machines.sql, …fuel_claims_intranet_sync.sql) in Supabase.')
   }
   return error instanceof Error ? error : new Error(error?.message || 'Could not save. Please try again.')
 }

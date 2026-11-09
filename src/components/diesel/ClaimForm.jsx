@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Button, Modal } from '../ui.jsx'
+import { Button, Card } from '../ui.jsx'
 import { F, inputCls, opt, toNum } from './shared.jsx'
 import { insertClaim, lastOdometer, removeReceipt, updateClaim, uploadReceipt, vehicleLabel } from '../../lib/diesel.js'
 import { money, today } from '../../lib/format.js'
 
-// New / edit cash claim: vehicle, date, odometer, litres, amount, station,
-// receipt photo (required for a new claim), notes. The receipt is compressed
-// on the phone and uploaded to the private bucket before the row is saved.
-export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved }) {
+// New / edit fuel claim form (a page, not a dialog): vehicle, date, odometer,
+// litres, amount, station, receipt photo (required for a new claim), notes.
+// The receipt is compressed on the phone and uploaded to the private bucket
+// before the row is saved.
+export function ClaimForm({ company, userId, vehicles, claim, onSaved, onCancel }) {
   const usable = useMemo(
     () => vehicles.filter((v) => v.is_active || (claim && v.id === claim.vehicle_id)),
     [vehicles, claim]
@@ -68,7 +69,6 @@ export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved 
       }
       if (claim && row.receipt_path && claim.receipt_path) removeReceipt(claim.receipt_path)
       onSaved()
-      onClose()
     } catch (err) {
       setError(err.message || 'Could not save. Please try again.')
       setBusy(false)
@@ -77,17 +77,17 @@ export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved 
 
   if (!usable.length)
     return (
-      <Modal open onClose={onClose} title="New claim">
-        <p className="text-sm text-slate-600">No vehicles yet. Add them under Machinery Manage → Machinery Profile.</p>
-        <Button className="mt-4" variant="secondary" onClick={onClose}>
-          Close
+      <Card className="p-6">
+        <p className="text-sm text-slate-600">No vehicles yet. Add them under Machinery Manage → Machinery Profile first.</p>
+        <Button className="mt-4" variant="secondary" onClick={onCancel}>
+          Back
         </Button>
-      </Modal>
+      </Card>
     )
 
   return (
-    <Modal open onClose={onClose} title={claim ? 'Edit claim' : 'New claim'}>
-      <form onSubmit={submit} className="space-y-3">
+    <Card className="mx-auto max-w-2xl p-5 sm:p-6">
+      <form onSubmit={submit} className="space-y-4">
         {error && <p className="rounded-lg bg-red-100 p-2.5 text-sm text-red-700">{error}</p>}
         <F label="Vehicle">
           <select required value={f.vehicle_id} onChange={set('vehicle_id')} className={inputCls}>
@@ -104,11 +104,11 @@ export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved 
           <F label="Litres">
             <input type="number" inputMode="decimal" min="0.01" step="0.01" required value={f.litres} onChange={set('litres')} className={inputCls} />
           </F>
-          <F label="Amount (RM)">
+          <F label="Claim amount (RM)">
             <input type="number" inputMode="decimal" min="0" step="0.01" required value={f.amount} onChange={set('amount')} placeholder="RM" className={inputCls} />
           </F>
         </div>
-        {litres > 0 && amount > 0 && <p className="-mt-1 text-xs text-slate-500">{money(amount / litres)} per litre</p>}
+        {litres > 0 && amount > 0 && <p className="-mt-2 text-xs text-slate-500">{money(amount / litres)} per litre</p>}
         <F label="Station">
           <input maxLength={120} value={f.station} onChange={set('station')} placeholder="e.g. Petronas Jalan Ipoh" className={inputCls} />
         </F>
@@ -129,14 +129,14 @@ export function ClaimModal({ company, userId, vehicles, claim, onClose, onSaved 
           <textarea maxLength={500} rows={2} value={f.notes} onChange={set('notes')} className={`${inputCls} h-auto py-2`} />
         </F>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={busy || !ok}>
-            {busy ? 'Saving…' : claim ? 'Save' : 'Submit claim'}
+          <Button type="submit" disabled={busy || !ok}>
+            {busy ? 'Saving…' : claim ? 'Save changes' : 'Submit claim'}
           </Button>
         </div>
       </form>
-    </Modal>
+    </Card>
   )
 }

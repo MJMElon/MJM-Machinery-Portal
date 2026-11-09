@@ -12,7 +12,7 @@ that company's modules:
   - **CMMS User Setting**: per company, Machinery Manage rights (Solve, Edit, Delete, Manage lists) and Diesel Manage rights (Access, Cash Claim, Report, Admin). Also where display names are set.
   - The main page shows the modules as square icons: Machinery Manage, Diesel Manage, Settings.
   - **MachTrek** link.
-- **Diesel Manage** (only for companies with Diesel Manage access) — the Intranet's Diesel Claims module, now per company (see [Diesel Manage](#diesel-manage)).
+- **Fuel Manage** (per company) — the Intranet's Diesel Claims module, now per company (see [Fuel Manage](#fuel-manage-was-diesel-manage)). Opens on four draggable square buttons.
 - **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
 - **Businesses & Companies** (gear, top right, **super admins only**) → businesses, the companies under them (code, short name, registration no., active), module access per company (CMMS 2, Diesel Manage) and each company's staff WhatsApp numbers. A case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
 
@@ -26,20 +26,22 @@ Master data mirrors the Intranet so both systems name things alike:
 | Company (`gw_companies`: code, short name, registration no.) | `machinery_companies` (+ `code`, `short_name`, `registration_no`, `is_active`) |
 | Business ↔ Company (`gw_business_companies`, many-to-many) | `machinery_business_companies` |
 
-The two systems use **different Supabase projects**, so there is no live sync: a super admin enters the businesses and
-companies here with the same name and code as in MJM Intranet (Master Manage → Business / Company). To link the portal
-from MJM Intranet, add it there as an Icon (Master Manage → Module, kind = **Link**, URL = this portal) and tag it with
-the businesses / companies that use it.
+The two systems use **different Supabase projects**, so the portal keeps a copy that is **synced from MJM Intranet**:
+every sign-in from the Intranet (`gw-login`) and the "Sync from MJM Intranet" button (`sync-intranet`) pull the
+businesses, companies and links from the Intranet's `gw-master-data` function (same API key) and apply them with
+`machinery_apply_intranet_master()`. Names, codes, status and business links follow the Intranet (those fields are
+read-only here); module access, WhatsApp numbers and area are set here. Companies removed in the Intranet become
+inactive here. The Intranet side registers the portal as an Icon by SQL (`gw_register_system`, see the Intranet repo).
 
-## Diesel Manage
+## Fuel Manage (was Diesel Manage)
 
 Ported from the Intranet's Diesel Claims module, per company. Opens on a page of four square module buttons
 (also in the left sidebar); "Back to CMMS main page" returns to the portal home.
 
 | Module | What it holds | Who |
 | --- | --- | --- |
-| **Diesel Claims** | *My claims*: submit cash fuel claims (vehicle, date, odometer, litres, amount, station, receipt photo), edit / delete while pending. *All claims*: every claim with filters; Diesel admins approve, reject (with reason), mark paid, export CSV | Cash Claim / Report / Admin |
-| **Diesel Usage** | Every fill-up of the company in one log (cash claims not rejected + fleet card fill-ups) by month and vehicle, totals, CSV. Admins record fleet card fill-ups here | Report / Admin |
+| **Fuel Claims** | Claim list (No. · Description · Claim amount · Action: view / edit / print / delete), each person their own claims; "New claim" opens a form page. Fuel admins switch to "All users" to review; the claim page has Approve / Reject (with reason) / Mark paid and a printable claim form | Cash Claim / Report / Admin |
+| **Fuel Usage** | Every fill-up of the company in one log (cash claims not rejected + fleet card fill-ups) by month and vehicle, totals, CSV. Admins record fleet card fill-ups here | Report / Admin |
 | **Fleet Card Manage** | Fuel cards (balance = reloads − fill-ups, monthly limit), reloads, and the **KPDN diesel subsidy vehicles**: vehicles ticked in Machinery Profile that apply for the subsidised-diesel fleet card, with or without a card yet | Report / Admin |
 | **Report** | Per month: totals, by vehicle (cash vs card, km/L, over-tank flags), by driver, CSV | Report / Admin |
 
@@ -154,6 +156,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261107120000_businesses.sql` (businesses, business ↔ company links, company code / short name / registration no. / active, Diesel Manage access flag, user display names).
 - `supabase/migrations/20261108120000_diesel.sql` (Diesel Manage: members, claims, fleet cards, reloads, card fill-ups, access functions, RLS, receipts bucket).
 - `supabase/migrations/20261109120000_vehicles_into_machines.sql` (vehicles live in `machinery_machines`: fuel type, tank, usual driver, KPDN diesel subsidy tick, active flag; drops the old Diesel vehicle table; `machinery_portal_people()` for drop-downs).
+- `supabase/migrations/20261110120000_fuel_claims_intranet_sync.sql` (running claim number per company; `intranet_id` on businesses / companies and `machinery_apply_intranet_master()` for the sync from MJM Intranet).
 
 Then link the portal to MJM Intranet (API key → `GW_API_KEY` secret), see [Sign-in](#sign-in-from-mjm-intranet-only-no-login-page).
 

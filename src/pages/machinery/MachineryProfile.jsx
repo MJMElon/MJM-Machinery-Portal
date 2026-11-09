@@ -7,10 +7,10 @@ import { deleteMachine, listMachines, listPortalPeople, saveMachine, useCmmsAcce
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
 // One list for machines AND vehicles of the company. Cases link to these,
-// suppliers list which ones they handle, and Diesel Manage uses them as the
+// suppliers list which ones they handle, and Fuel Manage uses them as the
 // vehicles for claims, fleet cards and fill-ups. Tick "KPDN diesel subsidy"
 // for a vehicle that applies for the subsidised-diesel fleet card: it then
-// shows under Diesel Manage → Fleet Card Manage.
+// shows under Fuel Manage → Fleet Card Manage.
 export default function MachineryProfile() {
   const { current } = useCompany()
   const access = useCmmsAccess(current?.id)
@@ -67,16 +67,16 @@ export default function MachineryProfile() {
         ['none', 'None']
       ]
     },
-    { key: 'tank_capacity_l', label: 'Tank (L)', type: 'number', placeholder: 'L', hint: 'Fill-ups larger than this are flagged in the Diesel report' },
+    { key: 'tank_capacity_l', label: 'Tank (L)', type: 'number', placeholder: 'L', hint: 'Fill-ups larger than this are flagged in the Fuel report' },
     {
       key: 'driver_id',
       label: 'Usual driver',
       type: 'select',
       default: '',
       options: [['', '—'], ...people.map((p) => [p.user_id, userLabel(p)])],
-      hint: 'Their Diesel claims default to this vehicle'
+      hint: 'Their fuel claims default to this vehicle'
     },
-    { key: 'kpdn_subsidy', label: 'KPDN diesel subsidy', type: 'checkbox', hint: 'Applies for the KPDN subsidised-diesel fleet card (shows in Diesel Manage → Fleet Card Manage)' },
+    { key: 'kpdn_subsidy', label: 'KPDN diesel subsidy', type: 'checkbox', hint: 'Applies for the KPDN subsidised-diesel fleet card (shows in Fuel Manage → Fleet Card Manage)' },
     {
       key: 'is_active',
       label: 'Status',
@@ -131,8 +131,8 @@ export default function MachineryProfile() {
         )}
       </Card>
       <p className="text-xs text-slate-500">
-        Vehicles used for diesel (claims, fleet cards, fill-ups) are kept here too. Tick “KPDN diesel subsidy” for a
-        vehicle that applies for the subsidised-diesel fleet card; it then appears under Diesel Manage → Fleet Card Manage.
+        Vehicles used for fuel (claims, fleet cards, fill-ups) are kept here too. Tick “KPDN diesel subsidy” for a
+        vehicle that applies for the subsidised-diesel fleet card; it then appears under Fuel Manage → Fleet Card Manage.
       </p>
     </div>
   )

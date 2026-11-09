@@ -296,3 +296,18 @@ export const IconX = (p) => (
     <path d="M6 6l12 12M18 6 6 18" />
   </svg>
 )
+
+export const IconPrint = (p) => (
+  <svg {...base} {...p}>
+    <path d="M7 9V3.5h10V9" />
+    <rect x="3.5" y="9" width="17" height="8" rx="2" />
+    <path d="M7 14h10v6.5H7z" />
+  </svg>
+)
+
+export const IconEye = (p) => (
+  <svg {...base} {...p}>
+    <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+)

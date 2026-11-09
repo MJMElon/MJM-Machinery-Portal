@@ -18,6 +18,8 @@ import ManageCompanies from './pages/admin/ManageCompanies.jsx'
 import DieselLayout from './pages/diesel/DieselLayout.jsx'
 import DieselHome from './pages/diesel/DieselHome.jsx'
 import DieselClaims from './pages/diesel/DieselClaims.jsx'
+import ClaimEdit from './pages/diesel/ClaimEdit.jsx'
+import ClaimView from './pages/diesel/ClaimView.jsx'
 import DieselUsage from './pages/diesel/DieselUsage.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import DieselReport from './pages/diesel/DieselReport.jsx'
@@ -47,6 +49,9 @@ export default function App() {
           <Route path="/diesel" element={<DieselLayout />}>
             <Route index element={<DieselHome />} />
             <Route path="claims" element={<DieselClaims />} />
+            <Route path="claims/new" element={<ClaimEdit />} />
+            <Route path="claims/:id" element={<ClaimView />} />
+            <Route path="claims/:id/edit" element={<ClaimEdit />} />
             <Route path="usage" element={<DieselUsage />} />
             <Route path="cards" element={<FleetCardManage />} />
             <Route path="report" element={<DieselReport />} />

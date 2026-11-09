@@ -32,7 +32,7 @@ export function Shell() {
 function pageTitle(path) {
   if (path === '/') return ''
   if (path.startsWith('/cmms')) return 'Machinery Manage'
-  if (path.startsWith('/diesel')) return 'Diesel Manage'
+  if (path.startsWith('/diesel')) return 'Fuel Manage'
   if (path.startsWith('/settings')) return 'Settings'
   if (path.startsWith('/admin/companies')) return 'Businesses & Companies'
   return ''
@@ -45,7 +45,7 @@ function TopBar({ title, gutter }) {
   const { user, logout, isSuperAdmin } = useAuth()
   const home = !title
   return (
-    <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
       <div
         className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${gutter} ${home ? 'h-20 sm:h-24' : 'h-16 sm:h-[76px]'}`}
       >

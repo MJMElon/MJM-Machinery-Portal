@@ -96,7 +96,7 @@ export default function DieselUsage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Diesel Usage"
+        title="Fuel Usage"
         subtitle={`${company.name} · every fill-up, cash and fleet card`}
         right={
           <div className="flex flex-wrap gap-2">

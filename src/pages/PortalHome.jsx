@@ -52,7 +52,7 @@ export default function PortalHome() {
         <ModuleTile
           key="diesel"
           to="/diesel"
-          label="Diesel Manage"
+          label="Fuel Manage"
           Icon={DieselIcon}
           disabled={!current.diesel_enabled}
           note={current.diesel_enabled ? null : 'Not enabled'}

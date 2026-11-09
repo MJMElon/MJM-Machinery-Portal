@@ -7,6 +7,7 @@ import {
   createCompany,
   deleteBusiness,
   deleteCompany,
+  fromIntranet,
   groupByBusiness,
   isValidCode,
   listBusinesses,
@@ -14,9 +15,11 @@ import {
   normalizeCode,
   parseNumbers,
   setCompanyBusinesses,
+  syncFromIntranet,
   updateBusiness,
   updateCompany
 } from '../../lib/companies.js'
+import { IconRefresh } from '../../components/icons.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -31,6 +34,23 @@ export default function ManageCompanies() {
   const [businesses, setBusinesses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+
+  async function sync() {
+    setSyncing(true)
+    setError('')
+    setSyncMsg('')
+    try {
+      const r = await syncFromIntranet()
+      setSyncMsg(`Synced from MJM Intranet: ${r.businesses} businesses, ${r.companies} companies${r.made_inactive ? `, ${r.made_inactive} made inactive` : ''}.`)
+      await load()
+    } catch (e) {
+      setError(e.message || 'Sync failed.')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const load = useCallback(async () => {
     setError('')
@@ -72,12 +92,18 @@ export default function ManageCompanies() {
     <div className="space-y-5">
       <PageHeader
         backTo="/"
-        backLabel="Back to main page"
+        backLabel="Back to CMMS main page"
         title="Businesses & Companies"
-        subtitle="Same structure as MJM Intranet: each business has its companies. Turn on module access and link WhatsApp numbers per company."
+        subtitle="Businesses and companies come from MJM Intranet (synced on every sign-in and with the button). Module access and WhatsApp numbers are set here, per company."
+        right={
+          <Button variant="secondary" onClick={sync} disabled={syncing}>
+            <IconRefresh width={18} height={18} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing…' : 'Sync from MJM Intranet'}
+          </Button>
+        }
       />
 
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
+      {syncMsg && <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{syncMsg}</p>}
 
       <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
         <div className="space-y-5">
@@ -93,7 +119,7 @@ export default function ManageCompanies() {
           ) : companies.length === 0 ? (
             <EmptyState
               title="No companies yet"
-              subtitle="Add a business (left), then the companies under it, with the same names and codes as in MJM Intranet."
+              subtitle="Press “Sync from MJM Intranet” to pull the businesses and companies, or add them by hand on the left."
             />
           ) : (
             groups.map((g) => (
@@ -144,7 +170,7 @@ function BusinessesCard({ businesses, onChanged, onError }) {
     <Card className="overflow-hidden">
       <div className="border-b border-slate-200 px-5 py-4">
         <p className="font-semibold text-slate-800">Businesses</p>
-        <p className="text-sm text-slate-500">As in MJM Intranet → Master Manage → Business.</p>
+        <p className="text-sm text-slate-500">Synced from MJM Intranet (Master Manage → Business). Extra local ones can be added below.</p>
       </div>
       <form
         onSubmit={async (e) => {
@@ -209,24 +235,30 @@ function BusinessesCard({ businesses, onChanged, onError }) {
                   <span className="block truncate font-medium text-slate-800">{b.name}</span>
                   {b.description && <span className="block truncate text-xs text-slate-500">{b.description}</span>}
                 </span>
-                <button
-                  onClick={() => setEditing({ id: b.id, name: b.name, description: b.description || '' })}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  aria-label={`Edit ${b.name}`}
-                >
-                  <IconPencil width={16} height={16} />
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    window.confirm(`Delete business "${b.name}"? Its companies stay, but are no longer under it.`) &&
-                    run(() => deleteBusiness(b.id))
-                  }
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  aria-label={`Delete ${b.name}`}
-                >
-                  <IconTrash width={16} height={16} />
-                </button>
+                {fromIntranet(b) ? (
+                  <Badge color="blue">Intranet</Badge>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setEditing({ id: b.id, name: b.name, description: b.description || '' })}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      aria-label={`Edit ${b.name}`}
+                    >
+                      <IconPencil width={16} height={16} />
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        window.confirm(`Delete business "${b.name}"? Its companies stay, but are no longer under it.`) &&
+                        run(() => deleteBusiness(b.id))
+                      }
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`Delete ${b.name}`}
+                    >
+                      <IconTrash width={16} height={16} />
+                    </button>
+                  </>
+                )}
               </li>
             )
           )}
@@ -307,8 +339,8 @@ function AddCompanyCard({ businesses, onAdded, onError }) {
 // ---- one company -----------------------------------------------------------------
 
 const MODULES = [
-  { key: 'cmms_enabled', label: 'CMMS 2', hint: 'Maintenance cases, machinery profile, suppliers' },
-  { key: 'diesel_enabled', label: 'Diesel Manage', hint: 'Vehicles, cash fuel claims, fleet cards, reports' }
+  { key: 'cmms_enabled', label: 'Machinery Manage', hint: 'Maintenance cases, machinery profile, suppliers' },
+  { key: 'diesel_enabled', label: 'Fuel Manage', hint: 'Fuel claims, usage, fleet cards, reports' }
 ]
 
 function CompanyCard({ company, businesses, onChanged }) {
@@ -361,6 +393,7 @@ function CompanyCard({ company, businesses, onChanged }) {
   }
 
   const inactive = company.is_active === false
+  const synced = fromIntranet(company)
 
   return (
     <Card className={`space-y-4 p-4 sm:p-5 ${inactive ? 'opacity-75' : ''}`}>
@@ -374,6 +407,7 @@ function CompanyCard({ company, businesses, onChanged }) {
             {[company.code, company.short_name, company.registration_no].filter(Boolean).join(' · ') || 'No code yet'}
           </p>
         </div>
+        {synced && <Badge color="blue">Intranet</Badge>}
         {inactive && <Badge>Inactive</Badge>}
         <button
           onClick={remove}
@@ -406,26 +440,33 @@ function CompanyCard({ company, businesses, onChanged }) {
         ))}
       </div>
 
+      {synced && (
+        <p className="rounded-lg bg-brand-light/50 px-3 py-2 text-xs text-brand-dark">
+          Name, code, short name, registration no., status and businesses are managed in MJM Intranet and refreshed on
+          every sign-in. Module access and WhatsApp numbers are set here.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <Field label="Company name">
-            <TextInput value={form.name} onChange={set('name')} />
+            <TextInput value={form.name} onChange={set('name')} disabled={synced} />
           </Field>
         </div>
         <Field label="Code" error={isValidCode(code) ? '' : 'A-Z, 0-9, - or _'}>
-          <TextInput value={form.code} onChange={set('code')} placeholder="MJMP" className="uppercase" />
+          <TextInput value={form.code} onChange={set('code')} placeholder="MJMP" className="uppercase" disabled={synced} />
         </Field>
         <Field label="Short name">
-          <TextInput value={form.short_name} onChange={set('short_name')} placeholder="MJM Plantation" />
+          <TextInput value={form.short_name} onChange={set('short_name')} placeholder="MJM Plantation" disabled={synced} />
         </Field>
         <Field label="Registration no.">
-          <TextInput value={form.registration_no} onChange={set('registration_no')} placeholder="202001012345 (1234567-X)" />
+          <TextInput value={form.registration_no} onChange={set('registration_no')} placeholder="202001012345 (1234567-X)" disabled={synced} />
         </Field>
         <Field label="Status">
           <select
             value={form.is_active}
             onChange={set('is_active')}
-            className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+            disabled={synced}
+            className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-slate-100"
           >
             <option value="true">Active</option>
             <option value="false">Inactive (hidden from the company switcher)</option>
@@ -451,6 +492,7 @@ function CompanyCard({ company, businesses, onChanged }) {
                     type="checkbox"
                     className="h-4 w-4 accent-[#2563eb]"
                     checked={on}
+                    disabled={synced}
                     onChange={() =>
                       setForm((f) => ({
                         ...f,
