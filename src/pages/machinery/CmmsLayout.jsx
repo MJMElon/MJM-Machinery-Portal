@@ -18,7 +18,7 @@ const NAV = [
   { to: '/cmms/users', label: 'CMMS User Setting', Icon: IconUsers }
 ]
 
-// CMMS 2: a left sidebar with the modules; the chosen one opens on the right.
+// Machinery Manage: a left sidebar with its pages; the chosen one opens on the right.
 // Phones: the list becomes a scrollable row of tabs above the content.
 export default function CmmsLayout() {
   const navigate = useNavigate()
@@ -46,7 +46,7 @@ export default function CmmsLayout() {
         {/* Same card style as the content blocks on the right */}
         <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-3 lg:shadow-sm">
           <p className="hidden px-3 pb-1 pt-1.5 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 lg:block">
-            Modules
+            Machinery Manage
           </p>
           {NAV.map(({ to, label, Icon }) => (
             <NavLink key={to} to={to} className={({ isActive }) => item(isActive)}>

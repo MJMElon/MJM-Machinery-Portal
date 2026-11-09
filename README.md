@@ -1,15 +1,16 @@
-# MJM Machinery Portal (CMMS)
+# CMMS 2 (MJM Machinery Portal)
 
 Company portal opened from **MJM Intranet** (the Intranet): people log in there and the portal is one of its icons
 (no login page here, see [Sign-in](#sign-in-from-mjm-intranet-only-no-login-page)); the top bar has an "MJM Intranet" link back. The **company switcher** (top left) picks the company you work in;
 companies are listed under their **business**, with the same names and codes as in MJM Intranet. The main page shows
 that company's modules:
 
-- **CMMS 2** (only for companies with CMMS 2 access):
+- **Machinery Manage** (CMMS 2 access per company):
   - **Maintenance Work Manage**: WhatsApp texts + photos grouped into numbered cases, Pending / Solved, with supplier, sent-out date and Solve / Edit / Delete (per-user access). The consolidate button shows every company's pending cases at once.
   - **Machinery Profile**: the company's machines.
   - **Supplier Workshop List**: suppliers/workshops and the machines each handles (suppliers that handle a case's machine are proposed first).
   - **CMMS User Setting**: per company, who may Solve, Edit, Delete and Manage lists (super admins set it; super admins can do everything). Also where portal users are added and their display name set.
+  - The main page shows the modules as square icons: Machinery Manage, Diesel Manage, Settings.
   - **MachTrek** link.
 - **Diesel Manage** (only for companies with Diesel Manage access) — the Intranet's Diesel Claims module, now per company (see [Diesel Manage](#diesel-manage)).
 - **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
@@ -115,7 +116,9 @@ Set-up (once):
 
 - MJM Intranet → Master Manage → Module: add the portal as an Icon (kind **Link**, URL = the portal address,
   access **2 · Token**), tag it with the businesses that use it, and **Generate API key** (shown once).
-- Supabase (this project) → Edge Functions → Secrets: `GW_API_KEY` = that key. Optional `GW_CHECK_ACCESS_URL` if
+- Supabase (this project) → Edge Functions → Secrets: `GW_API_KEY` = that key. A second Intranet Icon that deep-links
+  into this portal (the "Diesel Manage" Icon, code `DIESEL`, URL `…/MJM-Machinery-Portal/#/diesel`) has its own key:
+  `GW_API_KEY_DIESEL`. In general `GW_API_KEY_<ICON CODE>` ("-" → "_"). Optional `GW_CHECK_ACCESS_URL` if
   MJM Intranet moves project. Then deploy the functions (GitHub → Actions → Deploy WhatsApp webhook → Run workflow;
   it deploys `gw-login` too).
 - MJM Intranet → User & Group Manage → Module access: tick Access on the portal icon for the people who may use it.

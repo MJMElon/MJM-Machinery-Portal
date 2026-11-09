@@ -11,8 +11,8 @@ import { useAuth } from '../auth/AuthContext.jsx'
 // size: 'md' (main page) or 'sm' (module sub-pages).
 const SIZES = {
   md: {
-    tile: 'sm:w-[140px]',
-    icon: 'h-12 w-12 sm:h-14 sm:w-14',
+    tile: 'sm:w-[150px]',
+    icon: 'h-14 w-14 sm:h-16 sm:w-16',
     pad: 'gap-2.5 p-3 sm:gap-3',
     text: 'text-sm',
     round: 'rounded-[22px]'
@@ -96,7 +96,7 @@ const MAX_SCALE = 2.4
 function baseSize(el) {
   const p = el.props || {}
   if (p.Art) return { w: 270, h: Math.round((270 * 170) / 256) + (p.note ? 16 : 0) }
-  const w = p.size === 'sm' ? 120 : 140
+  const w = p.size === 'sm' ? 120 : 150
   return { w, h: w }
 }
 

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ModuleTile, TileGrid } from '../components/ModuleTile.jsx'
-import { CmmsScene, DieselScene, SettingsScene } from '../components/AppIcons.jsx'
+import { DieselIcon, MachineryIcon, SettingsIcon } from '../components/AppIcons.jsx'
 import { Card, Spinner } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useCompany } from '../lib/CompanyContext.jsx'
@@ -44,8 +44,8 @@ export default function PortalHome() {
         <ModuleTile
           key="cmms"
           to="/cmms"
-          label="CMMS 2"
-          Art={CmmsScene}
+          label="Machinery Manage"
+          Icon={MachineryIcon}
           disabled={!current.cmms_enabled}
           note={current.cmms_enabled ? null : 'Not enabled'}
         />
@@ -53,11 +53,11 @@ export default function PortalHome() {
           key="diesel"
           to="/diesel"
           label="Diesel Manage"
-          Art={DieselScene}
+          Icon={DieselIcon}
           disabled={!current.diesel_enabled}
           note={current.diesel_enabled ? null : 'Not enabled'}
         />
-        <ModuleTile key="settings" to="/settings" label="Settings" Art={SettingsScene} />
+        <ModuleTile key="settings" to="/settings" label="Settings" Icon={SettingsIcon} />
       </TileGrid>
     </div>
   )

@@ -31,7 +31,7 @@ export function Shell() {
 // Centre title of the top bar for each page ('' = main page).
 function pageTitle(path) {
   if (path === '/') return ''
-  if (path.startsWith('/cmms')) return 'CMMS 2'
+  if (path.startsWith('/cmms')) return 'Machinery Manage'
   if (path.startsWith('/diesel')) return 'Diesel Manage'
   if (path.startsWith('/settings')) return 'Settings'
   if (path.startsWith('/admin/companies')) return 'Businesses & Companies'
@@ -50,7 +50,7 @@ function Brand({ size }) {
       <span
         className={`mt-1.5 whitespace-nowrap font-semibold uppercase text-slate-500 ${big ? 'text-[11px] tracking-[0.32em] sm:text-xs' : 'hidden text-[9px] tracking-[0.24em] sm:block'}`}
       >
-        Plantation Sector
+        CMMS 2
       </span>
     </span>
   )
