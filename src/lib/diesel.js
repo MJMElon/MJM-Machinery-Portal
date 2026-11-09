@@ -160,8 +160,8 @@ export async function reviewClaim(id, status, note) {
 // ---- claim lines (one per receipt) ----------------------------------------------
 
 export const PAYMENTS = [
-  ['cash', 'Cash (claim back)'],
-  ['fleet_card', 'Fleet card (no claim)']
+  ['cash', 'Cash — non-subsidised, claim back'],
+  ['fleet_card', 'Fleet card — KPDN subsidised, no claim']
 ]
 
 export const LINES = 'machinery_diesel_claim_lines'
@@ -233,7 +233,7 @@ async function replaceLines(claimId, lines) {
     unit_price: l.unit_price === '' || l.unit_price == null ? null : Number(l.unit_price),
     amount: Number(l.amount || 0),
     payment: l.payment || 'cash',
-    subsidised: Boolean(l.subsidised),
+    subsidised: (l.payment || 'cash') === 'fleet_card',
     receipt_no: l.receipt_no || null,
     station: l.station || null,
     odometer_km: l.odometer_km === '' || l.odometer_km == null ? null : Number(l.odometer_km),

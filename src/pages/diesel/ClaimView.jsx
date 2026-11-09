@@ -181,8 +181,7 @@ export default function ClaimView() {
                       <td className="py-2 pr-2 text-right tabular-nums">{l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
                       <td className="py-2 pr-2 text-right tabular-nums">{money(l.amount)}</td>
                       <td className="py-2 pr-2">
-                        {l.payment === 'fleet_card' ? 'Fleet card' : 'Cash'}
-                        {l.subsidised && <span className="ml-1 text-xs text-emerald-700">· subsidy</span>}
+                        {l.payment === 'fleet_card' ? 'Fleet card (KPDN)' : 'Cash'}
                       </td>
                       <td className="py-2 pr-2 text-slate-600">{[l.station, l.remark].filter(Boolean).join(' · ') || '—'}</td>
                       <td className="py-2 text-right font-semibold tabular-nums">{money(l.payment === 'cash' ? l.amount : 0)}</td>

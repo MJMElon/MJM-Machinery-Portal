@@ -27,7 +27,7 @@ export function FuelDashboard({ lines, title }) {
       const i = Number(l.fill_date.slice(5, 7)) - 1
       const L = Number(l.litres) || 0
       const A = Number(l.amount) || 0
-      if (l.subsidised) m[i].subL += L
+      if (l.payment === 'fleet_card') m[i].subL += L
       else m[i].nonL += L
       if (l.payment === 'fleet_card') m[i].cardRM += A
       else m[i].cashRM += A
@@ -64,8 +64,8 @@ export function FuelDashboard({ lines, title }) {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
                 <th className="p-2.5">Month</th>
-                <th className="p-2.5 text-right">Subsidised L</th>
-                <th className="p-2.5 text-right">Non-subsidised L</th>
+                <th className="p-2.5 text-right">Fleet card L (KPDN)</th>
+                <th className="p-2.5 text-right">Cash L</th>
                 <th className="p-2.5 text-right">Total L</th>
                 <th className="p-2.5 text-right">Cash RM</th>
                 <th className="p-2.5 text-right">Fleet card RM</th>
@@ -94,8 +94,8 @@ export function FuelDashboard({ lines, title }) {
             unit="L"
             fmt={(v) => `${num(v)} L`}
             series={[
-              { key: 'subL', label: 'Subsidised fuel', color: C1 },
-              { key: 'nonL', label: 'Non-subsidised fuel', color: C2 }
+              { key: 'subL', label: 'Fleet card (KPDN subsidised)', color: C1 },
+              { key: 'nonL', label: 'Cash (non-subsidised)', color: C2 }
             ]}
             data={data}
           />
@@ -104,8 +104,8 @@ export function FuelDashboard({ lines, title }) {
             unit="RM"
             fmt={money}
             series={[
-              { key: 'cashRM', label: 'Cash (claimed)', color: C1 },
-              { key: 'cardRM', label: 'Fleet card', color: C2 }
+              { key: 'cardRM', label: 'Fleet card (KPDN subsidised)', color: C1 },
+              { key: 'cashRM', label: 'Cash (claimed back)', color: C2 }
             ]}
             data={data}
           />

@@ -152,7 +152,6 @@ export default function DieselUsage() {
             {rows.map((r) => (
               <div key={`${r.source}-${r.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
                 <Badge color={r.source === 'cash' ? 'amber' : 'blue'}>{r.source === 'cash' ? 'Cash' : 'Card'}</Badge>
-                {r.subsidised && <Badge color="green">Subsidy</Badge>}
                 <span className="w-24 text-slate-500">{day(r.fill_date)}</span>
                 <span className="font-medium text-slate-800">{vehicleLabel(vById.get(r.vehicle_id))}</span>
                 <span className="text-slate-500">

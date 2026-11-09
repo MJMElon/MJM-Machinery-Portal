@@ -76,14 +76,9 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
     else if (field === 'amount' && L > 0 && A > 0 && !l.unit_price) patch.unit_price = (Math.round((A / L) * 1000) / 1000).toFixed(3)
     update(l.key, patch)
   }
-  const setVehicle = (l, vehicleId) => {
-    const v = vById[vehicleId]
-    update(l.key, { vehicle_id: vehicleId, subsidised: l.payment === 'fleet_card' ? Boolean(v?.kpdn_subsidy) : l.subsidised })
-  }
-  const setPayment = (l, payment) => {
-    const v = vById[l.vehicle_id]
-    update(l.key, { payment, subsidised: payment === 'fleet_card' ? Boolean(v?.kpdn_subsidy) : false })
-  }
+  const setVehicle = (l, vehicleId) => update(l.key, { vehicle_id: vehicleId })
+  // Fleet card = KPDN subsidised diesel; cash at the pump = non-subsidised.
+  const setPayment = (l, payment) => update(l.key, { payment, subsidised: payment === 'fleet_card' })
 
   // Receipt photos: one row per photo, scanned for a draft, attached to the row.
   async function addFiles(fileList) {
@@ -197,7 +192,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
       {/* Rows */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-sm">
+          <table className="w-full min-w-[1100px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="w-10 px-3 py-2.5">#</th>
@@ -208,9 +203,6 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                 <th className="w-28 px-2 py-2.5 text-right">Unit price</th>
                 <th className="w-28 px-2 py-2.5 text-right">Amount (RM)</th>
                 <th className="w-40 px-2 py-2.5">Payment</th>
-                <th className="w-20 px-2 py-2.5 text-center" title="Subsidised (KPDN) fuel — ticked automatically for fleet-card fill-ups on a KPDN vehicle; used in the litres dashboard">
-                  KPDN
-                </th>
                 <th className="px-2 py-2.5">Remark</th>
                 <th className="w-44 px-2 py-2.5">Attachment</th>
                 <th className="w-12 px-2 py-2.5" />
@@ -244,9 +236,6 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                     <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={inputCls}>
                       {opt(PAYMENTS)}
                     </select>
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    <input type="checkbox" className="mt-2.5 h-5 w-5 accent-[#059669]" checked={l.subsidised} onChange={(e) => update(l.key, { subsidised: e.target.checked })} title="Subsidised (KPDN) fuel" />
                   </td>
                   <td className="px-2 py-2">
                     <input value={l.remark} maxLength={300} onChange={(e) => update(l.key, { remark: e.target.value })} placeholder={l.station || ''} className={inputCls} />
@@ -299,7 +288,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                 <td className="px-2 py-2.5 text-right">{num(litres, 2)} L</td>
                 <td />
                 <td className="px-2 py-2.5 text-right">{money(total)}</td>
-                <td className="px-2 py-2.5" colSpan={5}>
+                <td className="px-2 py-2.5" colSpan={4}>
                   Payable <span className="text-brand-dark">{money(payable)}</span>
                 </td>
               </tr>
