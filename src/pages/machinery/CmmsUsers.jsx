@@ -3,15 +3,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { addPortalUser, listPortalUsers, removePortalUser, setUserName, userLabel } from '../../lib/cmms.js'
+import { addPortalUser, listPortalUsers, removePortalUser, setUserName } from '../../lib/cmms.js'
 import { MODULES, listCompanyPerms, removePerms, summarize } from '../../lib/perms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
-// User setting (CMMS main page → Settings): the people who have access to the selected company, with
-// a short summary of their modules. Edit opens the per-user access screen
-// (module → section → view / add / edit / delete + special actions).
-// Super admins manage it; everyone else sees their own access (View).
+// Role setup (CMMS main page → Settings): the people with access to CMMS 2 /
+// Fuel Manage (from MJM Intranet) or with a role in the selected company.
+// Edit opens the role screen (module → pages → options, approver names).
+// Super admins manage it; everyone else sees their own role (View).
 export default function CmmsUsers() {
   const { isSuperAdmin, user } = useAuth()
   const { current } = useCompany()
@@ -61,20 +61,20 @@ export default function CmmsUsers() {
   if (!isSuperAdmin) {
     return (
       <div className="space-y-4">
-        <PageHeader backTo="/settings" backLabel="Back to Settings" title="User setting" subtitle={`${current?.name || ''} · your access`} />
+        <PageHeader backTo="/settings" backLabel="Back to Settings" title="Role setup" subtitle={`${current?.name || ''} · your role`} />
         <Card className="max-w-xl p-5">
           <p className="text-sm text-slate-600">
             Your access in <span className="font-semibold">{current?.name}</span> is set by a super admin.
           </p>
           <Link to={`/settings/users/${user.id}`} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline">
-            <IconEye width={16} height={16} /> View my access
+            <IconEye width={16} height={16} /> View my role
           </Link>
         </Card>
       </div>
     )
   }
 
-  const withAccess = users.filter((u) => u.is_super_admin || Object.keys(perms[u.user_id] || {}).length)
+  const withAccess = users.filter((u) => u.is_super_admin || u.intranet_cmms || u.intranet_fuel || Object.keys(perms[u.user_id] || {}).length)
   const rows = showAll ? users : withAccess
 
   return (
@@ -82,8 +82,8 @@ export default function CmmsUsers() {
       <PageHeader
         backTo="/settings"
         backLabel="Back to Settings"
-        title="User setting"
-        subtitle={`${current?.name || ''} · ${withAccess.length} user${withAccess.length === 1 ? '' : 's'} with access`}
+        title="Role setup"
+        subtitle={`${current?.name || ''} · ${withAccess.length} user${withAccess.length === 1 ? '' : 's'}`}
         right={
           <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" className="h-4 w-4 accent-[#2563eb]" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
@@ -108,7 +108,7 @@ export default function CmmsUsers() {
           className="flex flex-col gap-3 border-b border-slate-200 bg-brand-light/30 px-5 py-4 sm:flex-row sm:items-end"
         >
           <label className="flex-1">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Give access to a user (login e-mail)</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700">Add a user by login e-mail (people given access in MJM Intranet appear here on their own)</span>
             <TextInput
               type="email"
               value={email}
@@ -117,7 +117,7 @@ export default function CmmsUsers() {
             />
           </label>
           <Button type="submit" disabled={busy || !email.trim()}>
-            <IconPlus width={18} height={18} /> Add & set access
+            <IconPlus width={18} height={18} /> Add & set role
           </Button>
         </form>
 
@@ -127,7 +127,7 @@ export default function CmmsUsers() {
           </div>
         ) : rows.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-slate-400">
-            Nobody has access to {current?.name} yet. Add a user above, or tick “Show every portal user”.
+            Nobody yet. Give people access to the CMMS 2 / Fuel Manage icon in MJM Intranet (they appear here after the next sync), or add a user above.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -136,7 +136,8 @@ export default function CmmsUsers() {
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-2.5">User</th>
                   <th className="px-3 py-2.5">Name</th>
-                  <th className="px-3 py-2.5">Access</th>
+                  <th className="px-3 py-2.5">Intranet access</th>
+                  <th className="px-3 py-2.5">Role in {current?.name}</th>
                   <th className="w-40 px-3 py-2.5 text-center">Action</th>
                 </tr>
               </thead>
@@ -157,6 +158,13 @@ export default function CmmsUsers() {
                       <td className="px-3 py-2">
                         <NameCell user={u} disabled={busy} onSave={(name) => run(() => setUserName(u.user_id, name))} />
                       </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {u.intranet_cmms && <Badge color="amber">CMMS 2</Badge>}
+                          {u.intranet_fuel && <Badge color="green">Fuel Manage</Badge>}
+                          {!u.intranet_cmms && !u.intranet_fuel && <span className="text-xs text-slate-400">—</span>}
+                        </div>
+                      </td>
                       <td className="px-3 py-3 text-slate-600">
                         {u.is_super_admin ? (
                           <span className="text-slate-400">Everything</span>
@@ -172,7 +180,7 @@ export default function CmmsUsers() {
                             })}
                           </div>
                         ) : (
-                          <span className="text-slate-400">No access to this company</span>
+                          <span className="text-slate-400">No role yet — press Edit</span>
                         )}
                       </td>
                       <td className="px-3 py-3">
@@ -180,7 +188,7 @@ export default function CmmsUsers() {
                           <Link
                             to={`/settings/users/${u.user_id}`}
                             className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand"
-                            title={u.is_super_admin ? 'View' : 'Edit access'}
+                            title={u.is_super_admin ? 'View' : 'Edit role'}
                           >
                             {u.is_super_admin ? <IconEye width={18} height={18} /> : <IconPencil width={18} height={18} />}
                           </Link>
@@ -188,11 +196,11 @@ export default function CmmsUsers() {
                             <button
                               disabled={busy}
                               onClick={() =>
-                                window.confirm(`Remove all access of ${u.email} to ${current.name}?`) &&
+                                window.confirm(`Remove the role of ${u.email} in ${current.name}?`) &&
                                 run(() => removePerms(current.id, u.user_id))
                               }
                               className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                              title="Remove access to this company"
+                              title="Remove role in this company"
                             >
                               <IconTrash width={18} height={18} />
                             </button>
@@ -220,8 +228,9 @@ export default function CmmsUsers() {
         )}
       </Card>
       <p className="text-xs text-slate-500">
-        Access is per company: switch company (top left) to set it for another company. People arriving from MJM Intranet
-        are added to the portal automatically; give them access here. The name is shown in Fuel Manage lists and reports.
+        Roles are per company: switch company (top left) to set them for another company. Who may use CMMS 2 / Fuel Manage
+        at all is decided in MJM Intranet (Module access); their names appear here after the next sign-in or sync, and the
+        role is set here.
       </p>
     </div>
   )

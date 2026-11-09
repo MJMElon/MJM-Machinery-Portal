@@ -24,7 +24,8 @@ export default function ClaimReview() {
     if (!allowed) return setLoading(false)
     try {
       const [c, p] = await Promise.all([listClaims(company.id), listPeople(company.id)])
-      setClaims(c.filter((x) => x.claimant_id !== user.id))
+      // Approvers limited to named people only see those people's claims
+      setClaims(c.filter((x) => x.claimant_id !== user.id && (access.viewAll || access.reviewable(x.claimant_id))))
       setPeople(p)
       setError('')
     } catch (e) {
@@ -32,7 +33,7 @@ export default function ClaimReview() {
     } finally {
       setLoading(false)
     }
-  }, [company.id, user.id, allowed])
+  }, [company.id, user.id, allowed, access])
 
   useEffect(() => {
     setLoading(true)

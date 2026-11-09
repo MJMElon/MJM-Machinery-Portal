@@ -18,7 +18,7 @@ export function FuelDashboard({ lines, title }) {
     return [...ys].sort((a, b) => b - a)
   }, [lines])
   const [year, setYear] = useState(years[0])
-  const [table, setTable] = useState(false)
+  const table = false
 
   const data = useMemo(() => {
     const m = MONTHS.map(() => ({ subL: 0, nonL: 0, cashRM: 0, cardRM: 0, n: 0 }))
@@ -51,12 +51,6 @@ export function FuelDashboard({ lines, title }) {
             ))}
           </Select>
         </div>
-        <button onClick={() => setTable((v) => !v)} className="text-xs font-medium text-brand hover:underline">
-          {table ? 'Show charts' : 'Show table'}
-        </button>
-        <span className="ml-auto text-xs text-slate-500">
-          {num(sum('subL') + sum('nonL'))} L · {money(sum('cashRM') + sum('cardRM'))} in {year}
-        </span>
       </div>
       {table ? (
         <Card className="overflow-x-auto">

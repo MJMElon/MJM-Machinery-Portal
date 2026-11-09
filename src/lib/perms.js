@@ -55,6 +55,89 @@ export const MODULES = [
   }
 ]
 
+// Role setup screen: module → pages → options. Each option ticks a set of
+// actions in the matrix; "approvers" marks the option that carries the list
+// of people whose claims this user approves (perms.approve_for).
+export const ROLE_MODEL = [
+  {
+    key: 'machinery',
+    label: 'Machinery Manage',
+    sections: ['work', 'machines', 'suppliers'],
+    pages: [
+      {
+        section: 'work',
+        label: 'Maintenance Work Manage',
+        options: [
+          { key: 'view', label: 'View page', actions: ['view'] },
+          { key: 'edit', label: 'Edit cases, send to supplier', actions: ['edit', 'send'] },
+          { key: 'solve', label: 'Solve / close cases', actions: ['solve'] },
+          { key: 'delete', label: 'Delete cases', actions: ['delete'] }
+        ]
+      },
+      {
+        section: 'machines',
+        label: 'Machinery Profile',
+        options: [
+          { key: 'view', label: 'View page', actions: ['view'] },
+          { key: 'manage', label: 'Add / edit / delete machines & vehicles', actions: ['add', 'edit', 'delete'] }
+        ]
+      },
+      {
+        section: 'suppliers',
+        label: 'Supplier Workshop List',
+        options: [
+          { key: 'view', label: 'View page', actions: ['view'] },
+          { key: 'manage', label: 'Add / edit / delete suppliers', actions: ['add', 'edit', 'delete'] }
+        ]
+      }
+    ]
+  },
+  {
+    key: 'fuel',
+    label: 'Fuel Manage',
+    sections: ['claims', 'usage', 'cards', 'report'],
+    pages: [
+      {
+        section: 'claims',
+        label: 'Fuel Claims',
+        options: [
+          { key: 'own', label: 'View own claims record (submit, edit, delete own claims)', actions: ['view', 'add', 'edit', 'delete'] },
+          { key: 'all', label: 'View all users’ claims in this company', actions: ['view_all'] },
+          { key: 'approve', label: 'Approve claims', actions: ['approve'], approvers: true },
+          { key: 'pay', label: 'Payment: mark claims paid (account)', actions: ['pay'] }
+        ]
+      },
+      {
+        section: 'cards',
+        label: 'Fleet Card Manage',
+        options: [
+          { key: 'view', label: 'View page', actions: ['view'] },
+          { key: 'manage', label: 'Add / edit cards and reloads', actions: ['add', 'edit', 'delete'] }
+        ]
+      },
+      {
+        section: 'usage',
+        label: 'Fuel Usage',
+        options: [
+          { key: 'view', label: 'View page', actions: ['view'] },
+          { key: 'manage', label: 'Record / delete card fill-ups', actions: ['add', 'delete'] }
+        ]
+      },
+      { section: 'report', label: 'Report', options: [{ key: 'view', label: 'View page', actions: ['view'] }] }
+    ]
+  }
+]
+
+export const approveFor = (perms) => (Array.isArray(perms?.approve_for) ? perms.approve_for : [])
+
+/** May the signed-in user (with these perms) review claims of this claimant? */
+export const canReviewClaimant = (perms, isSuper, claimantId) => {
+  if (isSuper) return true
+  if (!(has(perms, 'claims', 'approve') || has(perms, 'claims', 'pay'))) return false
+  const list = approveFor(perms)
+  return list.length === 0 || list.includes(claimantId)
+}
+
 export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report']
 export const MACHINERY_SECTIONS = ['work', 'machines', 'suppliers']
 
@@ -91,7 +174,8 @@ export async function getUserPerms(companyId, userId) {
 }
 
 export async function savePerms(companyId, userId, perms) {
-  const clean = Object.fromEntries(Object.entries(perms).filter(([, v]) => Array.isArray(v) && v.length))
+  const clean = Object.fromEntries(Object.entries(perms).filter(([k, v]) => Array.isArray(v) && (v.length || k === 'approve_for')))
+  if (!has(clean, 'claims', 'approve')) delete clean.approve_for
   const { error } = await supabase
     .from(PERMS_TABLE)
     .upsert({ company_id: companyId, user_id: userId, perms: clean }, { onConflict: 'company_id,user_id' })
@@ -127,7 +211,9 @@ export function usePerms(companyId) {
       ...state,
       super: isSuperAdmin,
       can: (section, action) => isSuperAdmin || has(state.perms, section, action),
-      any: (sections) => isSuperAdmin || hasAny(state.perms, sections)
+      any: (sections) => isSuperAdmin || hasAny(state.perms, sections),
+      reviewable: (claimantId) => canReviewClaimant(state.perms, isSuperAdmin, claimantId),
+      approveFor: approveFor(state.perms)
     }),
     [state, isSuperAdmin]
   )

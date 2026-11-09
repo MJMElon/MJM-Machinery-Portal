@@ -4,20 +4,64 @@
 // a DRAFT the person checks and corrects before saving.
 
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+
+function loadScript(src, ready) {
+  if (ready()) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => (ready() ? resolve() : reject(new Error('Script did not load: ' + src)))
+    s.onerror = () => reject(new Error('Could not load the reader (no internet?).'))
+    document.head.appendChild(s)
+  })
+}
+
+let pdfLoading = null
+async function loadPdfJs() {
+  if (!pdfLoading) pdfLoading = loadScript(PDFJS_URL, () => Boolean(window.pdfjsLib)).then(() => {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER
+    return window.pdfjsLib
+  })
+  return pdfLoading
+}
+
+/**
+ * A PDF receipt: use its own text when it has one (e-receipts from the fuel
+ * apps do), otherwise draw the first page and read it like a photo.
+ * Returns { text, canvas } — canvas only when the text layer was empty.
+ */
+async function pdfToTextOrCanvas(file) {
+  const pdfjs = await loadPdfJs()
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
+  const page = await doc.getPage(1)
+  const content = await page.getTextContent()
+  // Group text items into lines by their vertical position
+  const rows = new Map()
+  for (const it of content.items) {
+    if (!it.str || !it.str.trim()) continue
+    const y = Math.round(it.transform[5] / 3)
+    if (!rows.has(y)) rows.set(y, [])
+    rows.get(y).push({ x: it.transform[4], s: it.str })
+  }
+  const text = [...rows.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([, items]) => items.sort((a, b) => a.x - b.x).map((i) => i.s).join(' '))
+    .join('\n')
+  if (text.replace(/\s/g, '').length >= 20) return { text }
+  const viewport = page.getViewport({ scale: 2 })
+  const canvas = document.createElement('canvas')
+  canvas.width = viewport.width
+  canvas.height = viewport.height
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+  return { text: '', canvas }
+}
 
 let loading = null
 function loadTesseract() {
-  if (window.Tesseract) return Promise.resolve(window.Tesseract)
-  if (!loading) {
-    loading = new Promise((resolve, reject) => {
-      const s = document.createElement('script')
-      s.src = TESSERACT_URL
-      s.async = true
-      s.onload = () => (window.Tesseract ? resolve(window.Tesseract) : reject(new Error('Tesseract did not load')))
-      s.onerror = () => reject(new Error('Could not load the scanner (no internet?).'))
-      document.head.appendChild(s)
-    })
-  }
+  if (!loading) loading = loadScript(TESSERACT_URL, () => Boolean(window.Tesseract)).then(() => window.Tesseract)
   return loading
 }
 
@@ -57,16 +101,24 @@ async function prepare(file) {
   return canvas
 }
 
-/** Reads the text from a receipt image (PDFs are skipped). Throws on failure. */
+/** Reads the text from a receipt photo or PDF. Throws on failure. */
 export async function readReceiptText(file) {
-  if (!file || !file.type.startsWith('image/')) return ''
-  const w = await getWorker()
+  if (!file) return ''
   let source = file
-  try {
-    source = await prepare(file)
-  } catch {
-    // e.g. HEIC the browser cannot decode: let Tesseract try the raw file
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+    const r = await pdfToTextOrCanvas(file)
+    if (r.text) return r.text
+    source = r.canvas
+  } else if (!file.type.startsWith('image/')) {
+    return ''
+  } else {
+    try {
+      source = await prepare(file)
+    } catch {
+      // e.g. HEIC the browser cannot decode: let Tesseract try the raw file
+    }
   }
+  const w = await getWorker()
   const { data } = await w.recognize(source)
   return data?.text || ''
 }

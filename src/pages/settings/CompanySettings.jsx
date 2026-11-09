@@ -172,8 +172,8 @@ function UsersCard() {
   return (
     <Card className="flex items-center justify-between gap-3 p-5">
       <div>
-        <SectionTitle>User setting</SectionTitle>
-        <p className="text-sm text-slate-600">Who may do what in Machinery Manage and Fuel Manage for this company.</p>
+        <SectionTitle>Role setup</SectionTitle>
+        <p className="text-sm text-slate-600">Who may do what in Machinery Manage and Fuel Manage for this company: pages, claim options, approvers.</p>
       </div>
       <Link
         to="/settings/users"

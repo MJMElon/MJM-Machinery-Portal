@@ -74,7 +74,7 @@ export default function ClaimView() {
   const own = claim?.claimant_id === user.id
   const canEdit = claim && own && claim.status === 'pending' && access.can('claims', 'edit')
   const canDelete = claim && ((own && claim.status === 'pending' && access.can('claims', 'delete')) || isSuperAdmin)
-  const canReview = claim && (access.admin || access.pay) && (!own || isSuperAdmin)
+  const canReview = claim && (access.admin || access.pay) && (!own || isSuperAdmin) && access.reviewable(claim.claimant_id)
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
   const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
   const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)
@@ -260,7 +260,7 @@ export default function ClaimView() {
               <Card className="p-4">
                 <p className="mb-2 font-semibold text-slate-800">Review</p>
                 {!canReview ? (
-                  <p className="text-sm text-slate-500">Your own claim — another reviewer handles it.</p>
+                  <p className="text-sm text-slate-500">{own ? 'Your own claim — another reviewer handles it.' : 'You are not the approver for this person.'}</p>
                 ) : claim.status === 'pending' && access.admin ? (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" disabled={busy} onClick={() => review('approved')}>

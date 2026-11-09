@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card } from '../ui.jsx'
-import { IconCamera, IconPlus, IconTrash } from '../icons.jsx'
+import { IconPlus, IconTrash } from '../icons.jsx'
 import { F, inputCls, opt } from './shared.jsx'
 import {
   PAYMENTS,
@@ -84,7 +84,8 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   async function addFiles(fileList) {
     const files = [...fileList].filter(Boolean)
     if (!files.length) return
-    const fresh = files.map((file) => ({ ...blankLine(mine), file, scan: file.type.startsWith('image/') ? 'scanning' : null }))
+    const readable = (f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+    const fresh = files.map((file) => ({ ...blankLine(mine), file, scan: readable(file) ? 'scanning' : null }))
     setLines((ls) => {
       // Replace a single still-empty first row instead of leaving it behind
       const onlyBlank = ls.length === 1 && !ls[0].file && !ls[0].amount && !ls[0].litres && !ls[0].receipt_path
@@ -96,7 +97,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   // Read one row's photo and fill the draft figures (never overwrites typed values with blanks).
   async function readRow(row) {
     update(row.key, { scan: 'scanning', scanText: '', scanError: '' })
-    const small = await compressReceipt(row.file)
+    const small = row.file.type.startsWith('image/') ? await compressReceipt(row.file) : row.file
     const draft = await scanReceipt(small)
     const found = ['fill_date', 'litres', 'unit_price', 'amount', 'receipt_no', 'station'].some((k) => draft[k])
     {
@@ -183,7 +184,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
               onClick={() => fileInput.current?.click()}
               className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-brand/50 bg-brand-light/40 text-sm font-semibold text-brand-dark hover:border-brand"
             >
-              <IconCamera width={18} height={18} /> Upload
+              Upload PDF or photo
             </button>
           </F>
         </div>
@@ -256,7 +257,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                         Could not read
                       </Badge>
                     )}
-                    {l.file && l.file.type.startsWith('image/') && l.scan !== 'scanning' && (
+                    {l.file && l.scan && l.scan !== 'scanning' && (
                       <span className="mt-1 flex gap-2 text-[11px]">
                         <button type="button" onClick={() => readRow(l)} className="text-brand hover:underline">
                           Read again

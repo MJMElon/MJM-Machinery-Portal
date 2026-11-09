@@ -51,7 +51,7 @@ active flag). Claims, cards and fill-ups point at that list.
 
 ## Access: one permission matrix per user and company
 
-Settings → **User setting** lists the people with access to the selected company; Edit opens their
+Settings → **Role setup** lists the people with access to the selected company; Edit opens their
 access screen: a big title per module, each section with **View / Add / Edit / Delete** and, where it matters, the
 important actions (`machinery_user_perms`, checked in the database by `machinery_can(company, section, action)`):
 
@@ -65,8 +65,12 @@ important actions (`machinery_user_perms`, checked in the database by `machinery
 | | Fleet Card Manage (`cards`) | view add edit delete | |
 | | Report (`report`) | view | |
 
-Super admins can do everything. People arriving from MJM Intranet are added to the portal automatically and get
-their access here.
+Super admins can do everything. Who may use CMMS 2 / Fuel Manage at all is decided in MJM Intranet (Module access on
+the two Icons); the sync pre-creates those people here (`intranet_cmms` / `intranet_fuel` on `machinery_portal_admins`),
+so they appear in Role setup before their first sign-in. An approver can be limited to named people
+(`perms.approve_for`, checked by `machinery_claim_reviewable()`); people with "see all users' claims" + "mark paid" are
+the account role that prepares payment. Receipts: photos are read with Tesseract.js (after a grayscale / contrast
+clean-up); PDFs use their text layer (pdf.js), falling back to reading the rendered page.
 
 Rules (enforced in the database): a reviewer cannot review their own claim (super admins can); the reviewer and time
 are recorded automatically; approved claims can no longer be edited by the claimant; the vehicle, card and claim must be
@@ -169,6 +173,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261110120000_fuel_claims_intranet_sync.sql` (running claim number per company; `intranet_id` on businesses / companies and `machinery_apply_intranet_master()` for the sync from MJM Intranet).
 - `supabase/migrations/20261111120000_permissions_matrix.sql` (permission matrix `machinery_user_perms` + `machinery_can()`, finer RLS per section, fuel claims without a vehicle, module access per company from the Intranet's Icon tags).
 - `supabase/migrations/20261112120000_fuel_claim_lines.sql` (a fuel claim is a header + receipt lines `machinery_diesel_claim_lines`; totals and payable amount kept by trigger; existing claims become one-line claims).
+- `supabase/migrations/20261113120000_claim_approvers_intranet_users.sql` (named approvers `machinery_claim_reviewable()`, Intranet Icon access flags on portal users, `machinery_apply_intranet_users()`).
 
 Then link the portal to MJM Intranet (API key → `GW_API_KEY` secret), see [Sign-in](#sign-in-from-mjm-intranet-only-no-login-page).
 
