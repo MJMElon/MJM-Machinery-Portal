@@ -57,9 +57,9 @@ export default function ClaimView() {
 
   const person = new Map(people.map((p) => [p.user_id, p]))
   const own = claim?.claimant_id === user.id
-  const canEdit = claim && own && claim.status === 'pending'
-  const canDelete = claim && ((own && claim.status === 'pending') || isSuperAdmin)
-  const canReview = claim && access.admin && (!own || isSuperAdmin)
+  const canEdit = claim && own && claim.status === 'pending' && access.can('claims', 'edit')
+  const canDelete = claim && ((own && claim.status === 'pending' && access.can('claims', 'delete')) || isSuperAdmin)
+  const canReview = claim && (access.admin || access.pay) && (!own || isSuperAdmin)
 
   async function act(fn) {
     setBusy(true)
@@ -183,12 +183,12 @@ export default function ClaimView() {
               )}
             </Card>
 
-            {access.admin && (
+            {(access.admin || access.pay) && (
               <Card className="p-4">
                 <p className="mb-2 font-semibold text-slate-800">Review</p>
                 {!canReview ? (
                   <p className="text-sm text-slate-500">Your own claim — another admin reviews it.</p>
-                ) : claim.status === 'pending' ? (
+                ) : claim.status === 'pending' && access.admin ? (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" disabled={busy} onClick={() => review('approved')}>
                       <IconCheck width={16} height={16} /> Approve
@@ -199,19 +199,23 @@ export default function ClaimView() {
                   </div>
                 ) : claim.status === 'approved' ? (
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => review('paid')}>
-                      Mark paid
-                    </Button>
-                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
-                      Back to pending
-                    </Button>
+                    {access.pay && (
+                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => review('paid')}>
+                        Mark paid
+                      </Button>
+                    )}
+                    {access.admin && (
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
+                        Back to pending
+                      </Button>
+                    )}
                   </div>
-                ) : claim.status === 'rejected' ? (
+                ) : claim.status === 'rejected' && access.admin ? (
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending', null)}>
                     Back to pending
                   </Button>
                 ) : (
-                  <p className="text-sm text-slate-500">Paid.</p>
+                  <p className="text-sm text-slate-500">{claim.status === 'paid' ? 'Paid.' : 'No action for you here.'}</p>
                 )}
               </Card>
             )}

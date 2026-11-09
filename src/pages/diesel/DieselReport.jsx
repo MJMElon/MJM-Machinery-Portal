@@ -131,8 +131,6 @@ export default function DieselReport() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Report"
-        subtitle={`${company.name} · cash claims (not rejected) and fleet card fill-ups`}
         right={
           <Button variant="secondary" onClick={exportCsv} disabled={!inMonth.length}>
             <IconDownload width={18} height={18} /> Export CSV

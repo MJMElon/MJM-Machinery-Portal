@@ -96,14 +96,12 @@ export default function DieselUsage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Fuel Usage"
-        subtitle={`${company.name} · every fill-up, cash and fleet card`}
         right={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={exportCsv} disabled={!rows.length}>
               <IconDownload width={18} height={18} /> Export CSV
             </Button>
-            {access.admin && (
+            {access.can('usage', 'add') && (
               <Button disabled={!cards.length} onClick={() => setModal(true)} title={cards.length ? '' : 'Add a fleet card first'}>
                 <IconFuel width={18} height={18} /> Record card fill-up
               </Button>
@@ -159,7 +157,7 @@ export default function DieselUsage() {
                 <span className="flex-1" />
                 <span className="w-20 text-right">{num(r.litres, 2)} L</span>
                 <span className="w-28 whitespace-nowrap text-right font-medium">{money(r.amount)}</span>
-                {r.source === 'card' && access.admin ? (
+                {r.source === 'card' && access.can('usage', 'delete') ? (
                   <button
                     onClick={() => removeUsage(r.id)}
                     aria-label="Delete fill-up"

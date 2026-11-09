@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom'
+import { Outlet, useMatch, useNavigate } from 'react-router-dom'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt } from '../../components/icons.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
@@ -10,10 +10,10 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 // gets depends on their Diesel access for the selected company (set under
 // Machinery Manage → CMMS User Setting).
 export const DIESEL_MODULES = [
-  { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.claim || a.report, hint: 'Cash fuel claims with receipt photos; review and payment' },
-  { to: '/diesel/usage', label: 'Fuel Usage', Icon: IconFuel, need: (a) => a.report, hint: 'Every fill-up (cash and fleet card) by vehicle and driver' },
-  { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.report, hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
-  { to: '/diesel/report', label: 'Report', Icon: IconChart, need: (a) => a.report, hint: 'Monthly totals by vehicle and driver, export' }
+  { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
+  { to: '/diesel/usage', label: 'Fuel Usage', Icon: IconFuel, need: (a) => a.can('usage', 'view'), hint: 'Every fill-up (cash and fleet card) by vehicle and driver' },
+  { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
+  { to: '/diesel/report', label: 'Report', Icon: IconChart, need: (a) => a.can('report', 'view'), hint: 'Monthly totals by vehicle and driver, export' }
 ]
 
 export default function DieselLayout() {
@@ -23,10 +23,6 @@ export default function DieselLayout() {
   const access = useDieselAccess(current?.diesel_enabled ? current.id : null)
   const landing = Boolean(useMatch({ path: '/diesel', end: true }))
   const back = () => navigate('/')
-  const item = (active) =>
-    `flex items-center gap-3 rounded-xl px-3.5 py-2.5 font-display text-[14px] font-semibold tracking-tight transition whitespace-nowrap ${
-      active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-    }`
 
   if (!loaded || !access.loaded)
     return (
@@ -64,66 +60,23 @@ export default function DieselLayout() {
 
   const nav = DIESEL_MODULES.filter((n) => n.need(access))
 
-  // Landing page: only "Back" and the module buttons, no sidebar.
-  if (landing)
-    return (
-      <div>
-        <button
-          onClick={back}
-          className="-ml-2 mb-4 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand"
-        >
-          <IconBack width={16} height={16} /> Back to CMMS main page
-        </button>
-        <Outlet context={{ company: current, access }} />
-        {!access.claim && !access.report && (
-          <p className="mx-auto mt-6 max-w-xl rounded-xl bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
-            You have Fuel Manage access but no module yet. A super admin gives Cash Claim or Report under Machinery Manage →
-            CMMS User Setting.
-          </p>
-        )}
-      </div>
-    )
-
+  // Landing page and every module: just "Back to CMMS main page" and the content.
+  // The top bar names the module (Fuel Claims, Fuel Usage, …).
   return (
-    <div className="lg:grid lg:grid-cols-[290px_minmax(0,1fr)] lg:items-start lg:gap-6">
-      <aside className="mb-5 print:hidden lg:sticky lg:top-[96px] lg:mb-0">
-        <div className="mb-4 lg:mb-5 lg:flex lg:h-14 lg:items-end">
-          <button
-            onClick={back}
-            className="-ml-2 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand"
-          >
-            <IconBack width={16} height={16} /> Back to CMMS main page
-          </button>
-        </div>
-        <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:p-3 lg:shadow-sm">
-          <p className="hidden px-3 pb-1 pt-1.5 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 lg:block">
-            Fuel Manage
-          </p>
-          <NavLink to="/diesel" end className={({ isActive }) => item(isActive)}>
-            <span className="grid h-[19px] w-[19px] shrink-0 grid-cols-2 gap-0.5">
-              {[0, 1, 2, 3].map((i) => (
-                <span key={i} className="rounded-[3px] bg-current opacity-80" />
-              ))}
-            </span>
-            Modules
-          </NavLink>
-          {nav.map(({ to, label, Icon }) => (
-            <NavLink key={to} to={to} className={({ isActive }) => item(isActive)}>
-              <Icon width={19} height={19} className="shrink-0" />
-              <span className="lg:whitespace-normal lg:leading-snug">{label}</span>
-            </NavLink>
-          ))}
-        </nav>
-        {!access.claim && !access.report && (
-          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            You have Fuel Manage access but no module yet. A super admin gives Cash Claim or Report under Machinery Manage →
-            CMMS User Setting.
-          </p>
-        )}
-      </aside>
-      <section className="min-w-0">
-        <Outlet context={{ company: current, access }} />
-      </section>
+    <div>
+      <button
+        onClick={back}
+        className="-ml-2 mb-4 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand print:hidden"
+      >
+        <IconBack width={16} height={16} /> Back to CMMS main page
+      </button>
+      <Outlet context={{ company: current, access }} />
+      {landing && !access.claim && !access.report && (
+        <p className="mx-auto mt-6 max-w-xl rounded-xl bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
+          You have Fuel Manage access but no module yet. A super admin gives access under Machinery Manage → CMMS User
+          Setting.
+        </p>
+      )}
     </div>
   )
 }

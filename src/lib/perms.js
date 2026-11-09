@@ -1,0 +1,142 @@
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from './supabase.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+
+// One permission matrix per user and company (table machinery_user_perms,
+// column perms = {"section": ["action", …]}). Super admins can do everything.
+// This file is the single description of modules → sections → actions; the
+// database checks the same keys with machinery_can(company, section, action).
+
+export const PERMS_TABLE = 'machinery_user_perms'
+
+export const ACTION_LABELS = {
+  view: 'View',
+  add: 'Add',
+  edit: 'Edit',
+  delete: 'Delete',
+  solve: 'Solve / close case',
+  send: 'Send to supplier',
+  view_all: 'See all users’ claims',
+  approve: 'Approve / reject',
+  pay: 'Mark paid'
+}
+
+export const MODULES = [
+  {
+    key: 'machinery',
+    label: 'Machinery Manage',
+    sections: [
+      {
+        key: 'work',
+        label: 'Maintenance Work Manage',
+        actions: ['view', 'edit', 'delete'],
+        special: ['solve', 'send'],
+        hint: 'Cases from WhatsApp: pending / solved, supplier, notes'
+      },
+      { key: 'machines', label: 'Machinery Profile', actions: ['view', 'add', 'edit', 'delete'], special: [] },
+      { key: 'suppliers', label: 'Supplier Workshop List', actions: ['view', 'add', 'edit', 'delete'], special: [] }
+    ]
+  },
+  {
+    key: 'fuel',
+    label: 'Fuel Manage',
+    sections: [
+      {
+        key: 'claims',
+        label: 'Fuel Claims',
+        actions: ['view', 'add', 'edit', 'delete'],
+        special: ['view_all', 'approve', 'pay'],
+        hint: 'View / add / edit / delete apply to the person’s own claims'
+      },
+      { key: 'usage', label: 'Fuel Usage', actions: ['view', 'add', 'delete'], special: [] },
+      { key: 'cards', label: 'Fleet Card Manage', actions: ['view', 'add', 'edit', 'delete'], special: [] },
+      { key: 'report', label: 'Report', actions: ['view'], special: [] }
+    ]
+  }
+]
+
+export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report']
+export const MACHINERY_SECTIONS = ['work', 'machines', 'suppliers']
+
+export const has = (perms, section, action) => Array.isArray(perms?.[section]) && perms[section].includes(action)
+export const hasAny = (perms, sections) => sections.some((s) => (perms?.[s] || []).length > 0)
+
+/** Short summary of a perms object: "Machinery Manage: 2 sections · Fuel Manage: 1 section" */
+export function summarize(perms) {
+  return MODULES.map((m) => {
+    const n = m.sections.filter((s) => (perms?.[s.key] || []).length > 0).length
+    return n ? `${m.label}: ${n} section${n === 1 ? '' : 's'}` : null
+  })
+    .filter(Boolean)
+    .join(' · ')
+}
+
+// ---- data --------------------------------------------------------------------
+
+export async function listCompanyPerms(companyId) {
+  const { data, error } = await supabase.from(PERMS_TABLE).select('user_id, perms, updated_at').eq('company_id', companyId)
+  if (error) throw friendly(error)
+  return data || []
+}
+
+export async function getUserPerms(companyId, userId) {
+  const { data, error } = await supabase
+    .from(PERMS_TABLE)
+    .select('perms')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw friendly(error)
+  return data?.perms || {}
+}
+
+export async function savePerms(companyId, userId, perms) {
+  const clean = Object.fromEntries(Object.entries(perms).filter(([, v]) => Array.isArray(v) && v.length))
+  const { error } = await supabase
+    .from(PERMS_TABLE)
+    .upsert({ company_id: companyId, user_id: userId, perms: clean }, { onConflict: 'company_id,user_id' })
+  if (error) throw friendly(error)
+}
+
+export async function removePerms(companyId, userId) {
+  const { error } = await supabase.from(PERMS_TABLE).delete().eq('company_id', companyId).eq('user_id', userId)
+  if (error) throw friendly(error)
+}
+
+/** The signed-in user's matrix for a company: { loaded, perms, can(section, action), any(sections) } */
+export function usePerms(companyId) {
+  const { user, isSuperAdmin } = useAuth()
+  const [state, setState] = useState({ loaded: false, perms: {}, error: '' })
+  useEffect(() => {
+    if (!companyId || !user) return setState({ loaded: true, perms: {}, error: '' })
+    if (isSuperAdmin) return setState({ loaded: true, perms: {}, error: '' })
+    let active = true
+    supabase
+      .from(PERMS_TABLE)
+      .select('perms')
+      .eq('company_id', companyId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => active && setState({ loaded: true, perms: data?.perms || {}, error: error ? friendly(error).message : '' }))
+    return () => {
+      active = false
+    }
+  }, [companyId, user, isSuperAdmin])
+  return useMemo(
+    () => ({
+      ...state,
+      super: isSuperAdmin,
+      can: (section, action) => isSuperAdmin || has(state.perms, section, action),
+      any: (sections) => isSuperAdmin || hasAny(state.perms, sections)
+    }),
+    [state, isSuperAdmin]
+  )
+}
+
+function friendly(error) {
+  if (error?.code === '42501') return new Error(error.message || 'You do not have access to do this.')
+  if (['42P01', 'PGRST205', '42703', 'PGRST204', 'PGRST202', '42883'].includes(error?.code)) {
+    return new Error('Database not up to date. Run the permissions SQL migration (…permissions_matrix.sql) in Supabase.')
+  }
+  return error instanceof Error ? error : new Error(error?.message || 'Could not save.')
+}

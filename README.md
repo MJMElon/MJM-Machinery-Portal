@@ -14,7 +14,7 @@ that company's modules:
   - **MachTrek** link.
 - **Fuel Manage** (per company) — the Intranet's Diesel Claims module, now per company (see [Fuel Manage](#fuel-manage-was-diesel-manage)). Opens on four draggable square buttons.
 - **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
-- **Businesses & Companies** (gear, top right, **super admins only**) → businesses, the companies under them (code, short name, registration no., active), module access per company (CMMS 2, Diesel Manage) and each company's staff WhatsApp numbers. A case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers".
+- **Settings** also holds, for super admins, the company's staff WhatsApp numbers (a case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers") and the "Sync from MJM Intranet" button. Businesses, companies and **which company has which module** all come from MJM Intranet; there is no company admin page in the portal.
 
 ## Businesses and companies (same as MJM Intranet)
 
@@ -49,14 +49,24 @@ Ported from the Intranet's Diesel Claims module, per company. Opens on a page of
 vehicles together (`machinery_machines`, with fuel type, tank size, usual driver, "KPDN diesel subsidy" tick and
 active flag). Claims, cards and fill-ups point at that list.
 
-**Access** is set under Machinery Manage → CMMS User Setting (super admins), Diesel columns per company:
+## Access: one permission matrix per user and company
 
-| Tick | Can |
-| --- | --- |
-| Access | Open Diesel Manage |
-| Cash Claim | Diesel Claims → My claims |
-| Report | All claims (view), Diesel Usage, Fleet Card Manage, Report |
-| Admin | Everything: review claims, record reloads and fill-ups, manage cards |
+Machinery Manage → **CMMS User Setting** lists the people with access to the selected company; Edit opens their
+access screen: a big title per module, each section with **View / Add / Edit / Delete** and, where it matters, the
+important actions (`machinery_user_perms`, checked in the database by `machinery_can(company, section, action)`):
+
+| Module | Section | Actions | Important actions |
+| --- | --- | --- | --- |
+| Machinery Manage | Maintenance Work Manage (`work`) | view edit delete | solve / close case, send to supplier |
+| | Machinery Profile (`machines`) | view add edit delete | |
+| | Supplier Workshop List (`suppliers`) | view add edit delete | |
+| Fuel Manage | Fuel Claims (`claims`) | view add edit delete (own claims) | see all users' claims, approve / reject, mark paid |
+| | Fuel Usage (`usage`) | view add delete | |
+| | Fleet Card Manage (`cards`) | view add edit delete | |
+| | Report (`report`) | view | |
+
+Super admins can do everything. People arriving from MJM Intranet are added to the portal automatically and get
+their access here.
 
 Rules (enforced in the database): a reviewer cannot review their own claim (super admins can); the reviewer and time
 are recorded automatically; approved claims can no longer be edited by the claimant; the vehicle, card and claim must be
@@ -157,6 +167,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261108120000_diesel.sql` (Diesel Manage: members, claims, fleet cards, reloads, card fill-ups, access functions, RLS, receipts bucket).
 - `supabase/migrations/20261109120000_vehicles_into_machines.sql` (vehicles live in `machinery_machines`: fuel type, tank, usual driver, KPDN diesel subsidy tick, active flag; drops the old Diesel vehicle table; `machinery_portal_people()` for drop-downs).
 - `supabase/migrations/20261110120000_fuel_claims_intranet_sync.sql` (running claim number per company; `intranet_id` on businesses / companies and `machinery_apply_intranet_master()` for the sync from MJM Intranet).
+- `supabase/migrations/20261111120000_permissions_matrix.sql` (permission matrix `machinery_user_perms` + `machinery_can()`, finer RLS per section, fuel claims without a vehicle, module access per company from the Intranet's Icon tags).
 
 Then link the portal to MJM Intranet (API key → `GW_API_KEY` secret), see [Sign-in](#sign-in-from-mjm-intranet-only-no-login-page).
 

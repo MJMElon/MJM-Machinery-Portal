@@ -64,10 +64,8 @@ export default function FleetCardManage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Fleet Card Manage"
-        subtitle={`${company.name} · fuel cards, reloads and KPDN subsidy vehicles`}
         right={
-          access.admin && (
+          (access.can('cards', 'add') || access.can('cards', 'edit')) && (
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setModal({ kind: 'card' })}>
                 <IconCard width={18} height={18} /> Add card
@@ -90,7 +88,7 @@ export default function FleetCardManage() {
             <h3 className="font-semibold text-slate-800">Fleet cards</h3>
             {cards.length === 0 ? (
               <Card>
-                <Empty>No fleet cards yet.{access.admin ? ' Add the first card.' : ''}</Empty>
+                <Empty>No fleet cards yet.{access.can('cards', 'add') ? ' Add the first card.' : ''}</Empty>
               </Card>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -115,7 +113,7 @@ export default function FleetCardManage() {
                             {[c.provider, c.vehicle_id ? vehicleLabel(vById.get(c.vehicle_id)) : 'No vehicle linked'].filter(Boolean).join(' · ')}
                           </p>
                         </div>
-                        {access.admin && (
+                        {access.can('cards', 'edit') && (
                           <button
                             onClick={() => setModal({ kind: 'card', card: c })}
                             aria-label={`Edit ${c.card_no}`}
@@ -217,7 +215,7 @@ export default function FleetCardManage() {
                         <span className="text-slate-500">{r.reference}</span>
                         <span className="flex-1" />
                         <span className="w-28 whitespace-nowrap text-right font-medium text-emerald-600">+ {money(r.amount)}</span>
-                        {access.admin ? (
+                        {access.can('cards', 'delete') ? (
                           <button
                             onClick={() => removeReload(r.id)}
                             aria-label="Delete reload"

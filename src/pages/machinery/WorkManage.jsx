@@ -112,7 +112,7 @@ export default function WorkManage() {
             <>
               {' '}
               or{' '}
-              <Link to="/admin/companies" className="font-medium underline">
+              <Link to="/settings" className="font-medium underline">
                 link the numbers to a company
               </Link>
             </>

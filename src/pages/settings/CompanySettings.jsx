@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card, EmptyState, Field, SectionTitle, Spinner, TextInput } from '../../components/ui.jsx'
-import { IconPlus, IconTrash } from '../../components/icons.jsx'
-import { createBlock, deleteBlock, listBlocks, updateBlock, updateCompany } from '../../lib/companies.js'
+import { Badge, Button, Card, EmptyState, Field, SectionTitle, Spinner, TextArea, TextInput } from '../../components/ui.jsx'
+import { IconPlus, IconRefresh, IconTrash } from '../../components/icons.jsx'
+import { createBlock, deleteBlock, listBlocks, parseNumbers, syncFromIntranet, updateBlock, updateCompany } from '../../lib/companies.js'
+import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
 const fmtHa = (n) =>
@@ -11,7 +12,8 @@ const toNum = (v) => (String(v).trim() === '' ? null : Number(v))
 
 // Settings of the selected company: total area and its blocks.
 export default function CompanySettings() {
-  const { current, reload: reloadCompanies, loaded } = useCompany()
+  const { current, reload: reloadCompanies, loaded, businessesOf } = useCompany()
+  const { isSuperAdmin } = useAuth()
   const [blocks, setBlocks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -40,7 +42,8 @@ export default function CompanySettings() {
         <PageHeader backTo="/" backLabel="Back to main page" />
         <EmptyState
           title="No company yet"
-          subtitle="A super admin creates companies from the Companies button (top right)."
+          subtitle="Companies come from MJM Intranet. A super admin presses “Sync from MJM Intranet” below."
+          action={isSuperAdmin && <SyncButton onDone={reloadCompanies} />}
         />
       </div>
     )
@@ -49,18 +52,28 @@ export default function CompanySettings() {
 
   return (
     <div className="space-y-5">
-      <PageHeader backTo="/" backLabel="Back to main page" title={current.name} subtitle="Company profile and blocks" />
+      <PageHeader
+        backTo="/"
+        backLabel="Back to CMMS main page"
+        title={current.name}
+        subtitle={[current.code, businessesOf(current).map((b) => b.name).join(', ')].filter(Boolean).join(' · ') || 'Company profile and blocks'}
+        right={isSuperAdmin && <SyncButton onDone={reloadCompanies} />}
+      />
 
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
       <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <ProfileCard
-          key={current.id}
-          company={current}
-          blockTotal={blockTotal}
-          blockCount={blocks.length}
-          onSaved={reloadCompanies}
-        />
+        <div className="space-y-5">
+          <ProfileCard
+            key={current.id}
+            company={current}
+            blockTotal={blockTotal}
+            blockCount={blocks.length}
+            onSaved={reloadCompanies}
+          />
+          <ModulesCard company={current} />
+          {isSuperAdmin && <WhatsAppCard key={`wa-${current.id}`} company={current} onSaved={reloadCompanies} />}
+        </div>
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
@@ -120,7 +133,7 @@ function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
   return (
     <Card className="space-y-4 self-start p-5">
       <SectionTitle>Company profile</SectionTitle>
-      <Field label="Company name" hint="Changed by a super admin (Companies, top right).">
+      <Field label="Company name" hint="From MJM Intranet (Master Manage → Company).">
         <TextInput value={company.name} disabled />
       </Field>
       <Field label="Total area (ha)">
@@ -150,6 +163,94 @@ function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
         </Button>
       </div>
     </Card>
+  )
+}
+
+// Which modules this company has: decided in MJM Intranet by tagging the
+// CMMS 2 / Fuel Manage Icons with the business or company.
+function ModulesCard({ company }) {
+  const rows = [
+    ['Machinery Manage', company.cmms_enabled],
+    ['Fuel Manage', company.diesel_enabled]
+  ]
+  return (
+    <Card className="space-y-3 p-5">
+      <SectionTitle>Modules</SectionTitle>
+      <ul className="space-y-2">
+        {rows.map(([label, on]) => (
+          <li key={label} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+            <span className="font-medium text-slate-800">{label}</span>
+            <Badge color={on ? 'green' : 'slate'}>{on ? 'On' : 'Off'}</Badge>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-slate-500">
+        Set in MJM Intranet: Master Manage → Module → tag the “CMMS 2” / “Fuel Manage” icon with this company or its
+        business. Refreshed on every sign-in and with “Sync from MJM Intranet”.
+      </p>
+    </Card>
+  )
+}
+
+// Staff WhatsApp numbers: a maintenance message belongs to the company whose
+// numbers include the sender (super admins only; portal setting, not Intranet).
+function WhatsAppCard({ company, onSaved }) {
+  const [numbers, setNumbers] = useState((company.whatsapp_numbers || []).join('\n'))
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const dirty = parseNumbers(numbers).join(',') !== (company.whatsapp_numbers || []).join(',')
+  async function save() {
+    setBusy(true)
+    setMsg('')
+    try {
+      await updateCompany(company.id, { whatsapp_numbers: parseNumbers(numbers) })
+      await onSaved()
+      setMsg('Saved')
+    } catch (e) {
+      setMsg(e.message || 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Card className="space-y-3 p-5">
+      <SectionTitle>WhatsApp numbers</SectionTitle>
+      <Field hint="Staff numbers that send maintenance messages, one per line, with country code (e.g. 60123456789). Messages from these numbers become this company’s cases.">
+        <TextArea rows={4} value={numbers} onChange={(e) => setNumbers(e.target.value)} placeholder="60123456789" />
+      </Field>
+      <div className="flex items-center justify-end gap-3">
+        {msg && <span className={`text-sm ${msg === 'Saved' ? 'text-green-700' : 'text-red-700'}`}>{msg}</span>}
+        <Button size="sm" disabled={busy || !dirty} onClick={save}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+function SyncButton({ onDone }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  async function sync() {
+    setBusy(true)
+    setMsg('')
+    try {
+      const r = await syncFromIntranet()
+      setMsg(`Synced: ${r.businesses} businesses, ${r.companies} companies.`)
+      await onDone()
+    } catch (e) {
+      setMsg(e.message || 'Sync failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button variant="secondary" onClick={sync} disabled={busy}>
+        <IconRefresh width={18} height={18} className={busy ? 'animate-spin' : ''} /> {busy ? 'Syncing…' : 'Sync from MJM Intranet'}
+      </Button>
+      {msg && <span className={`text-xs ${/failed|not|error/i.test(msg) ? 'text-red-700' : 'text-green-700'}`}>{msg}</span>}
+    </div>
   )
 }
 

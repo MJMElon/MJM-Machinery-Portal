@@ -41,9 +41,9 @@ export default function SupplierList() {
     <div className="space-y-4">
       <PageHeader
         title="Supplier Workshop List"
-        subtitle={`${current?.name || ''} · ${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} / workshop${suppliers.length === 1 ? '' : 's'}${access.loaded && !access.can_manage ? ' · view only' : ''}`}
+        subtitle={`${current?.name || ''} · ${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} / workshop${suppliers.length === 1 ? '' : 's'}${access.loaded && !access.can_suppliers ? ' · view only' : ''}`}
         right={
-          access.can_manage && (
+          access.can_suppliers && (
             <Button onClick={() => setEditing({})}>
               <IconPlus width={18} height={18} /> Add supplier
             </Button>
@@ -70,7 +70,7 @@ export default function SupplierList() {
                   <p className="truncate text-lg font-bold tracking-tight text-slate-900">{s.name}</p>
                   {s.services && <p className="text-sm text-slate-500">{s.services}</p>}
                 </div>
-                {access.can_manage && (
+                {access.can_suppliers && (
                   <div className="flex gap-1">
                     <button
                       onClick={() => setEditing(s)}

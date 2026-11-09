@@ -24,15 +24,15 @@ export default function PortalHome() {
         <p className="mt-1 text-sm text-slate-500">
           {error ||
             (isSuperAdmin
-              ? 'Create your first company to start using the modules.'
-              : 'Ask a super admin to create your company and give you access.')}
+              ? 'Companies come from MJM Intranet. Open Settings and press “Sync from MJM Intranet”.'
+              : 'Ask a super admin to sync the companies from MJM Intranet and give you access.')}
         </p>
         {isSuperAdmin && (
           <Link
-            to="/admin/companies"
+            to="/settings"
             className="mt-5 inline-flex h-11 items-center rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark"
           >
-            Create a company
+            Open Settings
           </Link>
         )}
       </Card>

@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { supabase, ADMIN_TABLE } from './supabase.js'
-import { useAuth } from '../auth/AuthContext.jsx'
+import { usePerms } from './perms.js'
 
 // CMMS 2 lists (machinery profile, suppliers) and user access.
 
@@ -14,8 +13,6 @@ export const PERMISSIONS = [
   { key: 'can_delete', label: 'Delete', hint: 'Delete cases' },
   { key: 'can_manage', label: 'Manage lists', hint: 'Machinery profile and supplier list' }
 ]
-const NONE = { can_solve: false, can_edit: false, can_delete: false, can_manage: false }
-const ALL = { can_solve: true, can_edit: true, can_delete: true, can_manage: true }
 
 // ---- machinery profile -------------------------------------------------------
 
@@ -175,26 +172,21 @@ export async function setMember(companyId, userId, perms) {
   if (error) throw friendly(error)
 }
 
-/** What the signed-in user may do in CMMS 2 for a company. */
+/** What the signed-in user may do in Machinery Manage for a company (from the permission matrix). */
 export function useCmmsAccess(companyId) {
-  const { user, isSuperAdmin } = useAuth()
-  const [access, setAccess] = useState({ ...NONE, loaded: false })
-  useEffect(() => {
-    if (isSuperAdmin) return setAccess({ ...ALL, loaded: true })
-    if (!companyId || !user) return setAccess({ ...NONE, loaded: true })
-    let active = true
-    supabase
-      .from(MEMBERS)
-      .select('can_solve, can_edit, can_delete, can_manage')
-      .eq('company_id', companyId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => active && setAccess({ ...NONE, ...(data || {}), loaded: true }))
-    return () => {
-      active = false
-    }
-  }, [companyId, user, isSuperAdmin])
-  return access
+  const p = usePerms(companyId)
+  return {
+    loaded: p.loaded,
+    can: p.can,
+    can_solve: p.can('work', 'solve'),
+    can_edit: p.can('work', 'edit'),
+    can_send: p.can('work', 'send'),
+    can_delete: p.can('work', 'delete'),
+    // machines / suppliers pages: one "may change" flag each
+    can_manage: p.can('machines', 'edit') || p.can('suppliers', 'edit'),
+    can_machines: p.can('machines', 'edit') || p.can('machines', 'add'),
+    can_suppliers: p.can('suppliers', 'edit') || p.can('suppliers', 'add')
+  }
 }
 
 function friendly(error) {

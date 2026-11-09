@@ -99,7 +99,7 @@ export default function MachineryProfile() {
     <div className="space-y-4">
       <PageHeader
         title="Machinery Profile"
-        subtitle={`${current?.name || ''} · ${rows.length} machine${rows.length === 1 ? '' : 's'} / vehicle${rows.length === 1 ? '' : 's'}${access.loaded && !access.can_manage ? ' · view only' : ''}`}
+        subtitle={`${current?.name || ''} · ${rows.length} machine${rows.length === 1 ? '' : 's'} / vehicle${rows.length === 1 ? '' : 's'}${access.loaded && !access.can_machines ? ' · view only' : ''}`}
         right={
           kpdn > 0 && (
             <Link to="/diesel/cards" className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
@@ -120,7 +120,7 @@ export default function MachineryProfile() {
               columns={columns}
               template="minmax(0,1.2fr) minmax(0,1fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,1fr) 104px 86px minmax(0,1.1fr) 92px 112px minmax(0,1fr)"
               rows={tableRows}
-              canEdit={access.can_manage}
+              canEdit={access.can_machines}
               onAdd={guard((v) => saveMachine(current.id, toRow(v)))}
               onSave={guard((v) => saveMachine(current.id, toRow(v)))}
               onDelete={guard((r) => deleteMachine(r.id))}

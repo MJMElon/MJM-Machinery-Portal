@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { supabase, DIESEL } from './supabase.js'
-import { useAuth } from '../auth/AuthContext.jsx'
+import { FUEL_SECTIONS, usePerms } from './perms.js'
 
 // Diesel Manage: vehicles, cash fuel claims (receipt photos), fleet cards
 // (reloads + card fill-ups), reports and user access — all per company.
@@ -40,39 +39,20 @@ export const personLabel = (p) => (p ? p.full_name || p.email : '—')
 
 // ---- access ------------------------------------------------------------------
 
-const NONE = { use: false, admin: false, claim: false, report: false }
-const ALL = { use: true, admin: true, claim: true, report: true }
-
-/** What the signed-in user may do in Diesel Manage for a company. */
+/** What the signed-in user may do in Fuel Manage for a company (from the permission matrix). */
 export function useDieselAccess(companyId) {
-  const { user, isSuperAdmin } = useAuth()
-  const [access, setAccess] = useState({ ...NONE, loaded: false })
-  useEffect(() => {
-    if (isSuperAdmin) return setAccess({ ...ALL, loaded: true })
-    if (!companyId || !user) return setAccess({ ...NONE, loaded: true })
-    let active = true
-    supabase
-      .from(DIESEL.members)
-      .select('is_admin, can_claim, can_report')
-      .eq('company_id', companyId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!active) return
-        if (error || !data) return setAccess({ ...NONE, loaded: true, error: error ? friendly(error).message : '' })
-        setAccess({
-          use: true,
-          admin: data.is_admin,
-          claim: data.is_admin || data.can_claim,
-          report: data.is_admin || data.can_report,
-          loaded: true
-        })
-      })
-    return () => {
-      active = false
-    }
-  }, [companyId, user, isSuperAdmin])
-  return access
+  const p = usePerms(companyId)
+  return {
+    loaded: p.loaded,
+    error: p.error,
+    can: p.can,
+    use: p.any(FUEL_SECTIONS),
+    admin: p.can('claims', 'approve'),
+    pay: p.can('claims', 'pay'),
+    claim: p.can('claims', 'add'),
+    report: p.can('report', 'view') || p.can('claims', 'view_all'),
+    viewAll: p.can('claims', 'view_all') || p.can('report', 'view')
+  }
 }
 
 /** Portal users with their Diesel access for a company (admins see everyone). */

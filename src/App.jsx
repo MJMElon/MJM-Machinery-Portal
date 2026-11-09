@@ -13,8 +13,8 @@ import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
 import SupplierList from './pages/machinery/SupplierList.jsx'
 import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
+import UserAccessEdit from './pages/machinery/UserAccessEdit.jsx'
 import CompanySettings from './pages/settings/CompanySettings.jsx'
-import ManageCompanies from './pages/admin/ManageCompanies.jsx'
 import DieselLayout from './pages/diesel/DieselLayout.jsx'
 import DieselHome from './pages/diesel/DieselHome.jsx'
 import DieselClaims from './pages/diesel/DieselClaims.jsx'
@@ -36,7 +36,7 @@ export default function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
           <Route path="/settings" element={<CompanySettings />} />
-          <Route path="/admin/companies" element={<ManageCompanies />} />
+          <Route path="/admin/companies" element={<Navigate to="/settings" replace />} />
           <Route path="/cmms" element={<CmmsLayout />}>
             <Route index element={<Navigate to="/cmms/work" replace />} />
             <Route path="work" element={<WorkManage />} />
@@ -45,6 +45,7 @@ export default function App() {
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="suppliers" element={<SupplierList />} />
             <Route path="users" element={<CmmsUsers />} />
+            <Route path="users/:userId" element={<UserAccessEdit />} />
           </Route>
           <Route path="/diesel" element={<DieselLayout />}>
             <Route index element={<DieselHome />} />

@@ -1,37 +1,36 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card, Select } from '../../components/ui.jsx'
+import { Button, Card } from '../../components/ui.jsx'
 import { IconDownload, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
-import { Empty, ErrorBox, Loading, MonthSelect, StatusBadge, monthsOf } from '../../components/diesel/shared.jsx'
+import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { CLAIM_STATUS, deleteClaim, listClaims, listPeople, listVehicles, personLabel, removeReceipt, vehicleLabel } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, sum, today } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
 
-// Fuel Claims: each person's own claim list (No. · Description · Claim amount ·
-// Action: view / edit / print / delete). Fuel admins can switch to every
-// claim of the company to review them (approve / reject / pay on the view page).
+// Fuel Claims: the claim list (No. · Description · Claim amount · Action:
+// view / edit / print / delete), latest first. Each person sees their own
+// claims; people with "see all users' claims" see everyone's and review them
+// on the claim page (approve / reject / pay).
 export default function DieselClaims() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
-  const [scope, setScope] = useState('mine') // mine | all (admins / report)
   const [claims, setClaims] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState({ status: '', month: '' })
   const [busyId, setBusyId] = useState(null)
 
   const load = useCallback(async () => {
     try {
       const [c, v, p] = await Promise.all([
-        listClaims(company.id, access.report ? {} : { mine: user.id }),
+        listClaims(company.id, access.viewAll ? {} : { mine: user.id }),
         listVehicles(company.id),
-        access.report ? listPeople(company.id) : []
+        access.viewAll ? listPeople(company.id) : []
       ])
       setClaims(c)
       setVehicles(v)
@@ -42,7 +41,7 @@ export default function DieselClaims() {
     } finally {
       setLoading(false)
     }
-  }, [company.id, user.id, access.report])
+  }, [company.id, user.id, access.viewAll])
 
   useEffect(() => {
     setLoading(true)
@@ -51,11 +50,9 @@ export default function DieselClaims() {
 
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const person = new Map(people.map((p) => [p.user_id, p]))
-  const base = scope === 'all' ? claims : claims.filter((c) => c.claimant_id === user.id)
-  const months = monthsOf(base.map((c) => c.fill_date))
-  const rows = base.filter(
-    (c) => (!filter.status || c.status === filter.status) && (!filter.month || c.fill_date.startsWith(filter.month))
-  )
+  const all = access.viewAll
+  // Latest first: by date of the fill-up, then by creation.
+  const rows = [...claims].sort((a, b) => (a.fill_date < b.fill_date ? 1 : a.fill_date > b.fill_date ? -1 : (a.created_at || '') < (b.created_at || '') ? 1 : -1))
 
   async function remove(c) {
     if (!window.confirm(`Delete claim ${claimNo(c, 0)}? This cannot be undone.`)) return
@@ -72,8 +69,8 @@ export default function DieselClaims() {
     }
   }
 
-  const canEdit = (c) => c.status === 'pending' && c.claimant_id === user.id
-  const canDelete = (c) => (c.status === 'pending' && c.claimant_id === user.id) || isSuperAdmin
+  const canEdit = (c) => c.status === 'pending' && c.claimant_id === user.id && access.can('claims', 'edit')
+  const canDelete = (c) => (c.status === 'pending' && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin
 
   const exportCsv = () =>
     downloadCsv(
@@ -96,8 +93,6 @@ export default function DieselClaims() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Fuel Claims"
-        subtitle={`${company.name} · ${scope === 'all' ? 'all claims of the company' : 'your claims'}`}
         right={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={exportCsv} disabled={!rows.length}>
@@ -113,37 +108,17 @@ export default function DieselClaims() {
       />
       <ErrorBox>{error}</ErrorBox>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        {access.report && (
-          <div className="sm:w-48">
-            <Select value={scope} onChange={(e) => setScope(e.target.value)} className="h-10" aria-label="Whose claims">
-              <option value="mine">My claims</option>
-              <option value="all">All users (review)</option>
-            </Select>
-          </div>
-        )}
-        <div className="sm:w-44">
-          <Select value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} className="h-10" aria-label="Status">
-            <option value="">All statuses</option>
-            {Object.entries(CLAIM_STATUS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <MonthSelect months={months} value={filter.month} onChange={(m) => setFilter({ ...filter, month: m })} allLabel="All months" />
-        <span className="text-sm text-slate-500 sm:ml-auto">
-          {rows.length} claim{rows.length === 1 ? '' : 's'} · {num(sum(rows, 'litres'))} L · {money(sum(rows))}
-        </span>
-      </div>
+      <p className="text-sm text-slate-500">
+        {all ? 'All users’ claims' : 'Your claims'} · {rows.length} claim{rows.length === 1 ? '' : 's'} · {num(sum(rows, 'litres'))} L ·{' '}
+        {money(sum(rows))}
+      </p>
 
       <Card className="overflow-hidden">
         <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">Claim list</h3>
         {loading ? (
           <Loading />
         ) : rows.length === 0 ? (
-          <Empty>{base.length ? 'No claims match these filters.' : 'No claims yet. Press New claim after filling up.'}</Empty>
+          <Empty>No claims yet. Press New claim after filling up.</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
@@ -165,9 +140,9 @@ export default function DieselClaims() {
                       </Link>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                         <span>{day(c.fill_date)}</span>
-                        <span>· {vehicleLabel(vById.get(c.vehicle_id))}</span>
+                        <span>· {c.vehicle_id ? vehicleLabel(vById.get(c.vehicle_id)) : 'No vehicle'}</span>
                         <span>· {num(c.litres, 2)} L</span>
-                        {scope === 'all' && <span>· {personLabel(person.get(c.claimant_id))}</span>}
+                        {all && <span>· {personLabel(person.get(c.claimant_id))}</span>}
                         <StatusBadge status={c.status} />
                       </div>
                     </td>

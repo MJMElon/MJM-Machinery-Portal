@@ -13,9 +13,10 @@ export function ClaimForm({ company, userId, vehicles, claim, onSaved, onCancel 
     () => vehicles.filter((v) => v.is_active || (claim && v.id === claim.vehicle_id)),
     [vehicles, claim]
   )
-  const mineFirst = usable.find((v) => v.driver_id === userId) || usable[0]
+  // Default vehicle: the one this person is the usual driver of (else none).
+  const mine = usable.find((v) => v.driver_id === userId)
   const [f, setF] = useState(() => ({
-    vehicle_id: claim?.vehicle_id || mineFirst?.id || '',
+    vehicle_id: claim ? claim.vehicle_id || '' : mine?.id || '',
     fill_date: claim?.fill_date || today(),
     odometer_km: claim?.odometer_km ?? '',
     litres: claim?.litres ?? '',
@@ -30,7 +31,7 @@ export function ClaimForm({ company, userId, vehicles, claim, onSaved, onCancel 
 
   const litres = Number(f.litres)
   const amount = Number(f.amount)
-  const ok = f.vehicle_id && f.fill_date && litres > 0 && amount >= 0 && f.amount !== '' && (claim || file)
+  const ok = f.fill_date && litres > 0 && amount >= 0 && f.amount !== '' && (claim || file)
 
   async function submit(e) {
     e.preventDefault()
@@ -39,7 +40,7 @@ export function ClaimForm({ company, userId, vehicles, claim, onSaved, onCancel 
     setError('')
     try {
       const row = {
-        vehicle_id: f.vehicle_id,
+        vehicle_id: f.vehicle_id || null,
         fill_date: f.fill_date,
         odometer_km: toNum(f.odometer_km),
         litres,
@@ -48,7 +49,7 @@ export function ClaimForm({ company, userId, vehicles, claim, onSaved, onCancel 
         notes: f.notes.trim() || null
       }
       // Odometer lower than the vehicle's last reading: ask first (likely a typo).
-      if (row.odometer_km != null) {
+      if (row.odometer_km != null && row.vehicle_id) {
         const last = await lastOdometer(row.vehicle_id, row.fill_date)
         if (
           last != null &&
@@ -75,23 +76,13 @@ export function ClaimForm({ company, userId, vehicles, claim, onSaved, onCancel 
     }
   }
 
-  if (!usable.length)
-    return (
-      <Card className="p-6">
-        <p className="text-sm text-slate-600">No vehicles yet. Add them under Machinery Manage → Machinery Profile first.</p>
-        <Button className="mt-4" variant="secondary" onClick={onCancel}>
-          Back
-        </Button>
-      </Card>
-    )
-
   return (
     <Card className="mx-auto max-w-2xl p-5 sm:p-6">
       <form onSubmit={submit} className="space-y-4">
         {error && <p className="rounded-lg bg-red-100 p-2.5 text-sm text-red-700">{error}</p>}
-        <F label="Vehicle">
-          <select required value={f.vehicle_id} onChange={set('vehicle_id')} className={inputCls}>
-            {opt(usable.map((v) => [v.id, vehicleLabel(v)]))}
+        <F label="Vehicle" hint={mine ? `Your linked vehicle (${vehicleLabel(mine)}) is chosen for you; change it if needed.` : 'Optional. Vehicles are kept under Machinery Manage → Machinery Profile.'}>
+          <select value={f.vehicle_id} onChange={set('vehicle_id')} className={inputCls}>
+            {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
           </select>
         </F>
         <div className="grid grid-cols-2 gap-3">
