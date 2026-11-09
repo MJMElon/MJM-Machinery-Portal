@@ -8,7 +8,7 @@ import { MODULES, listCompanyPerms, removePerms, summarize } from '../../lib/per
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
-// CMMS User Setting: the people who have access to the selected company, with
+// User setting (CMMS main page → Settings): the people who have access to the selected company, with
 // a short summary of their modules. Edit opens the per-user access screen
 // (module → section → view / add / edit / delete + special actions).
 // Super admins manage it; everyone else sees their own access (View).
@@ -61,12 +61,12 @@ export default function CmmsUsers() {
   if (!isSuperAdmin) {
     return (
       <div className="space-y-4">
-        <PageHeader title="CMMS User Setting" subtitle={`${current?.name || ''} · your access`} />
+        <PageHeader backTo="/settings" backLabel="Back to Settings" title="User setting" subtitle={`${current?.name || ''} · your access`} />
         <Card className="max-w-xl p-5">
           <p className="text-sm text-slate-600">
             Your access in <span className="font-semibold">{current?.name}</span> is set by a super admin.
           </p>
-          <Link to={`/cmms/users/${user.id}`} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline">
+          <Link to={`/settings/users/${user.id}`} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline">
             <IconEye width={16} height={16} /> View my access
           </Link>
         </Card>
@@ -80,7 +80,9 @@ export default function CmmsUsers() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="CMMS User Setting"
+        backTo="/settings"
+        backLabel="Back to Settings"
+        title="User setting"
         subtitle={`${current?.name || ''} · ${withAccess.length} user${withAccess.length === 1 ? '' : 's'} with access`}
         right={
           <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
@@ -100,7 +102,7 @@ export default function CmmsUsers() {
             if (ok) {
               setEmail('')
               const u = (await listPortalUsers()).find((x) => (x.email || '').toLowerCase() === email.trim().toLowerCase())
-              if (u) navigate(`/cmms/users/${u.user_id}`)
+              if (u) navigate(`/settings/users/${u.user_id}`)
             }
           }}
           className="flex flex-col gap-3 border-b border-slate-200 bg-brand-light/30 px-5 py-4 sm:flex-row sm:items-end"
@@ -176,7 +178,7 @@ export default function CmmsUsers() {
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-center gap-0.5">
                           <Link
-                            to={`/cmms/users/${u.user_id}`}
+                            to={`/settings/users/${u.user_id}`}
                             className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand"
                             title={u.is_super_admin ? 'View' : 'Edit access'}
                           >

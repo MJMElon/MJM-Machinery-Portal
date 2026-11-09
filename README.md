@@ -40,7 +40,7 @@ Ported from the Intranet's Diesel Claims module, per company. Opens on a page of
 
 | Module | What it holds | Who |
 | --- | --- | --- |
-| **Fuel Claims** | Claim list (No. · Description · Claim amount · Action: view / edit / print / delete), each person their own claims; "New claim" opens a form page. Fuel admins switch to "All users" to review; the claim page has Approve / Reject (with reason) / Mark paid and a printable claim form | Cash Claim / Report / Admin |
+| **Fuel Claims** | A year dashboard (litres per month, subsidised vs non-subsidised; RM per month, cash vs fleet card) and the claim list (No. · Description · Claim amount · Action: view / edit / print / delete), latest first. A claim is a **document with receipt rows**: submission date, company, name, totals; a drop zone for receipt photos (each photo becomes a row, read in the browser by Tesseract.js and attached to that row; the figures are a draft to check) or rows typed by hand; per row: vehicle (optional), receipt date, receipt no., litres, unit price, amount, payment (cash = claim back, fleet card = recorded only), subsidy tick, remark, attachment. **Payable = cash rows only.** The claim page prints as a claim form with the receipts; reviewers Approve / Reject / Mark paid | claims: view add edit delete · view_all approve pay |
 | **Fuel Usage** | Every fill-up of the company in one log (cash claims not rejected + fleet card fill-ups) by month and vehicle, totals, CSV. Admins record fleet card fill-ups here | Report / Admin |
 | **Fleet Card Manage** | Fuel cards (balance = reloads − fill-ups, monthly limit), reloads, and the **KPDN diesel subsidy vehicles**: vehicles ticked in Machinery Profile that apply for the subsidised-diesel fleet card, with or without a card yet | Report / Admin |
 | **Report** | Per month: totals, by vehicle (cash vs card, km/L, over-tank flags), by driver, CSV | Report / Admin |
@@ -51,7 +51,7 @@ active flag). Claims, cards and fill-ups point at that list.
 
 ## Access: one permission matrix per user and company
 
-Machinery Manage → **CMMS User Setting** lists the people with access to the selected company; Edit opens their
+Settings → **User setting** lists the people with access to the selected company; Edit opens their
 access screen: a big title per module, each section with **View / Add / Edit / Delete** and, where it matters, the
 important actions (`machinery_user_perms`, checked in the database by `machinery_can(company, section, action)`):
 
@@ -168,6 +168,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261109120000_vehicles_into_machines.sql` (vehicles live in `machinery_machines`: fuel type, tank, usual driver, KPDN diesel subsidy tick, active flag; drops the old Diesel vehicle table; `machinery_portal_people()` for drop-downs).
 - `supabase/migrations/20261110120000_fuel_claims_intranet_sync.sql` (running claim number per company; `intranet_id` on businesses / companies and `machinery_apply_intranet_master()` for the sync from MJM Intranet).
 - `supabase/migrations/20261111120000_permissions_matrix.sql` (permission matrix `machinery_user_perms` + `machinery_can()`, finer RLS per section, fuel claims without a vehicle, module access per company from the Intranet's Icon tags).
+- `supabase/migrations/20261112120000_fuel_claim_lines.sql` (a fuel claim is a header + receipt lines `machinery_diesel_claim_lines`; totals and payable amount kept by trigger; existing claims become one-line claims).
 
 Then link the portal to MJM Intranet (API key → `GW_API_KEY` secret), see [Sign-in](#sign-in-from-mjm-intranet-only-no-login-page).
 

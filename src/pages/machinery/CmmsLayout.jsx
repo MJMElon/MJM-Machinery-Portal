@@ -5,7 +5,6 @@ import {
   IconExternal,
   IconNotebook,
   IconRoute,
-  IconUsers,
   IconWorkshop
 } from '../../components/icons.jsx'
 
@@ -14,8 +13,7 @@ const MACHTREK_URL = import.meta.env.VITE_MACHTREK_URL || 'https://mjmelon.githu
 const NAV = [
   { to: '/cmms/work', label: 'Maintenance Work Manage', Icon: IconNotebook },
   { to: '/cmms/machines', label: 'Machinery Profile', Icon: IconExcavator },
-  { to: '/cmms/suppliers', label: 'Supplier Workshop List', Icon: IconWorkshop },
-  { to: '/cmms/users', label: 'CMMS User Setting', Icon: IconUsers }
+  { to: '/cmms/suppliers', label: 'Supplier Workshop List', Icon: IconWorkshop }
 ]
 
 // Machinery Manage: a left sidebar with its pages; the chosen one opens on the right.

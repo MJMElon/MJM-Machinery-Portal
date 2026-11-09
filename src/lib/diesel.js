@@ -91,7 +91,6 @@ export async function listClaims(companyId, filter = {}) {
     .from(DIESEL.claims)
     .select('*')
     .eq('company_id', companyId)
-    .order('fill_date', { ascending: false })
     .order('created_at', { ascending: false })
   if (filter.mine) q = q.eq('claimant_id', filter.mine)
   if (filter.from) q = q.gte('fill_date', filter.from)
@@ -156,6 +155,94 @@ export async function reviewClaim(id, status, note) {
     .single()
   if (error) throw friendly(error)
   return data
+}
+
+// ---- claim lines (one per receipt) ----------------------------------------------
+
+export const PAYMENTS = [
+  ['cash', 'Cash (claim back)'],
+  ['fleet_card', 'Fleet card (no claim)']
+]
+
+export const LINES = 'machinery_diesel_claim_lines'
+
+export async function listClaimLines(companyId, { claimIds } = {}) {
+  let q = supabase.from(LINES).select('*').eq('company_id', companyId).order('fill_date', { ascending: false }).order('line_no')
+  if (claimIds) q = q.in('claim_id', claimIds)
+  const { data, error } = await q.limit(5000)
+  if (error) throw friendly(error)
+  return data || []
+}
+
+export async function getClaimLines(claimId) {
+  const { data, error } = await supabase.from(LINES).select('*').eq('claim_id', claimId).order('line_no')
+  if (error) throw friendly(error)
+  return data || []
+}
+
+/** Create a claim with its lines. Returns the new claim id. */
+export async function createClaimWithLines(companyId, userId, header, lines) {
+  const { data, error } = await supabase
+    .from(DIESEL.claims)
+    .insert({
+      company_id: companyId,
+      claimant_id: userId,
+      submitted_on: header.submitted_on,
+      fill_date: header.submitted_on,
+      notes: header.notes || null,
+      amount: 0
+    })
+    .select('id')
+    .single()
+  if (error) throw friendly(error)
+  try {
+    await replaceLines(data.id, lines)
+  } catch (e) {
+    await supabase.from(DIESEL.claims).delete().eq('id', data.id)
+    throw e
+  }
+  return data.id
+}
+
+/** Update a pending claim's header and replace its lines. */
+export async function updateClaimWithLines(claimId, header, lines) {
+  const { error } = await supabase
+    .from(DIESEL.claims)
+    .update({ submitted_on: header.submitted_on, fill_date: header.submitted_on, notes: header.notes || null })
+    .eq('id', claimId)
+  if (error) throw friendly(error)
+  await replaceLines(claimId, lines)
+}
+
+async function replaceLines(claimId, lines) {
+  const { data: existing } = await supabase.from(LINES).select('id').eq('claim_id', claimId)
+  const keep = new Set(lines.filter((l) => l.id).map((l) => l.id))
+  const gone = (existing || []).filter((l) => !keep.has(l.id)).map((l) => l.id)
+  if (gone.length) {
+    const { error } = await supabase.from(LINES).delete().in('id', gone)
+    if (error) throw friendly(error)
+  }
+  const rows = lines.map((l, i) => ({
+    ...(l.id ? { id: l.id } : {}),
+    claim_id: claimId,
+    company_id: l.company_id,
+    line_no: i + 1,
+    fill_date: l.fill_date,
+    vehicle_id: l.vehicle_id || null,
+    litres: l.litres === '' || l.litres == null ? null : Number(l.litres),
+    unit_price: l.unit_price === '' || l.unit_price == null ? null : Number(l.unit_price),
+    amount: Number(l.amount || 0),
+    payment: l.payment || 'cash',
+    subsidised: Boolean(l.subsidised),
+    receipt_no: l.receipt_no || null,
+    station: l.station || null,
+    odometer_km: l.odometer_km === '' || l.odometer_km == null ? null : Number(l.odometer_km),
+    remark: l.remark || null,
+    receipt_path: l.receipt_path || null
+  }))
+  if (!rows.length) return
+  const { error } = await supabase.from(LINES).upsert(rows, { onConflict: 'id' })
+  if (error) throw friendly(error)
 }
 
 // ---- receipts (private bucket: <company>/<user>/<uuid>.<ext>) --------------------

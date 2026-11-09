@@ -67,25 +67,27 @@ export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, 
 }
 
 /**
- * Module area: a neat grid of equal tiles. With `orderKey` the tiles can be
- * dragged onto each other to change their order (like icons on a phone); the
- * order is remembered per user in this browser. Tiles always sit in the grid,
- * they never float freely.
+ * Module area: a neat grid of equal tiles. With `orderKey` a tile can be
+ * picked up and dragged: it follows the pointer, the other tiles make room
+ * where it would land, and on release it drops into that slot. The order is
+ * remembered per user in this browser. Tiles never float freely.
  */
 export function TileGrid({ children, orderKey }) {
   const items = Children.toArray(children).filter(Boolean)
   const { user } = useAuth()
   const storageKey = orderKey ? `tiles.order.${orderKey}.${user?.id || 'anon'}` : null
   const [order, setOrder] = useState(() => (storageKey ? readJson(storageKey) : []))
-  const [dragId, setDragId] = useState(null)
-  const [overId, setOverId] = useState(null)
+  const [drag, setDrag] = useState(null) // { id, x, y, w, h, dx, dy, live: [ids] }
+  const gridRef = useRef(null)
   const gesture = useRef(null)
   const suppressClick = useRef(false)
 
   useEffect(() => setOrder(storageKey ? readJson(storageKey) : []), [storageKey])
 
   const ids = items.map((c) => String(c.key))
-  const sorted = [...items].sort((a, b) => rank(order, ids, String(a.key)) - rank(order, ids, String(b.key)))
+  const baseOrder = [...ids].sort((a, b) => rank(order, ids, a) - rank(order, ids, b))
+  const shown = drag?.live || baseOrder
+  const byId = Object.fromEntries(items.map((c) => [String(c.key), c]))
 
   function commit(next) {
     setOrder(next)
@@ -94,7 +96,8 @@ export function TileGrid({ children, orderKey }) {
 
   function start(e, id) {
     if (!storageKey || e.button !== 0) return
-    gesture.current = { id, sx: e.clientX, sy: e.clientY, moved: false }
+    const r = e.currentTarget.getBoundingClientRect()
+    gesture.current = { id, sx: e.clientX, sy: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height, moved: false, target: e.currentTarget, pointerId: e.pointerId }
   }
   function move(e) {
     const g = gesture.current
@@ -102,42 +105,45 @@ export function TileGrid({ children, orderKey }) {
     if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < 6) return
     if (!g.moved) {
       g.moved = true
-      setDragId(g.id)
-      e.currentTarget.setPointerCapture?.(e.pointerId)
+      g.target.setPointerCapture?.(g.pointerId)
     }
-    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-tile]')
-    setOverId(el ? el.getAttribute('data-tile') : null)
+    // Where would it land? The slot whose centre is nearest the pointer.
+    const slots = [...gridRef.current.querySelectorAll('[data-tile]')]
+    let best = null
+    for (const el of slots) {
+      const r = el.getBoundingClientRect()
+      const d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2))
+      if (!best || d < best.d) best = { id: el.getAttribute('data-tile'), d }
+    }
+    const live = [...(drag?.live || baseOrder)]
+    if (best && best.id !== g.id) {
+      live.splice(live.indexOf(g.id), 1)
+      live.splice(live.indexOf(best.id) + (live.indexOf(best.id) < 0 ? 0 : 0), 0, g.id)
+    }
+    setDrag({ id: g.id, x: e.clientX - g.dx, y: e.clientY - g.dy, w: g.w, h: g.h, live })
   }
   function end() {
     const g = gesture.current
     gesture.current = null
     if (g?.moved) {
       suppressClick.current = true
-      if (overId && overId !== g.id) {
-        const current = sorted.map((c) => String(c.key))
-        const from = current.indexOf(g.id)
-        const to = current.indexOf(overId)
-        current.splice(from, 1)
-        current.splice(to, 0, g.id)
-        commit(current)
-      }
+      if (drag?.live) commit(drag.live)
     }
-    setDragId(null)
-    setOverId(null)
+    setDrag(null)
   }
 
   return (
     <div>
-      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-5">
-        {sorted.map((el) => {
-          const id = String(el.key)
+      <div ref={gridRef} className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-5">
+        {shown.map((id) => {
+          const el = byId[id]
+          if (!el) return null
+          const lifted = drag?.id === id
           return (
             <div
               key={id}
               data-tile={id}
-              className={`touch-none transition ${storageKey ? 'cursor-grab active:cursor-grabbing' : ''} ${
-                dragId === id ? 'scale-95 opacity-60' : ''
-              } ${overId === id && dragId && dragId !== id ? 'rounded-[24px] ring-2 ring-brand ring-offset-2' : ''}`}
+              className={`touch-none transition-opacity ${storageKey ? 'cursor-grab active:cursor-grabbing' : ''} ${lifted ? 'opacity-30' : ''}`}
               onPointerDown={(e) => start(e, id)}
               onPointerMove={move}
               onPointerUp={end}
@@ -155,9 +161,18 @@ export function TileGrid({ children, orderKey }) {
           )
         })}
       </div>
+      {/* The lifted tile follows the pointer */}
+      {drag && (
+        <div
+          className="pointer-events-none fixed z-50 rotate-2 scale-105 drop-shadow-2xl"
+          style={{ left: drag.x, top: drag.y, width: drag.w, height: drag.h }}
+        >
+          {byId[drag.id]}
+        </div>
+      )}
       {storageKey && (
         <p className="mt-6 text-center text-xs text-slate-400">
-          Drag a button onto another to change the order.{' '}
+          Hold and drag a button to move it; it drops where you let go.{' '}
           {order.length > 0 && (
             <button onClick={() => commit([])} className="text-xs font-medium text-brand hover:underline">
               Reset order

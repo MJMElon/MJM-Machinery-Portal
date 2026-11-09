@@ -8,7 +8,7 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 // Diesel Manage: four modules. The landing page shows them as square icons;
 // inside a module the same four sit in the left sidebar. Which ones a person
 // gets depends on their Diesel access for the selected company (set under
-// Machinery Manage → CMMS User Setting).
+// Settings → User setting).
 export const DIESEL_MODULES = [
   { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
   { to: '/diesel/usage', label: 'Fuel Usage', Icon: IconFuel, need: (a) => a.can('usage', 'view'), hint: 'Every fill-up (cash and fleet card) by vehicle and driver' },
@@ -52,7 +52,7 @@ export default function DieselLayout() {
         title="No access to Fuel Manage"
         body={
           access.error ||
-          `You are not on the Fuel Manage user list of ${current.name}. A super admin gives access under Machinery Manage → CMMS User Setting.`
+          `You are not on the Fuel Manage user list of ${current.name}. A super admin gives access under Settings → User setting.`
         }
         onBack={back}
       />

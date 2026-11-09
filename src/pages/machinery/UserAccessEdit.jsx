@@ -84,7 +84,7 @@ export default function UserAccessEdit() {
   return (
     <div className="space-y-5">
       <PageHeader
-        backTo="/cmms/users"
+        backTo="/settings/users"
         backLabel="Back to user list"
         title={person ? userLabel(person) : 'User access'}
         subtitle={`${person?.email || ''} · access in ${current.name}${readOnly ? ' · view only' : ''}`}
@@ -92,7 +92,7 @@ export default function UserAccessEdit() {
           !readOnly && (
             <div className="flex items-center gap-3">
               {!dirty && saved && <span className="text-sm text-green-700">Saved</span>}
-              <Button variant="secondary" onClick={() => navigate('/cmms/users')}>
+              <Button variant="secondary" onClick={() => navigate('/settings/users')}>
                 Cancel
               </Button>
               <Button disabled={busy || !dirty} onClick={save}>

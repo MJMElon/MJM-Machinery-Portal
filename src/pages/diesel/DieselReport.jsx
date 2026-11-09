@@ -4,7 +4,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card } from '../../components/ui.jsx'
 import { IconDownload } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, MonthSelect, Stats, monthsOf } from '../../components/diesel/shared.jsx'
-import { CLAIM_STATUS, listCardData, listClaims, listPeople, listVehicles, personLabel } from '../../lib/diesel.js'
+import { CLAIM_STATUS, listCardData, listClaimLines, listClaims, listPeople, listVehicles, personLabel } from '../../lib/diesel.js'
 import { downloadCsv, money, num, sum, thisMonth } from '../../lib/format.js'
 
 // Report (Report access / admins): one month, cash claims (not rejected) +
@@ -20,17 +20,21 @@ export default function DieselReport() {
 
   const load = useCallback(async () => {
     try {
-      const [v, claims, cards, p] = await Promise.all([
+      const [v, claims, lines, cards, p] = await Promise.all([
         listVehicles(company.id),
         listClaims(company.id),
+        listClaimLines(company.id).catch(() => []),
         listCardData(company.id),
         listPeople(company.id)
       ])
       setVehicles(v)
       setPeople(p)
-      // One list of fill-ups: source = cash (not rejected) / card
+      const claimById = new Map(claims.map((c) => [c.id, c]))
+      // One list of fill-ups: claim lines (not from rejected claims) + admin-recorded card fill-ups
       setFills([
-        ...claims.filter((c) => c.status !== 'rejected').map((c) => ({ ...c, source: 'cash', driver: c.claimant_id })),
+        ...lines
+          .filter((l) => claimById.get(l.claim_id)?.status !== 'rejected')
+          .map((l) => ({ ...l, source: l.payment === 'fleet_card' ? 'card' : 'cash', driver: claimById.get(l.claim_id)?.claimant_id, status: claimById.get(l.claim_id)?.status })),
         ...cards.usage.map((u) => ({ ...u, source: 'card', driver: u.driver_id }))
       ])
       setError('')

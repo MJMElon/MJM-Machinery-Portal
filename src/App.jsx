@@ -36,6 +36,8 @@ export default function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
           <Route path="/settings" element={<CompanySettings />} />
+          <Route path="/settings/users" element={<CmmsUsers />} />
+          <Route path="/settings/users/:userId" element={<UserAccessEdit />} />
           <Route path="/admin/companies" element={<Navigate to="/settings" replace />} />
           <Route path="/cmms" element={<CmmsLayout />}>
             <Route index element={<Navigate to="/cmms/work" replace />} />
@@ -44,8 +46,7 @@ export default function App() {
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="suppliers" element={<SupplierList />} />
-            <Route path="users" element={<CmmsUsers />} />
-            <Route path="users/:userId" element={<UserAccessEdit />} />
+            <Route path="users" element={<Navigate to="/settings/users" replace />} />
           </Route>
           <Route path="/diesel" element={<DieselLayout />}>
             <Route index element={<DieselHome />} />
@@ -59,7 +60,7 @@ export default function App() {
             {/* old links */}
             <Route path="all" element={<Navigate to="/diesel/claims" replace />} />
             <Route path="vehicles" element={<Navigate to="/cmms/machines" replace />} />
-            <Route path="users" element={<Navigate to="/cmms/users" replace />} />
+            <Route path="users" element={<Navigate to="/settings/users" replace />} />
           </Route>
           {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
           <Route path="/machinery" element={<Navigate to="/cmms" replace />} />

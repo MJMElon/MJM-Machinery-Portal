@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, Field, SectionTitle, Spinner, TextArea, TextInput } from '../../components/ui.jsx'
 import { IconPlus, IconRefresh, IconTrash } from '../../components/icons.jsx'
@@ -71,6 +72,7 @@ export default function CompanySettings() {
             blockCount={blocks.length}
             onSaved={reloadCompanies}
           />
+          <UsersCard />
           <ModulesCard company={current} />
           {isSuperAdmin && <WhatsAppCard key={`wa-${current.id}`} company={current} onSaved={reloadCompanies} />}
         </div>
@@ -162,6 +164,23 @@ function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
           {busy ? 'Saving…' : 'Save'}
         </Button>
       </div>
+    </Card>
+  )
+}
+
+function UsersCard() {
+  return (
+    <Card className="flex items-center justify-between gap-3 p-5">
+      <div>
+        <SectionTitle>User setting</SectionTitle>
+        <p className="text-sm text-slate-600">Who may do what in Machinery Manage and Fuel Manage for this company.</p>
+      </div>
+      <Link
+        to="/settings/users"
+        className="inline-flex h-11 shrink-0 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark"
+      >
+        Open
+      </Link>
     </Card>
   )
 }

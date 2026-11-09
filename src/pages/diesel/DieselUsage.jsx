@@ -5,7 +5,7 @@ import { Badge, Button, Card, Select } from '../../components/ui.jsx'
 import { IconDownload, IconFuel, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, MonthSelect, Stats, StatusBadge, monthsOf } from '../../components/diesel/shared.jsx'
 import { UsageModal } from '../../components/diesel/CardModals.jsx'
-import { deleteCardRecord, listCardData, listClaims, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
+import { deleteCardRecord, listCardData, listClaimLines, listClaims, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, sum, thisMonth } from '../../lib/format.js'
 
 // Diesel Usage: every fill-up of the company in one log — cash claims (not
@@ -25,18 +25,28 @@ export default function DieselUsage() {
 
   const load = useCallback(async () => {
     try {
-      const [v, claims, cardData, p] = await Promise.all([
+      const [v, claims, lines, cardData, p] = await Promise.all([
         listVehicles(company.id),
         listClaims(company.id),
+        listClaimLines(company.id).catch(() => []),
         listCardData(company.id),
         listPeople(company.id)
       ])
       setVehicles(v)
       setCards(cardData.cards)
       setPeople(p)
+      const claimById = new Map(claims.map((c) => [c.id, c]))
       setFills(
         [
-          ...claims.filter((c) => c.status !== 'rejected').map((c) => ({ ...c, source: 'cash', driver: c.claimant_id })),
+          ...lines
+            .filter((l) => claimById.get(l.claim_id)?.status !== 'rejected')
+            .map((l) => ({
+              ...l,
+              source: l.payment === 'fleet_card' ? 'card' : 'cash',
+              driver: claimById.get(l.claim_id)?.claimant_id,
+              status: claimById.get(l.claim_id)?.status,
+              fromClaim: true
+            })),
           ...cardData.usage.map((u) => ({ ...u, source: 'card', driver: u.driver_id }))
         ].sort((a, b) => (a.fill_date < b.fill_date ? 1 : a.fill_date > b.fill_date ? -1 : 0))
       )
@@ -88,7 +98,8 @@ export default function DieselUsage() {
         { header: 'Litres', value: (r) => Number(r.litres) },
         { header: 'Amount (RM)', value: (r) => Number(r.amount) },
         { header: 'Station', value: (r) => r.station },
-        { header: 'Status', value: (r) => (r.source === 'cash' ? r.status : '') }
+        { header: 'Subsidised', value: (r) => (r.subsidised ? 'yes' : '') },
+        { header: 'Status', value: (r) => (r.fromClaim ? r.status : '') }
       ],
       [...rows].reverse()
     )
@@ -141,6 +152,7 @@ export default function DieselUsage() {
             {rows.map((r) => (
               <div key={`${r.source}-${r.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
                 <Badge color={r.source === 'cash' ? 'amber' : 'blue'}>{r.source === 'cash' ? 'Cash' : 'Card'}</Badge>
+                {r.subsidised && <Badge color="green">Subsidy</Badge>}
                 <span className="w-24 text-slate-500">{day(r.fill_date)}</span>
                 <span className="font-medium text-slate-800">{vehicleLabel(vById.get(r.vehicle_id))}</span>
                 <span className="text-slate-500">
@@ -153,11 +165,11 @@ export default function DieselUsage() {
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
-                {r.source === 'cash' && <StatusBadge status={r.status} />}
+                {r.fromClaim && r.status && <StatusBadge status={r.status} />}
                 <span className="flex-1" />
                 <span className="w-20 text-right">{num(r.litres, 2)} L</span>
                 <span className="w-28 whitespace-nowrap text-right font-medium">{money(r.amount)}</span>
-                {r.source === 'card' && access.can('usage', 'delete') ? (
+                {r.source === 'card' && !r.fromClaim && access.can('usage', 'delete') ? (
                   <button
                     onClick={() => removeUsage(r.id)}
                     aria-label="Delete fill-up"
