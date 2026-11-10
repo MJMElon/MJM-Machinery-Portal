@@ -183,21 +183,38 @@ export function parseReceipt(text) {
   if (out.litres && out.unit_price && !out.amount) out.amount = Math.round(out.litres * out.unit_price * 100) / 100
   if (out.litres && out.amount && !out.unit_price) out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
 
-  // Receipt / invoice / document number: a labelled line ("Receipt No",
-  // "Resit No", "Invoice No", "Doc No", "Trans No", "Ref No", "Bil No"); the
-  // value may sit on the same line or on the next one. Dates, times, amounts
-  // and phone / registration numbers are never taken.
+  // Receipt number = the TAX INVOICE number. Search in order of preference:
+  // 1. a line with "Tax Invoice" (number on the same line or the next lines),
+  // 2. "Invoice No" / "Inv No",
+  // 3. "Receipt / Resit / Doc / Trans / Ref / Bil / Slip No".
+  // The value must contain a digit; dates, times, amounts, phone numbers,
+  // GST/SST ids and vehicle registrations are never taken.
   const bad = (v) =>
-    /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v) || /^\d{1,2}:\d{2}/.test(v) || /^\d{1,5}[.,]\d{2}$/.test(v) ||
-    /^(NO|NUM|NUMBER|RM|TEL|GST|SST)$/i.test(v) || /^0[1-9]\d{7,9}$/.test(v)
-  const LABEL = /\b(?:RECEIPT|RCPT|RESIT|INVOICE|INV|BIL|BILL|DOC(?:UMENT)?|TRANS(?:ACTION)?|TXN|REF(?:ERENCE)?|TICKET|SLIP|CHIT)\b\s*(?:NO|NUM|NUMBER|#|ID)?\s*[:.#-]?\s*/i
+    !/\d/.test(v) || /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v) || /^\d{1,2}:\d{2}/.test(v) ||
+    /^\d{1,5}[.,]\d{2}$/.test(v) || /^0[1-9]\d{7,9}$/.test(v) || /^[A-Z]{1,3}\d{1,4}[A-Z]?$/i.test(v) ||
+    /^(RM|GST|SST|TEL|NO)\d*$/i.test(v)
+  const TIERS = [
+    /\bTAX\s*INV(?:OICE)?\b/i,
+    /\bINV(?:OICE)?\b/i,
+    /\b(?:RECEIPT|RCPT|RESIT|BIL|BILL|DOC(?:UMENT)?|TRANS(?:ACTION)?|TXN|REF(?:ERENCE)?|TICKET|SLIP|CHIT)\b/i
+  ]
+  const TAIL = /^\s*(?:NO|NUM|NUMBER|#|ID)?\s*[:.#-]?\s*/i
+  const pick = (x) => {
+    const found = x.match(/[A-Z0-9][A-Z0-9/-]{3,24}/gi) || []
+    return found.find((v) => !bad(v))
+  }
+  // Within a tier a number on the label's own line wins over one on the
+  // following lines (a bare "TAX INVOICE" title must not grab the next text).
   let rn
-  for (let i = 0; i < lines.length && !rn; i++) {
-    const m = lines[i].match(LABEL)
-    if (!m) continue
-    const rest = lines[i].slice(m.index + m[0].length).trim()
-    const cand = [rest, lines[i + 1] || ''].map((x) => (x.match(/[A-Z0-9][A-Z0-9/-]{3,24}/i) || [])[0]).filter(Boolean)
-    rn = cand.find((v) => !bad(v))
+  for (const re of TIERS) {
+    const hits = []
+    lines.forEach((l, i) => {
+      const m = l.match(re)
+      if (m) hits.push([i, l.slice(m.index + m[0].length).replace(TAIL, '')])
+    })
+    for (const [, rest] of hits) if ((rn = pick(rest))) break
+    for (const [i] of hits) if (!rn && (rn = pick(lines[i + 1] || '') || pick(lines[i + 2] || ''))) break
+    if (rn) break
   }
   if (!rn) {
     const m = t.match(/\b(?:NO|NUM)\s*[:.#]?\s*([A-Z]{0,4}\d{6,16})\b/i)
