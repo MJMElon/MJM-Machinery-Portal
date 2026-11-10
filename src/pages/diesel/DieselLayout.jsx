@@ -1,4 +1,4 @@
-import { Outlet, useMatch, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt } from '../../components/icons.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
@@ -22,6 +22,7 @@ export default function DieselLayout() {
   const { isSuperAdmin } = useAuth()
   const access = useDieselAccess(current?.diesel_enabled ? current.id : null)
   const landing = Boolean(useMatch({ path: '/diesel', end: true }))
+  const location = useLocation()
   const back = () => navigate('/')
 
   if (!loaded || !access.loaded)
@@ -59,17 +60,21 @@ export default function DieselLayout() {
     )
 
   const nav = DIESEL_MODULES.filter((n) => n.need(access))
+  // Inside a claim (view / edit / new) only the page's own "Back to claim list" shows.
+  const deep = location.pathname.split('/').filter(Boolean).length > 2
 
   // Landing page and every module: just "Back to CMMS main page" and the content.
   // The top bar names the module (Fuel Claims, Fuel Usage, …).
   return (
     <div>
-      <button
-        onClick={back}
-        className="-ml-2 mb-4 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand print:hidden"
-      >
-        <IconBack width={16} height={16} /> Back to CMMS main page
-      </button>
+      {!deep && (
+        <button
+          onClick={back}
+          className="-ml-2 mb-4 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand print:hidden"
+        >
+          <IconBack width={16} height={16} /> Back to CMMS main page
+        </button>
+      )}
       <Outlet context={{ company: current, access }} />
       {landing && !access.claim && !access.report && (
         <p className="mx-auto mt-6 max-w-xl rounded-xl bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
