@@ -155,8 +155,9 @@ export function parseReceipt(text) {
     if (c && MON[c[2].toUpperCase()]) return toIso(c[3], MON[c[2].toUpperCase()], c[1])
     return null
   }
-  const dateLine = lines.find((l) => /\b(DATE|TARIKH|TKH|DT)\b/i.test(l))
-  out.fill_date = (dateLine && findDate(dateLine)) || findDate(t) || undefined
+  // The value may be on the label's line or the next one (Setel: "Created on").
+  const di = lines.findIndex((l) => /\b(DATE|TARIKH|TKH|DT|CREATED\s*ON)\b/i.test(l))
+  out.fill_date = (di >= 0 && (findDate(lines[di]) || findDate(lines[di + 1] || ''))) || findDate(t) || undefined
   if (!out.fill_date) delete out.fill_date
 
   // Litres: "12.345 L", "LITRE 45.67", "45.67 LTR", "QTY 40.12"
@@ -182,6 +183,10 @@ export function parseReceipt(text) {
   // If we have litres and unit price but no amount (or vice versa), fill the gap
   if (out.litres && out.unit_price && !out.amount) out.amount = Math.round(out.litres * out.unit_price * 100) / 100
   if (out.litres && out.amount && !out.unit_price) out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
+  // Subsidised receipts (MySubsidy / KPDN) print the pump price but charge
+  // less: the claim keeps the price actually paid.
+  if (out.litres && out.amount && out.unit_price && Math.abs(out.litres * out.unit_price - out.amount) > 0.05)
+    out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
 
   // Receipt number = the TAX INVOICE number. Search in order of preference:
   // 1. a line with "Tax Invoice" (number on the same line or the next lines),
@@ -200,7 +205,7 @@ export function parseReceipt(text) {
   ]
   const TAIL = /^\s*(?:NO|NUM|NUMBER|#|ID)?\s*[:.#-]?\s*/i
   const pick = (x) => {
-    const found = x.match(/[A-Z0-9][A-Z0-9/-]{3,24}/gi) || []
+    const found = x.match(/[A-Z0-9][A-Z0-9/-]{3,40}/gi) || []
     return found.find((v) => !bad(v))
   }
   // Within a tier a number on the label's own line wins over one on the

@@ -3,13 +3,14 @@ import { useNavigate, useOutletContext, useParams, useSearchParams } from 'react
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Modal } from '../../components/ui.jsx'
 import { IconCheck, IconPencil, IconPrint, IconTrash, IconX } from '../../components/icons.jsx'
-import { ErrorBox, Loading, ReceiptButton, StatusBadge, inputCls } from '../../components/diesel/shared.jsx'
+import { ErrorBox, Loading, StatusBadge, inputCls } from '../../components/diesel/shared.jsx'
 import {
   deleteClaim,
   getClaim,
   getClaimLines,
   listPeople,
   listVehicles,
+  openReceipt,
   personLabel,
   receiptUrl,
   removeReceipt,
@@ -106,6 +107,43 @@ export default function ClaimView() {
   if (loading) return <Loading />
 
   const claimantName = own ? user.fullName || user.email : personLabel(person.get(claim?.claimant_id))
+  // Read-only boxes that mirror the claim form's cells.
+  const box = 'flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm text-slate-800'
+  const cell = `${box} h-9`
+  const tall = `${box} h-[78px] items-start py-2 leading-snug`
+  const showApproval = access.admin || access.pay
+
+  const approval = !claim ? null : !canReview ? (
+    <p className="text-xs text-slate-500">{own ? 'Your own claim' : claim.status === 'paid' ? 'Paid' : 'Not your approvee'}</p>
+  ) : claim.status === 'pending' && access.admin ? (
+    <div className="flex flex-col gap-2">
+      <Button size="sm" disabled={busy} onClick={() => review('approved')}>
+        <IconCheck width={16} height={16} /> Approve
+      </Button>
+      <Button size="sm" variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
+        <IconX width={16} height={16} /> Reject
+      </Button>
+    </div>
+  ) : claim.status === 'approved' ? (
+    <div className="flex flex-col gap-2">
+      {access.pay && (
+        <Button size="sm" disabled={busy} onClick={() => review('paid')}>
+          Mark paid
+        </Button>
+      )}
+      {access.admin && (
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
+          Back to pending
+        </Button>
+      )}
+    </div>
+  ) : claim.status === 'rejected' && access.admin ? (
+    <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending', null)}>
+      Back to pending
+    </Button>
+  ) : (
+    <p className="text-xs text-slate-500">{claim.status === 'paid' ? 'Paid' : '—'}</p>
+  )
 
   return (
     <div className="space-y-4">
@@ -113,7 +151,16 @@ export default function ClaimView() {
         <PageHeader
           backTo="/diesel/claims"
           backLabel="Back to claim list"
-          title={claim ? `Fuel claim ${claimNo(claim, 0)}` : 'Fuel claim'}
+          title={
+            claim ? (
+              <span className="inline-flex flex-wrap items-center gap-3">
+                Fuel claim #{claimNo(claim, 0)}
+                <StatusBadge status={claim.status} />
+              </span>
+            ) : (
+              'Fuel claim'
+            )
+          }
           right={
             claim && (
               <div className="flex flex-wrap gap-2">
@@ -139,87 +186,146 @@ export default function ClaimView() {
 
       {claim && (
         <>
-          {/* The claim form (prints) */}
-          <Card className="p-5 sm:p-6 print:border-0 print:p-0 print:shadow-none">
-            <div className="mb-4 flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+          <Card className="overflow-hidden print:border-0 print:shadow-none">
+            {/* Printout header only: the screen already shows the claim number in the page header */}
+            <div className="hidden items-start justify-between border-b border-slate-200 p-5 print:flex">
               <div>
-                <p className="font-display text-xl font-extrabold tracking-tight text-slate-900">Fuel Claim</p>
+                <p className="font-display text-xl font-extrabold tracking-tight text-slate-900">Fuel claim #{claimNo(claim, 0)}</p>
                 <p className="text-sm text-slate-600">{company.name}</p>
                 <p className="text-sm text-slate-600">Claimant: {claimantName}</p>
-                <p className="text-sm text-slate-600">Submission date: {day(claim.submitted_on || claim.fill_date)}</p>
               </div>
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Claim no.</p>
-                <p className="font-display text-2xl font-extrabold tabular-nums text-slate-900">{claimNo(claim, 0)}</p>
+              <div className="text-right text-sm text-slate-600">
+                <p>Submission date: {day(claim.submitted_on || claim.fill_date)}</p>
                 <StatusBadge status={claim.status} />
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-sm text-slate-600 print:hidden">
+              <span>Submission date: <b className="text-slate-800">{day(claim.submitted_on || claim.fill_date)}</b></span>
+              <span>Total amount: <b className="text-slate-800">{money(total)}</b></span>
+              <span>Payable amount: <b className="text-brand-dark">{money(payable)}</b></span>
+              <span>Total litres: <b className="text-slate-800">{num(litres, 2)} L</b></span>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="w-full min-w-[1180px] border-t border-slate-200 text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="py-2 pr-2">#</th>
-                    <th className="py-2 pr-2">Receipt date</th>
-                    <th className="py-2 pr-2">Vehicle</th>
-                    <th className="py-2 pr-2">Receipt no.</th>
-                    <th className="py-2 pr-2 text-right">Litre</th>
-                    <th className="py-2 pr-2 text-right">Unit price</th>
-                    <th className="py-2 pr-2 text-right">Amount</th>
-                    <th className="py-2 pr-2">Payment</th>
-                    <th className="py-2 pr-2">Description</th>
-                    <th className="py-2 pr-2">Remark</th>
-                    <th className="py-2 text-right">Payable</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="w-10 px-3 py-2.5">#</th>
+                    <th className="w-44 px-2 py-2.5">Vehicle no.</th>
+                    <th className="w-44 px-2 py-2.5">Receipt</th>
+                    <th className="w-40 px-2 py-2.5">Description</th>
+                    <th className="w-40 px-2 py-2.5">Fuel</th>
+                    <th className="w-36 px-2 py-2.5 text-right">Total fuel expenses</th>
+                    <th className="w-36 px-2 py-2.5 text-right">Claim payable amount</th>
+                    <th className="w-40 px-2 py-2.5">Payment method</th>
+                    <th className="w-44 px-2 py-2.5">Remark</th>
+                    <th className="w-40 px-2 py-2.5">Attachment</th>
+                    {showApproval && <th className="w-36 px-2 py-2.5 print:hidden">Approval</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {lines.map((l, i) => (
-                    <tr key={l.id}>
-                      <td className="py-2 pr-2 text-slate-500">{i + 1}</td>
-                      <td className="py-2 pr-2">{day(l.fill_date)}</td>
-                      <td className="py-2 pr-2">{l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : '—'}</td>
-                      <td className="py-2 pr-2">{l.receipt_no || '—'}</td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{l.litres != null ? num(l.litres, 2) : '—'}</td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{money(l.amount)}</td>
-                      <td className="py-2 pr-2">
-                        {l.payment === 'fleet_card' ? 'Fleet card (KPDN)' : 'Cash'}
+                    <tr key={l.id} className="align-top">
+                      <td className="px-3 py-3 text-slate-500">{i + 1}</td>
+                      <td className="px-2 py-3">
+                        <div className={tall}>{l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : 'No vehicle'}</div>
                       </td>
-                      <td className="py-2 pr-2">{[l.description, l.station].filter(Boolean).join(' · ') || '—'}</td>
-                      <td className="py-2 pr-2 text-slate-600">{l.remark || '—'}</td>
-                      <td className="py-2 text-right font-semibold tabular-nums">{money(l.payment === 'cash' ? l.amount : 0)}</td>
+                      <td className="px-2 py-3">
+                        <div className="space-y-1.5">
+                          <div className={cell}>{day(l.fill_date)}</div>
+                          <div className={`${cell} truncate`} title={l.receipt_no || ''}>{l.receipt_no || '—'}</div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className={tall}>{[l.description, l.station].filter(Boolean).join(' · ') || '—'}</div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className="space-y-1.5">
+                          <div className={`${cell} justify-between tabular-nums`}>
+                            <span>{l.litres != null ? num(l.litres, 2) : '—'}</span>
+                            <span className="text-xs text-slate-400">L</span>
+                          </div>
+                          <div className={`${cell} justify-between tabular-nums`}>
+                            <span>{l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</span>
+                            <span className="text-xs text-slate-400">RM/L</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className={`${tall} justify-end font-semibold tabular-nums`}>{money(l.amount)}</div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className={`${tall} justify-end font-bold tabular-nums text-brand-dark`}>{money(l.payment === 'cash' ? l.amount : 0)}</div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className="space-y-1.5">
+                          <div className={cell}>{l.payment === 'fleet_card' ? 'Fleet card' : 'Cash'}</div>
+                          <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className={`${tall} overflow-hidden text-slate-600`}>{l.remark || '—'}</div>
+                      </td>
+                      <td className="px-2 py-3 print:hidden">
+                        {l.receipt_path ? (
+                          <button
+                            type="button"
+                            onClick={() => openReceipt(l.receipt_path).catch((e) => window.alert(e.message))}
+                            className="flex h-[78px] w-full items-center justify-center gap-2 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 hover:border-brand"
+                            title="Open receipt"
+                          >
+                            {imgs[l.id] ? (
+                              <img src={imgs[l.id]} alt={`Receipt ${i + 1}`} className="h-full w-full rounded object-contain" />
+                            ) : (
+                              <span className="text-xs font-medium text-brand">Open PDF</span>
+                            )}
+                          </button>
+                        ) : (
+                          <div className={`${tall} justify-center text-xs text-red-500`}>No receipt</div>
+                        )}
+                      </td>
+                      <td className="hidden px-2 py-3 text-xs text-slate-500 print:table-cell">{l.receipt_path ? `Receipt ${i + 1}` : 'No receipt'}</td>
+                      {showApproval && i === 0 && (
+                        <td className="px-2 py-3 print:hidden" rowSpan={lines.length}>
+                          {approval}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-slate-300 font-semibold text-slate-900">
-                    <td className="py-2 pr-2" colSpan={4}>
+                  <tr className="border-t border-slate-200 bg-slate-50/60 text-sm font-semibold text-slate-800">
+                    <td className="px-3 py-2.5" colSpan={4}>
                       Total
                     </td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{num(litres, 2)} L</td>
-                    <td />
-                    <td className="py-2 pr-2 text-right tabular-nums">{money(total)}</td>
-                    <td colSpan={3} className="py-2 pr-2 text-right">
-                      Payable amount
-                    </td>
-                    <td className="py-2 text-right text-lg tabular-nums text-brand-dark">{money(payable)}</td>
+                    <td className="px-2 py-2.5 text-right">{num(litres, 2)} L</td>
+                    <td className="px-2 py-2.5 text-right">{money(total)}</td>
+                    <td className="px-2 py-2.5 text-right text-brand-dark">{money(payable)}</td>
+                    <td colSpan={showApproval ? 4 : 3} />
                   </tr>
                 </tfoot>
               </table>
             </div>
-            {claim.notes && <p className="mt-3 text-sm text-slate-600">Notes: {claim.notes}</p>}
-            {claim.reviewed_at && (
-              <p className="mt-2 text-sm text-slate-600">
-                Reviewed {day(claim.reviewed_at.slice(0, 10))} by {personLabel(person.get(claim.reviewed_by)) || 'admin'}
-                {claim.review_note ? ` · ${claim.review_note}` : ''}
-              </p>
+            {(claim.notes || claim.reviewed_at || payable === 0) && (
+              <div className="space-y-1 px-4 py-3 text-sm text-slate-600">
+                {claim.notes && <p>Notes: {claim.notes}</p>}
+                {claim.reviewed_at && (
+                  <p>
+                    Reviewed {day(claim.reviewed_at.slice(0, 10))} by {personLabel(person.get(claim.reviewed_by)) || 'admin'}
+                    {claim.review_note ? ` · ${claim.review_note}` : ''}
+                  </p>
+                )}
+                {payable === 0 && <Badge>Nothing to pay back — fleet card only</Badge>}
+              </div>
             )}
-            <div className="mt-10 hidden grid-cols-3 gap-8 text-xs text-slate-500 print:grid">
+            <div className="mx-5 mt-6 hidden grid-cols-3 gap-8 text-xs text-slate-500 print:grid">
               <div className="border-t border-slate-400 pt-1">Claimant signature</div>
               <div className="border-t border-slate-400 pt-1">Checked by</div>
               <div className="border-t border-slate-400 pt-1">Approved by</div>
             </div>
             {/* Receipts on the printout */}
-            <div className="mt-6 hidden grid-cols-2 gap-4 print:grid">
+            <div className="m-5 hidden grid-cols-2 gap-4 print:grid">
               {lines.map((l, i) => imgs[l.id] && (
                 <figure key={l.id}>
                   <img src={imgs[l.id]} alt={`Receipt ${i + 1}`} className="max-h-[45vh] rounded border border-slate-200" />
@@ -228,74 +334,6 @@ export default function ClaimView() {
               ))}
             </div>
           </Card>
-
-          {/* Receipts + review (screen) */}
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] print:hidden">
-            <Card className="p-4">
-              <p className="mb-2 font-semibold text-slate-800">Receipts</p>
-              {lines.every((l) => !l.receipt_path) ? (
-                <p className="text-sm text-slate-500">No receipt attached.</p>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {lines.map((l, i) =>
-                    l.receipt_path ? (
-                      <div key={l.id} className="rounded-xl border border-slate-200 p-2">
-                        {imgs[l.id] ? (
-                          <img src={imgs[l.id]} alt={`Receipt ${i + 1}`} className="h-40 w-full rounded-lg object-contain" />
-                        ) : (
-                          <p className="py-6 text-center text-xs text-slate-500">PDF receipt</p>
-                        )}
-                        <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
-                          <span>
-                            #{i + 1} · {money(l.amount)}
-                          </span>
-                          <ReceiptButton path={l.receipt_path} />
-                        </div>
-                      </div>
-                    ) : null
-                  )}
-                </div>
-              )}
-            </Card>
-
-            {(access.admin || access.pay) && (
-              <Card className="p-4">
-                <p className="mb-2 font-semibold text-slate-800">Review</p>
-                {!canReview ? (
-                  <p className="text-sm text-slate-500">{own ? 'Your own claim — another reviewer handles it.' : 'You are not the approver for this person.'}</p>
-                ) : claim.status === 'pending' && access.admin ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" disabled={busy} onClick={() => review('approved')}>
-                      <IconCheck width={16} height={16} /> Approve
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
-                      <IconX width={16} height={16} /> Reject
-                    </Button>
-                  </div>
-                ) : claim.status === 'approved' ? (
-                  <div className="flex flex-wrap gap-2">
-                    {access.pay && (
-                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => review('paid')}>
-                        Mark paid {payable > 0 ? money(payable) : ''}
-                      </Button>
-                    )}
-                    {access.admin && (
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
-                        Back to pending
-                      </Button>
-                    )}
-                  </div>
-                ) : claim.status === 'rejected' && access.admin ? (
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending', null)}>
-                    Back to pending
-                  </Button>
-                ) : (
-                  <p className="text-sm text-slate-500">{claim.status === 'paid' ? 'Paid.' : 'No action for you here.'}</p>
-                )}
-                {payable === 0 && <Badge className="mt-3">Nothing to pay back — fleet card only</Badge>}
-              </Card>
-            )}
-          </div>
         </>
       )}
 
