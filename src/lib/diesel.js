@@ -162,9 +162,10 @@ export async function reviewClaim(id, status, note) {
 // ---- claim lines (one per receipt) ----------------------------------------------
 
 export const PAYMENTS = [
-  ['cash', 'Cash — non-subsidised, claim back'],
-  ['fleet_card', 'Fleet card — KPDN subsidised, no claim']
+  ['cash', 'Cash'],
+  ['fleet_card', 'Fleet card']
 ]
+export const PAYMENT_NOTE = { cash: 'Non-subsidised', fleet_card: 'KPDN subsidy' }
 
 export const LINES = 'machinery_diesel_claim_lines'
 

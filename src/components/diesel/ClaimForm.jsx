@@ -4,6 +4,7 @@ import { IconPlus, IconTrash } from '../icons.jsx'
 import { F, inputCls, opt } from './shared.jsx'
 import {
   PAYMENTS,
+  PAYMENT_NOTE,
   compressReceipt,
   createClaimWithLines,
   removeReceipt,
@@ -239,7 +240,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                 <th className="w-40 px-2 py-2.5">Fuel</th>
                 <th className="w-36 px-2 py-2.5 text-right">Total fuel expenses</th>
                 <th className="w-36 px-2 py-2.5 text-right">Claim payable amount</th>
-                <th className="w-52 px-2 py-2.5">Payment method</th>
+                <th className="w-40 px-2 py-2.5">Payment method</th>
                 <th className="w-44 px-2 py-2.5">Remark</th>
                 <th className="w-48 px-2 py-2.5">Attachment</th>
                 <th className="w-12 px-2 py-2.5" />
@@ -286,9 +287,14 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                       </Unit>
                     </td>
                     <td className="px-2 py-3">
-                      <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={tall} title="Payment method">
-                        {opt(PAYMENTS)}
-                      </select>
+                      <div className="space-y-1.5">
+                        <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={cell} title="Payment method">
+                          {opt(PAYMENTS)}
+                        </select>
+                        <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                          {PAYMENT_NOTE[l.payment]}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-2 py-3">
                       <textarea value={l.remark} maxLength={300} placeholder="Remark" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${tall} resize-none py-2`} title="Remark" />

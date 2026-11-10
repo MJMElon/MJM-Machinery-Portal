@@ -134,14 +134,30 @@ export function parseReceipt(text) {
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
   const out = {}
 
-  // Date: dd/mm/yyyy, dd-mm-yy, yyyy-mm-dd
-  const d1 = t.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/)
-  const d2 = t.match(/\b(20\d{2})[/.-](\d{1,2})[/.-](\d{1,2})\b/)
-  if (d2) out.fill_date = `${d2[1]}-${d2[2].padStart(2, '0')}-${d2[3].padStart(2, '0')}`
-  else if (d1) {
-    const y = d1[3].length === 2 ? `20${d1[3]}` : d1[3]
-    out.fill_date = `${y}-${d1[2].padStart(2, '0')}-${d1[1].padStart(2, '0')}`
+  // Date. Prefer a line labelled DATE / TARIKH / TKH; accept 09/11/2026,
+  // 09-11-26, 09.11.2026, 2026-11-09, 09 Nov 2026, 9-NOV-26. OCR often reads
+  // 0 as O and 1 as I/l in numbers, so normalise those first.
+  const fix = (x) => x.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1')
+  const MON = { JAN: 1, FEB: 2, MAC: 3, MAR: 3, APR: 4, MAY: 5, MEI: 5, JUN: 6, JUL: 7, AUG: 8, OGO: 8, SEP: 9, OCT: 10, OKT: 10, NOV: 11, DEC: 12, DIS: 12 }
+  const toIso = (y, m, d) => {
+    y = String(y).length === 2 ? `20${y}` : String(y)
+    m = Number(m)
+    d = Number(d)
+    if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31 && Number(y) >= 2015 && Number(y) <= 2100)) return null
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   }
+  const findDate = (src) => {
+    const a = fix(src).match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/)
+    if (a) return toIso(a[3], a[2], a[1])
+    const b = fix(src).match(/\b(20\d{2})[/.-](\d{1,2})[/.-](\d{1,2})\b/)
+    if (b) return toIso(b[1], b[2], b[3])
+    const c = src.match(/\b(\d{1,2})[ \t/-]*([A-Za-z]{3})[A-Za-z]*[ \t/,-]*(\d{4}|\d{2})\b/)
+    if (c && MON[c[2].toUpperCase()]) return toIso(c[3], MON[c[2].toUpperCase()], c[1])
+    return null
+  }
+  const dateLine = lines.find((l) => /\b(DATE|TARIKH|TKH|DT)\b/i.test(l))
+  out.fill_date = (dateLine && findDate(dateLine)) || findDate(t) || undefined
+  if (!out.fill_date) delete out.fill_date
 
   // Litres: "12.345 L", "LITRE 45.67", "45.67 LTR", "QTY 40.12"
   const lit =
@@ -167,11 +183,26 @@ export function parseReceipt(text) {
   if (out.litres && out.unit_price && !out.amount) out.amount = Math.round(out.litres * out.unit_price * 100) / 100
   if (out.litres && out.amount && !out.unit_price) out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
 
-  // Receipt / invoice / document number: a label followed by a code. Dates,
-  // times and amounts are never taken as the number.
-  const rn = [...t.matchAll(/\b(?:RECEIPT|RCPT|RESIT|INVOICE|INV|BILL|DOC(?:UMENT)?|TRANS(?:ACTION)?|TXN|REF(?:ERENCE)?|TICKET|SLIP)\s*(?:NO|NUM|NUMBER|#|ID)?\s*[:.#-]?\s*([A-Z0-9][A-Z0-9/-]{3,24})\b/gi)]
-    .map((m) => m[1])
-    .find((v) => !/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(v) && !/^\d{1,2}:\d{2}/.test(v) && !/^\d{1,5}\.\d{2}$/.test(v) && !/^(NO|NUM|NUMBER)$/i.test(v))
+  // Receipt / invoice / document number: a labelled line ("Receipt No",
+  // "Resit No", "Invoice No", "Doc No", "Trans No", "Ref No", "Bil No"); the
+  // value may sit on the same line or on the next one. Dates, times, amounts
+  // and phone / registration numbers are never taken.
+  const bad = (v) =>
+    /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v) || /^\d{1,2}:\d{2}/.test(v) || /^\d{1,5}[.,]\d{2}$/.test(v) ||
+    /^(NO|NUM|NUMBER|RM|TEL|GST|SST)$/i.test(v) || /^0[1-9]\d{7,9}$/.test(v)
+  const LABEL = /\b(?:RECEIPT|RCPT|RESIT|INVOICE|INV|BIL|BILL|DOC(?:UMENT)?|TRANS(?:ACTION)?|TXN|REF(?:ERENCE)?|TICKET|SLIP|CHIT)\b\s*(?:NO|NUM|NUMBER|#|ID)?\s*[:.#-]?\s*/i
+  let rn
+  for (let i = 0; i < lines.length && !rn; i++) {
+    const m = lines[i].match(LABEL)
+    if (!m) continue
+    const rest = lines[i].slice(m.index + m[0].length).trim()
+    const cand = [rest, lines[i + 1] || ''].map((x) => (x.match(/[A-Z0-9][A-Z0-9/-]{3,24}/i) || [])[0]).filter(Boolean)
+    rn = cand.find((v) => !bad(v))
+  }
+  if (!rn) {
+    const m = t.match(/\b(?:NO|NUM)\s*[:.#]?\s*([A-Z]{0,4}\d{6,16})\b/i)
+    if (m && !bad(m[1])) rn = m[1]
+  }
   if (rn) out.receipt_no = rn
 
   // Station brand
