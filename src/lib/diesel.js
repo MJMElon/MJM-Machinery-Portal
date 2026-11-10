@@ -239,6 +239,7 @@ async function replaceLines(claimId, lines) {
     receipt_no: l.receipt_no || null,
     station: l.station || null,
     odometer_km: l.odometer_km === '' || l.odometer_km == null ? null : Number(l.odometer_km),
+    description: l.description || null,
     remark: l.remark || null,
     receipt_path: l.receipt_path || null
   }))

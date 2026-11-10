@@ -166,6 +166,7 @@ export default function ClaimView() {
                     <th className="py-2 pr-2 text-right">Unit price</th>
                     <th className="py-2 pr-2 text-right">Amount</th>
                     <th className="py-2 pr-2">Payment</th>
+                    <th className="py-2 pr-2">Description</th>
                     <th className="py-2 pr-2">Remark</th>
                     <th className="py-2 text-right">Payable</th>
                   </tr>
@@ -183,7 +184,8 @@ export default function ClaimView() {
                       <td className="py-2 pr-2">
                         {l.payment === 'fleet_card' ? 'Fleet card (KPDN)' : 'Cash'}
                       </td>
-                      <td className="py-2 pr-2 text-slate-600">{[l.station, l.remark].filter(Boolean).join(' · ') || '—'}</td>
+                      <td className="py-2 pr-2">{[l.description, l.station].filter(Boolean).join(' · ') || '—'}</td>
+                      <td className="py-2 pr-2 text-slate-600">{l.remark || '—'}</td>
                       <td className="py-2 text-right font-semibold tabular-nums">{money(l.payment === 'cash' ? l.amount : 0)}</td>
                     </tr>
                   ))}
@@ -196,7 +198,7 @@ export default function ClaimView() {
                     <td className="py-2 pr-2 text-right tabular-nums">{num(litres, 2)} L</td>
                     <td />
                     <td className="py-2 pr-2 text-right tabular-nums">{money(total)}</td>
-                    <td colSpan={2} className="py-2 pr-2 text-right">
+                    <td colSpan={3} className="py-2 pr-2 text-right">
                       Payable amount
                     </td>
                     <td className="py-2 text-right text-lg tabular-nums text-brand-dark">{money(payable)}</td>

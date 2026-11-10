@@ -31,11 +31,22 @@ const blankLine = (mine) => ({
   subsidised: false,
   receipt_no: '',
   station: '',
-  remark: fuelWord(mine), // "Description": the fuel product
+  description: fuelWord(mine), // the fuel product
+  remark: '',
   receipt_path: '',
   file: null,
   scan: null
 })
+
+// An input with its unit printed inside the box (right, or left for RM).
+function Unit({ unit, left, children }) {
+  return (
+    <div className="relative">
+      {children}
+      <span className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400 ${left ? 'left-3' : 'right-3'}`}>{unit}</span>
+    </div>
+  )
+}
 
 export function ClaimForm({ company, user, vehicles, claim, lines: initialLines, onSaved, onCancel }) {
   const usable = useMemo(() => vehicles.filter((v) => v.is_active || initialLines?.some((l) => l.vehicle_id === v.id)), [vehicles, initialLines])
@@ -51,7 +62,8 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
           amount: l.amount ?? '',
           receipt_no: l.receipt_no || '',
           station: l.station || '',
-          remark: l.remark || '',
+          description: l.description || (l.remark && /^(diesel|petrol)/i.test(l.remark) ? l.remark : '') || '',
+          remark: l.remark && !/^(diesel|petrol)/i.test(l.remark) ? l.remark : '',
           receipt_path: l.receipt_path || '',
           key: l.id
         }))
@@ -79,7 +91,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   }
   const setVehicle = (l, vehicleId) => {
     const v = vById[vehicleId]
-    update(l.key, { vehicle_id: vehicleId, ...(l.remark === 'Diesel' || l.remark === 'Petrol' || !l.remark ? { remark: fuelWord(v) } : {}) })
+    update(l.key, { vehicle_id: vehicleId, ...(l.description === 'Diesel' || l.description === 'Petrol' || !l.description ? { description: fuelWord(v) } : {}) })
   }
   // Fleet card = KPDN subsidised diesel; cash at the pump = non-subsidised.
   const setPayment = (l, payment) => update(l.key, { payment, subsidised: payment === 'fleet_card' })
@@ -110,7 +122,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
       ...(draft.amount ? { amount: Number(draft.amount).toFixed(2) } : {}),
       ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
       ...(draft.station ? { station: draft.station } : {}),
-      ...(draft.product ? { remark: draft.product } : {}),
+      ...(draft.product ? { description: draft.product } : {}),
       ...(draft.payment ? { payment: draft.payment, subsidised: draft.payment === 'fleet_card' } : {})
     })
   }
@@ -160,6 +172,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   )
 
   const cell = `${inputCls} h-9 px-2 text-sm`
+  const tall = `${inputCls} h-[78px] px-2 text-sm` // two lines tall, same as date + receipt no.
 
   return (
     <form onSubmit={save} className="space-y-4">
@@ -213,76 +226,90 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
         </div>
       </Card>
 
-      {/* Rows */}
+      {/* Rows: every cell is two lines tall so the columns line up */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-sm">
+          <table className="w-full min-w-[1360px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="w-10 px-3 py-2.5">#</th>
                 <th className="w-44 px-2 py-2.5">Vehicle no.</th>
                 <th className="w-44 px-2 py-2.5">Receipt</th>
-                <th className="px-2 py-2.5">Description</th>
-                <th className="w-32 px-2 py-2.5">Fuel</th>
-                <th className="w-32 px-2 py-2.5 text-right">Amount (RM)</th>
-                <th className="w-52 px-2 py-2.5">Payment</th>
-                <th className="w-56 px-2 py-2.5">Attachment</th>
+                <th className="w-40 px-2 py-2.5">Description</th>
+                <th className="w-40 px-2 py-2.5">Fuel</th>
+                <th className="w-36 px-2 py-2.5 text-right">Total fuel expenses</th>
+                <th className="w-36 px-2 py-2.5 text-right">Claim payable amount</th>
+                <th className="w-52 px-2 py-2.5">Payment method</th>
+                <th className="w-44 px-2 py-2.5">Remark</th>
+                <th className="w-48 px-2 py-2.5">Attachment</th>
                 <th className="w-12 px-2 py-2.5" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 align-top">
-              {lines.map((l, i) => (
-                <tr key={l.key} className={l.scan === 'scanning' ? 'bg-amber-50/40' : ''}>
-                  <td className="px-3 py-3 pt-4 font-semibold text-slate-500">{i + 1}</td>
-                  <td className="px-2 py-3">
-                    <select value={l.vehicle_id} onChange={(e) => setVehicle(l, e.target.value)} className={`${cell} tracking-wide`}>
-                      {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
-                    </select>
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="space-y-1.5">
-                      <label className="block">
-                        <span className="sr-only">Receipt date</span>
+            <tbody className="divide-y divide-slate-100">
+              {lines.map((l, i) => {
+                const payableLine = l.payment === 'cash' ? Number(l.amount) || 0 : 0
+                return (
+                  <tr key={l.key} className={l.scan === 'scanning' ? 'bg-amber-50/40' : ''}>
+                    <td className="px-3 py-3 align-top pt-4 font-semibold text-slate-500">{i + 1}</td>
+                    <td className="px-2 py-3">
+                      <select value={l.vehicle_id} onChange={(e) => setVehicle(l, e.target.value)} className={`${tall} tracking-wide`} title="Vehicle">
+                        {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
+                      </select>
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="space-y-1.5">
                         <input type="date" required max={today()} value={l.fill_date} onChange={(e) => update(l.key, { fill_date: e.target.value })} className={cell} title="Receipt date" />
+                        <input value={l.receipt_no} maxLength={60} placeholder="Receipt no." onChange={(e) => update(l.key, { receipt_no: e.target.value })} className={cell} title="Receipt no." />
+                      </div>
+                    </td>
+                    <td className="px-2 py-3">
+                      <textarea value={l.description} maxLength={120} placeholder="Diesel / Petrol" onChange={(e) => update(l.key, { description: e.target.value })} className={`${tall} resize-none py-2`} title="Description" />
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="space-y-1.5">
+                        <Unit unit="L">
+                          <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Litre" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} className={`${cell} pr-8 text-right`} title="Litres" />
+                        </Unit>
+                        <Unit unit="RM/L">
+                          <input type="number" inputMode="decimal" min="0" step="0.001" placeholder="Unit price" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} className={`${cell} pr-12 text-right`} title="Unit price" />
+                        </Unit>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3">
+                      <Unit unit="RM" left>
+                        <input type="number" inputMode="decimal" min="0" step="0.01" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} className={`${tall} pl-10 text-right font-semibold`} title="Total fuel expenses" />
+                      </Unit>
+                    </td>
+                    <td className="px-2 py-3">
+                      <Unit unit="RM" left>
+                        <input value={payableLine.toFixed(2)} disabled className={`${tall} pl-10 text-right font-bold text-brand-dark`} title="Claim payable amount (cash receipts only)" />
+                      </Unit>
+                    </td>
+                    <td className="px-2 py-3">
+                      <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={tall} title="Payment method">
+                        {opt(PAYMENTS)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-3">
+                      <textarea value={l.remark} maxLength={300} placeholder="Remark" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${tall} resize-none py-2`} title="Remark" />
+                    </td>
+                    <td className="px-2 py-3">
+                      <label className={`${tall} flex cursor-pointer flex-col items-center justify-center gap-1 border-dashed text-xs hover:border-brand`}>
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && update(l.key, { file: e.target.files[0], scan: null })} />
+                        <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-medium text-slate-700">Choose</span>
+                        <span className="w-full truncate px-1 text-center text-slate-600" title={l.file ? l.file.name : l.receipt_path ? 'Attached' : ''}>
+                          {l.scan === 'scanning' ? 'Reading…' : l.file ? l.file.name : l.receipt_path ? 'Attached' : 'No file'}
+                        </span>
                       </label>
-                      <input value={l.receipt_no} maxLength={60} placeholder="Receipt no." onChange={(e) => update(l.key, { receipt_no: e.target.value })} className={cell} title="Receipt no." />
-                    </div>
-                  </td>
-                  <td className="px-2 py-3">
-                    <input value={l.remark} maxLength={300} placeholder="Diesel / Petrol" onChange={(e) => update(l.key, { remark: e.target.value })} className={cell} />
-                    {l.station && <p className="mt-1 truncate text-[11px] text-slate-400">{l.station}</p>}
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="space-y-1.5">
-                      <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Litre" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} className={`${cell} text-right`} title="Litres" />
-                      <input type="number" inputMode="decimal" min="0" step="0.001" placeholder="Unit price" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} className={`${cell} text-right`} title="Unit price (RM per litre)" />
-                    </div>
-                  </td>
-                  <td className="px-2 py-3">
-                    <input type="number" inputMode="decimal" min="0" step="0.01" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} className={`${cell} text-right font-semibold`} />
-                  </td>
-                  <td className="px-2 py-3">
-                    <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={cell}>
-                      {opt(PAYMENTS)}
-                    </select>
-                  </td>
-                  <td className="px-2 py-3">
-                    <label className="flex cursor-pointer items-center gap-2 text-xs">
-                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && update(l.key, { file: e.target.files[0], scan: null })} />
-                      <span className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-medium text-slate-700 hover:border-brand">Choose</span>
-                      <span className="min-w-0 truncate text-slate-600" title={l.file ? l.file.name : l.receipt_path ? 'Attached' : ''}>
-                        {l.file ? l.file.name : l.receipt_path ? 'Attached' : 'No file'}
-                      </span>
-                    </label>
-                    {l.scan === 'scanning' && <p className="mt-1 text-[11px] text-amber-700">Reading…</p>}
-                  </td>
-                  <td className="px-2 py-3">
-                    <button type="button" onClick={() => remove(l.key)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-900 hover:bg-red-50 hover:text-red-600" aria-label="Remove row" title="Remove row">
-                      <IconTrash width={18} height={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-2 py-3 align-top pt-4">
+                      <button type="button" onClick={() => remove(l.key)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-900 hover:bg-red-50 hover:text-red-600" aria-label="Remove row" title="Remove row">
+                        <IconTrash width={18} height={18} />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-200 bg-slate-50/60 text-sm font-semibold text-slate-800">
@@ -292,6 +319,8 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                   </button>
                 </td>
                 <td className="px-2 py-2.5 text-right">{num(litres, 2)} L</td>
+                <td className="px-2 py-2.5 text-right">{money(total)}</td>
+                <td className="px-2 py-2.5 text-right text-brand-dark">{money(payable)}</td>
                 <td colSpan={4} />
               </tr>
             </tfoot>
