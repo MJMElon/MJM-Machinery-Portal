@@ -145,8 +145,8 @@ export function parseReceipt(text) {
 
   // Litres: "12.345 L", "LITRE 45.67", "45.67 LTR", "QTY 40.12"
   const lit =
-    t.match(/(\d{1,3}(?:[.,]\d{1,3})?)\s*(?:L|LTR|LTRS|LITRE|LITRES|LITER)\b/i) ||
-    t.match(/(?:LITRE|LITRES|LITER|LTR|QTY|VOLUME|VOL)\s*[:=]?\s*(\d{1,3}(?:[.,]\d{1,3})?)/i)
+    t.match(/(\d{1,3}(?:[.,]\d{1,3})?)[ \t]*(?:L|LTR|LTRS|LITRE|LITRES|LITER)\b/i) ||
+    t.match(/(?:LITRE|LITRES|LITER|LTR|QTY|VOLUME|VOL)[ \t]*[:=]?[ \t]*(\d{1,3}(?:[.,]\d{1,3})?)/i)
   if (lit && num(lit[1]) > 0 && num(lit[1]) < 2000) out.litres = num(lit[1])
 
   // Unit price: "RM 2.15 /L", "PRICE 3.350", "@ 2.05"
@@ -167,17 +167,24 @@ export function parseReceipt(text) {
   if (out.litres && out.unit_price && !out.amount) out.amount = Math.round(out.litres * out.unit_price * 100) / 100
   if (out.litres && out.amount && !out.unit_price) out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
 
-  // Receipt / invoice number
-  const rn = t.match(/(?:RECEIPT|RCPT|INVOICE|INV|BILL|TRANS(?:ACTION)?|REF)\s*(?:NO|NUM|#)?\s*[:.#]?\s*([A-Z0-9-]{4,20})/i)
-  if (rn) out.receipt_no = rn[1]
+  // Receipt / invoice / document number: a label followed by a code. Dates,
+  // times and amounts are never taken as the number.
+  const rn = [...t.matchAll(/\b(?:RECEIPT|RCPT|RESIT|INVOICE|INV|BILL|DOC(?:UMENT)?|TRANS(?:ACTION)?|TXN|REF(?:ERENCE)?|TICKET|SLIP)\s*(?:NO|NUM|NUMBER|#|ID)?\s*[:.#-]?\s*([A-Z0-9][A-Z0-9/-]{3,24})\b/gi)]
+    .map((m) => m[1])
+    .find((v) => !/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(v) && !/^\d{1,2}:\d{2}/.test(v) && !/^\d{1,5}\.\d{2}$/.test(v) && !/^(NO|NUM|NUMBER)$/i.test(v))
+  if (rn) out.receipt_no = rn
 
   // Station brand
   const brand = t.match(/\b(PETRONAS|SHELL|PETRON|CALTEX|BHP|CHEVRON|ESSO)\b/i)
   if (brand) out.station = brand[1][0].toUpperCase() + brand[1].slice(1).toLowerCase()
 
-  // Fuel product (for the remark)
-  const prod = t.match(/\b(DIESEL|EURO\s*5|PRIMAX\s*9[57]|V-?POWER|RON\s*9[57]|DYNAMIC\s*DIESEL|BLAZE\s*9[57]|FUELSAVE)\b/i)
-  if (prod) out.remark = prod[1].toUpperCase()
+  // Fuel product → Description
+  if (/\bDIESEL|DYNAMIC\s*DIESEL|EURO\s*5|FUELSAVE\s*DIESEL|B10|B20/i.test(t)) out.product = 'Diesel'
+  else if (/PRIMAX|V-?POWER|RON\s*9[57]|BLAZE\s*9[57]|FUELSAVE\s*95|PETROL/i.test(t)) out.product = 'Petrol'
+
+  // Payment: subsidised diesel goes through the fleet card (KPDN / SKDS)
+  if (/FLEET\s*CARD|FLEETCARD|SUBSID|KPDN|SKDS|DIESEL\s*SUBSIDI|KAD\s*FLEET/i.test(t)) out.payment = 'fleet_card'
+  else if (/\bCASH\b|TUNAI/i.test(t)) out.payment = 'cash'
 
   return out
 }

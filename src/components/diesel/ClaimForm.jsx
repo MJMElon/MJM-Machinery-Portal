@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Badge, Button, Card } from '../ui.jsx'
+import { Button, Card } from '../ui.jsx'
 import { IconPlus, IconTrash } from '../icons.jsx'
 import { F, inputCls, opt } from './shared.jsx'
 import {
@@ -14,11 +14,12 @@ import {
 import { scanReceipt } from '../../lib/ocr.js'
 import { money, num, today } from '../../lib/format.js'
 
-// New / edit fuel claim: a header (submission date, company, claimant, totals),
-// a drop zone for receipt photos (each photo becomes a row, read by the
-// scanner and attached to that row), and the rows themselves, which can also
-// be typed by hand. Payable = cash rows only; fleet-card rows are recorded
-// for litres / cost but are not paid back.
+// New / edit fuel claim: a header (submission date, company, claimant, totals,
+// drag & drop for receipts), then one row per receipt. A dropped file becomes
+// a row, is read for a draft of the figures, and is attached to that row; rows
+// can also be typed by hand. Payable = cash rows only; fleet-card rows are
+// recorded for litres / cost but are not paid back.
+const fuelWord = (v) => (v?.fuel_type === 'petrol' ? 'Petrol' : 'Diesel')
 const blankLine = (mine) => ({
   key: Math.random().toString(36).slice(2),
   fill_date: today(),
@@ -30,17 +31,16 @@ const blankLine = (mine) => ({
   subsidised: false,
   receipt_no: '',
   station: '',
-  remark: '',
+  remark: fuelWord(mine), // "Description": the fuel product
   receipt_path: '',
   file: null,
-  scan: null // 'scanning' | 'done' | 'failed'
+  scan: null
 })
 
 export function ClaimForm({ company, user, vehicles, claim, lines: initialLines, onSaved, onCancel }) {
   const usable = useMemo(() => vehicles.filter((v) => v.is_active || initialLines?.some((l) => l.vehicle_id === v.id)), [vehicles, initialLines])
   const mine = usable.find((v) => v.driver_id === user.id)
   const [submittedOn, setSubmittedOn] = useState(claim?.submitted_on || claim?.fill_date || today())
-  const [notes, setNotes] = useState(claim?.notes || '')
   const [lines, setLines] = useState(() =>
     initialLines?.length
       ? initialLines.map((l) => ({
@@ -59,6 +59,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
   const fileInput = useRef(null)
   const vById = useMemo(() => Object.fromEntries(usable.map((v) => [v.id, v])), [usable])
 
@@ -76,54 +77,53 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
     else if (field === 'amount' && L > 0 && A > 0 && !l.unit_price) patch.unit_price = (Math.round((A / L) * 1000) / 1000).toFixed(3)
     update(l.key, patch)
   }
-  const setVehicle = (l, vehicleId) => update(l.key, { vehicle_id: vehicleId })
+  const setVehicle = (l, vehicleId) => {
+    const v = vById[vehicleId]
+    update(l.key, { vehicle_id: vehicleId, ...(l.remark === 'Diesel' || l.remark === 'Petrol' || !l.remark ? { remark: fuelWord(v) } : {}) })
+  }
   // Fleet card = KPDN subsidised diesel; cash at the pump = non-subsidised.
   const setPayment = (l, payment) => update(l.key, { payment, subsidised: payment === 'fleet_card' })
 
-  // Receipt photos: one row per photo, scanned for a draft, attached to the row.
+  // Receipt files: one row per file, read for a draft, attached to the row.
+  const readable = (f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
   async function addFiles(fileList) {
     const files = [...fileList].filter(Boolean)
     if (!files.length) return
-    const readable = (f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
     const fresh = files.map((file) => ({ ...blankLine(mine), file, scan: readable(file) ? 'scanning' : null }))
     setLines((ls) => {
-      // Replace a single still-empty first row instead of leaving it behind
       const onlyBlank = ls.length === 1 && !ls[0].file && !ls[0].amount && !ls[0].litres && !ls[0].receipt_path
       return onlyBlank ? fresh : [...ls, ...fresh]
     })
     for (const row of fresh) if (row.scan === 'scanning') await readRow(row)
   }
 
-  // Read one row's photo and fill the draft figures (never overwrites typed values with blanks).
+  // Read one row's file and fill the draft figures (never overwrites typed values with blanks).
   async function readRow(row) {
-    update(row.key, { scan: 'scanning', scanText: '', scanError: '' })
+    update(row.key, { scan: 'scanning' })
     const small = row.file.type.startsWith('image/') ? await compressReceipt(row.file) : row.file
     const draft = await scanReceipt(small)
-    const found = ['fill_date', 'litres', 'unit_price', 'amount', 'receipt_no', 'station'].some((k) => draft[k])
-    {
-      update(row.key, {
-        scan: draft._error ? 'failed' : found ? 'done' : 'empty',
-        scanText: draft._text || '',
-        scanError: draft._error || '',
-        ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
-        ...(draft.litres ? { litres: String(draft.litres) } : {}),
-        ...(draft.unit_price ? { unit_price: String(draft.unit_price) } : {}),
-        ...(draft.amount ? { amount: Number(draft.amount).toFixed(2) } : {}),
-        ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
-        ...(draft.station ? { station: draft.station } : {}),
-        ...(draft.remark ? { remark: draft.remark } : {})
-      })
-    }
+    update(row.key, {
+      scan: 'done',
+      ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
+      ...(draft.litres ? { litres: String(draft.litres) } : {}),
+      ...(draft.unit_price ? { unit_price: String(draft.unit_price) } : {}),
+      ...(draft.amount ? { amount: Number(draft.amount).toFixed(2) } : {}),
+      ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
+      ...(draft.station ? { station: draft.station } : {}),
+      ...(draft.product ? { remark: draft.product } : {}),
+      ...(draft.payment ? { payment: draft.payment, subsidised: draft.payment === 'fleet_card' } : {})
+    })
   }
 
   const total = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0)
   const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + (Number(l.amount) || 0), 0)
   const litres = lines.reduce((s, l) => s + (Number(l.litres) || 0), 0)
-  const valid = lines.length > 0 && lines.every((l) => l.fill_date && (Number(l.amount) >= 0) && (Number(l.amount) > 0 || Number(l.litres) > 0))
+  const reading = lines.some((l) => l.scan === 'scanning')
+  const valid = lines.length > 0 && lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (Number(l.amount) > 0 || Number(l.litres) > 0))
 
   async function save(e) {
-    e.preventDefault()
-    if (!valid) return
+    e?.preventDefault?.()
+    if (!valid || busy) return
     setBusy(true)
     setError('')
     const uploaded = []
@@ -138,7 +138,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
         }
         prepared.push({ ...l, company_id: company.id, receipt_path: receipt_path || null, id: l.id || undefined })
       }
-      const header = { submitted_on: submittedOn, notes: notes.trim() }
+      const header = { submitted_on: submittedOn, notes: claim?.notes || '' }
       const id = claim ? (await updateClaimWithLines(claim.id, header, prepared), claim.id) : await createClaimWithLines(company.id, user.id, header, prepared)
       onSaved(id)
     } catch (err) {
@@ -148,132 +148,137 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
     }
   }
 
+  const buttons = (
+    <div className="flex justify-end gap-2">
+      <Button type="button" variant="secondary" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button type="submit" disabled={busy || !valid || reading}>
+        {busy ? 'Saving…' : reading ? 'Reading receipts…' : claim ? 'Save changes' : 'Save claim'}
+      </Button>
+    </div>
+  )
+
+  const cell = `${inputCls} h-9 px-2 text-sm`
+
   return (
     <form onSubmit={save} className="space-y-4">
       {error && <p className="rounded-lg bg-red-100 p-2.5 text-sm text-red-700">{error}</p>}
+      {buttons}
 
-      {/* Header: submission date, company, name, totals and the receipt upload */}
-      <Card
-        className="p-4 sm:p-5"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault()
-          addFiles(e.dataTransfer.files)
-        }}
-      >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <F label="Submission date">
-            <input type="date" required max={today()} value={submittedOn} onChange={(e) => setSubmittedOn(e.target.value)} className={inputCls} />
-          </F>
-          <F label="Company">
-            <input value={company.name} disabled className={inputCls} />
-          </F>
-          <F label="Name">
-            <input value={user.fullName || user.email} disabled className={inputCls} />
-          </F>
-          <F label="Total amount">
-            <input value={money(total)} disabled className={`${inputCls} font-semibold`} />
-          </F>
-          <F label="Payable amount" hint="Cash receipts only">
-            <input value={money(payable)} disabled className={`${inputCls} font-bold text-brand-dark`} />
-          </F>
-          <F label="Fuel receipts" hint="Drop files here or click · PDF or photo">
+      {/* Header */}
+      <Card className="p-4 sm:p-5">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <F label="Submission date">
+              <input type="date" required max={today()} value={submittedOn} onChange={(e) => setSubmittedOn(e.target.value)} className={inputCls} />
+            </F>
+            <F label="Company">
+              <input value={company.name} disabled className={inputCls} />
+            </F>
+            <F label="Name">
+              <input value={user.fullName || user.email} disabled className={inputCls} />
+            </F>
+            <F label="Total amount">
+              <input value={money(total)} disabled className={`${inputCls} font-semibold`} />
+            </F>
+            <F label="Payable amount" hint="Cash receipts only">
+              <input value={money(payable)} disabled className={`${inputCls} font-bold text-brand-dark`} />
+            </F>
+            <F label="Total litres">
+              <input value={`${num(litres, 2)} L`} disabled className={inputCls} />
+            </F>
+          </div>
+          {/* Drag & drop */}
+          <div
+            onClick={() => fileInput.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOver(false)
+              addFiles(e.dataTransfer.files)
+            }}
+            className={`flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 text-center transition ${
+              dragOver ? 'border-brand bg-brand-light' : 'border-brand/40 bg-brand-light/40 hover:border-brand'
+            }`}
+          >
             <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
-            <button
-              type="button"
-              onClick={() => fileInput.current?.click()}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-brand/50 bg-brand-light/40 text-sm font-semibold text-brand-dark hover:border-brand"
-            >
-              Drag to upload fuel receipts
-            </button>
-          </F>
+            <p className="font-display text-lg font-extrabold tracking-tight text-brand-dark">Drag &amp; Drop</p>
+            <p className="mt-1 text-xs text-slate-500">Files for autofill</p>
+          </div>
         </div>
       </Card>
 
       {/* Rows */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="w-10 px-3 py-2.5">#</th>
-                <th className="px-2 py-2.5">Vehicle no.</th>
-                <th className="w-36 px-2 py-2.5">Receipt date</th>
-                <th className="w-32 px-2 py-2.5">Receipt no.</th>
-                <th className="w-24 px-2 py-2.5 text-right">Litre</th>
-                <th className="w-28 px-2 py-2.5 text-right">Unit price</th>
-                <th className="w-28 px-2 py-2.5 text-right">Amount (RM)</th>
-                <th className="w-40 px-2 py-2.5">Payment</th>
-                <th className="px-2 py-2.5">Remark</th>
-                <th className="w-44 px-2 py-2.5">Attachment</th>
+                <th className="w-44 px-2 py-2.5">Vehicle no.</th>
+                <th className="w-44 px-2 py-2.5">Receipt</th>
+                <th className="px-2 py-2.5">Description</th>
+                <th className="w-32 px-2 py-2.5">Fuel</th>
+                <th className="w-32 px-2 py-2.5 text-right">Amount (RM)</th>
+                <th className="w-52 px-2 py-2.5">Payment</th>
+                <th className="w-56 px-2 py-2.5">Attachment</th>
                 <th className="w-12 px-2 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 align-top">
               {lines.map((l, i) => (
                 <tr key={l.key} className={l.scan === 'scanning' ? 'bg-amber-50/40' : ''}>
-                  <td className="px-3 py-2 pt-4 font-semibold text-slate-500">{i + 1}</td>
-                  <td className="px-2 py-2">
-                    <select value={l.vehicle_id} onChange={(e) => setVehicle(l, e.target.value)} className={inputCls}>
+                  <td className="px-3 py-3 pt-4 font-semibold text-slate-500">{i + 1}</td>
+                  <td className="px-2 py-3">
+                    <select value={l.vehicle_id} onChange={(e) => setVehicle(l, e.target.value)} className={`${cell} tracking-wide`}>
                       {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
                     </select>
                   </td>
-                  <td className="px-2 py-2">
-                    <input type="date" required max={today()} value={l.fill_date} onChange={(e) => update(l.key, { fill_date: e.target.value })} className={inputCls} />
+                  <td className="px-2 py-3">
+                    <div className="space-y-1.5">
+                      <label className="block">
+                        <span className="sr-only">Receipt date</span>
+                        <input type="date" required max={today()} value={l.fill_date} onChange={(e) => update(l.key, { fill_date: e.target.value })} className={cell} title="Receipt date" />
+                      </label>
+                      <input value={l.receipt_no} maxLength={60} placeholder="Receipt no." onChange={(e) => update(l.key, { receipt_no: e.target.value })} className={cell} title="Receipt no." />
+                    </div>
                   </td>
-                  <td className="px-2 py-2">
-                    <input value={l.receipt_no} maxLength={60} onChange={(e) => update(l.key, { receipt_no: e.target.value })} className={inputCls} />
+                  <td className="px-2 py-3">
+                    <input value={l.remark} maxLength={300} placeholder="Diesel / Petrol" onChange={(e) => update(l.key, { remark: e.target.value })} className={cell} />
+                    {l.station && <p className="mt-1 truncate text-[11px] text-slate-400">{l.station}</p>}
                   </td>
-                  <td className="px-2 py-2">
-                    <input type="number" inputMode="decimal" min="0" step="0.01" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} className={`${inputCls} text-right`} />
+                  <td className="px-2 py-3">
+                    <div className="space-y-1.5">
+                      <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Litre" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} className={`${cell} text-right`} title="Litres" />
+                      <input type="number" inputMode="decimal" min="0" step="0.001" placeholder="Unit price" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} className={`${cell} text-right`} title="Unit price (RM per litre)" />
+                    </div>
                   </td>
-                  <td className="px-2 py-2">
-                    <input type="number" inputMode="decimal" min="0" step="0.001" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} className={`${inputCls} text-right`} />
+                  <td className="px-2 py-3">
+                    <input type="number" inputMode="decimal" min="0" step="0.01" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} className={`${cell} text-right font-semibold`} />
                   </td>
-                  <td className="px-2 py-2">
-                    <input type="number" inputMode="decimal" min="0" step="0.01" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} className={`${inputCls} text-right font-semibold`} />
-                  </td>
-                  <td className="px-2 py-2">
-                    <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={inputCls}>
+                  <td className="px-2 py-3">
+                    <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={cell}>
                       {opt(PAYMENTS)}
                     </select>
                   </td>
-                  <td className="px-2 py-2">
-                    <input value={l.remark} maxLength={300} onChange={(e) => update(l.key, { remark: e.target.value })} placeholder={l.station || ''} className={inputCls} />
-                  </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-3">
                     <label className="flex cursor-pointer items-center gap-2 text-xs">
-                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && update(l.key, { file: e.target.files[0] })} />
-                      <span className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-medium text-slate-700 hover:border-brand">Choose</span>
-                      <span className="min-w-0 truncate text-slate-500">
-                        {l.file ? l.file.name : l.receipt_path ? 'Attached' : 'None'}
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && update(l.key, { file: e.target.files[0], scan: null })} />
+                      <span className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-medium text-slate-700 hover:border-brand">Choose</span>
+                      <span className="min-w-0 truncate text-slate-600" title={l.file ? l.file.name : l.receipt_path ? 'Attached' : ''}>
+                        {l.file ? l.file.name : l.receipt_path ? 'Attached' : 'No file'}
                       </span>
                     </label>
-                    {l.scan === 'scanning' && <Badge color="amber" className="mt-1">Reading…</Badge>}
-                    {l.scan === 'done' && <Badge color="green" className="mt-1">Read — please check</Badge>}
-                    {l.scan === 'empty' && <Badge color="amber" className="mt-1">Nothing recognised — type it in</Badge>}
-                    {l.scan === 'failed' && (
-                      <Badge color="red" className="mt-1" title={l.scanError}>
-                        Could not read
-                      </Badge>
-                    )}
-                    {l.file && l.scan && l.scan !== 'scanning' && (
-                      <span className="mt-1 flex gap-2 text-[11px]">
-                        <button type="button" onClick={() => readRow(l)} className="text-brand hover:underline">
-                          Read again
-                        </button>
-                        {l.scanText && (
-                          <button type="button" onClick={() => update(l.key, { showText: !l.showText })} className="text-slate-500 hover:underline">
-                            {l.showText ? 'Hide text' : 'Show text'}
-                          </button>
-                        )}
-                      </span>
-                    )}
-                    {l.showText && <pre className="mt-1 max-h-28 max-w-[14rem] overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-1.5 text-[10px] text-slate-600">{l.scanText}</pre>}
+                    {l.scan === 'scanning' && <p className="mt-1 text-[11px] text-amber-700">Reading…</p>}
                   </td>
-                  <td className="px-2 py-2">
-                    <button type="button" onClick={() => remove(l.key)} className="mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove row">
-                      <IconTrash width={17} height={17} />
+                  <td className="px-2 py-3">
+                    <button type="button" onClick={() => remove(l.key)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-900 hover:bg-red-50 hover:text-red-600" aria-label="Remove row" title="Remove row">
+                      <IconTrash width={18} height={18} />
                     </button>
                   </td>
                 </tr>
@@ -287,25 +292,14 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                   </button>
                 </td>
                 <td className="px-2 py-2.5 text-right">{num(litres, 2)} L</td>
-                <td />
-                <td className="px-2 py-2.5 text-right">{money(total)}</td>
-                <td className="px-2 py-2.5" colSpan={4}>
-                  Payable <span className="text-brand-dark">{money(payable)}</span>
-                </td>
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>
         </div>
       </Card>
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={busy || !valid || lines.some((l) => l.scan === 'scanning')}>
-          {busy ? 'Saving…' : claim ? 'Save changes' : 'Save claim'}
-        </Button>
-      </div>
+      {buttons}
     </form>
   )
 }
