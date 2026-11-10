@@ -161,6 +161,8 @@ export async function reviewClaim(id, status, note) {
 
 // ---- claim lines (one per receipt) ----------------------------------------------
 
+const round = (v, dp) => Math.round(Number(v) * 10 ** dp) / 10 ** dp
+
 export const PAYMENTS = [
   ['cash', 'Cash'],
   ['fleet_card', 'Fleet card']
@@ -232,9 +234,9 @@ async function replaceLines(claimId, lines) {
     line_no: i + 1,
     fill_date: l.fill_date,
     vehicle_id: l.vehicle_id || null,
-    litres: l.litres === '' || l.litres == null ? null : Number(l.litres),
-    unit_price: l.unit_price === '' || l.unit_price == null ? null : Number(l.unit_price),
-    amount: Number(l.amount || 0),
+    litres: l.litres === '' || l.litres == null ? null : round(l.litres, 2),
+    unit_price: l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
+    amount: round(l.amount || 0, 2),
     payment: l.payment || 'cash',
     subsidised: (l.payment || 'cash') === 'fleet_card',
     receipt_no: l.receipt_no || null,

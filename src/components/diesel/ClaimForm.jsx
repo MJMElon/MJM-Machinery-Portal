@@ -81,6 +81,21 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   const addRow = () => setLines((ls) => [...ls, blankLine(mine)])
 
   // Keep litres × unit price = amount in step when two of them are typed.
+  // Litres and RM amounts are kept to 2 decimals, unit price to 3; the
+  // browser refuses to submit a box whose value has more decimals than its
+  // step, so rounding happens on autofill, on leaving the box and on save.
+  const DP = { litres: 2, unit_price: 3, amount: 2 }
+  const fixDp = (field, value) => {
+    if (value === '' || value == null) return ''
+    const n = Number(value)
+    if (!Number.isFinite(n)) return ''
+    const f = 10 ** DP[field]
+    return (Math.round(n * f) / f).toFixed(DP[field])
+  }
+  const blurNumber = (l, field) => {
+    const v = fixDp(field, l[field])
+    if (v !== l[field]) setNumber(l, field, v)
+  }
   const setNumber = (l, field, value) => {
     const patch = { [field]: value }
     const L = field === 'litres' ? Number(value) : Number(l.litres)
@@ -118,9 +133,9 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
     update(row.key, {
       scan: 'done',
       ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
-      ...(draft.litres ? { litres: String(draft.litres) } : {}),
-      ...(draft.unit_price ? { unit_price: String(draft.unit_price) } : {}),
-      ...(draft.amount ? { amount: Number(draft.amount).toFixed(2) } : {}),
+      ...(draft.litres ? { litres: fixDp('litres', draft.litres) } : {}),
+      ...(draft.unit_price ? { unit_price: fixDp('unit_price', draft.unit_price) } : {}),
+      ...(draft.amount ? { amount: fixDp('amount', draft.amount) } : {}),
       ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
       ...(draft.station ? { station: draft.station } : {}),
       ...(draft.product ? { description: draft.product } : {}),
@@ -269,16 +284,16 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                     <td className="px-2 py-3">
                       <div className="space-y-1.5">
                         <Unit unit="L">
-                          <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Litre" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} className={`${cell} pr-8 text-right`} title="Litres" />
+                          <input type="number" inputMode="decimal" min="0" step="any" placeholder="Litre" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} onBlur={() => blurNumber(l, 'litres')} className={`${cell} pr-8 text-right`} title="Litres" />
                         </Unit>
                         <Unit unit="RM/L">
-                          <input type="number" inputMode="decimal" min="0" step="0.001" placeholder="Unit price" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} className={`${cell} pr-12 text-right`} title="Unit price" />
+                          <input type="number" inputMode="decimal" min="0" step="any" placeholder="Unit price" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
                         </Unit>
                       </div>
                     </td>
                     <td className="px-2 py-3">
                       <Unit unit="RM" left>
-                        <input type="number" inputMode="decimal" min="0" step="0.01" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} className={`${tall} pl-10 text-right font-semibold`} title="Total fuel expenses" />
+                        <input type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} onBlur={() => blurNumber(l, 'amount')} className={`${tall} pl-10 text-right font-semibold`} title="Total fuel expenses" />
                       </Unit>
                     </td>
                     <td className="px-2 py-3">
