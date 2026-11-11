@@ -7,7 +7,7 @@ const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tess
 const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
 const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
-function loadScript(src, ready) {
+export function loadScript(src, ready) {
   if (ready()) return Promise.resolve()
   return new Promise((resolve, reject) => {
     const s = document.createElement('script')

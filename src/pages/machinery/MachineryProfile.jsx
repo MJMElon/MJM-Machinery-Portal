@@ -85,6 +85,11 @@ export default function MachineryProfile() {
               </Link>
             )}
             {canAdd && (
+              <Button variant="secondary" onClick={() => navigate('/cmms/machines/import')}>
+                Import Excel
+              </Button>
+            )}
+            {canAdd && (
               <Button onClick={() => navigate('/cmms/machines/new')}>
                 <IconPlus width={18} height={18} /> New machine / vehicle
               </Button>
@@ -134,7 +139,7 @@ export default function MachineryProfile() {
                       </td>
                       <td className="px-3 py-3 text-slate-700">
                         {m.machine_type || '—'}
-                        {m.general_use && <Badge color="blue" className="ml-1.5">General use</Badge>}
+                        {m.general_use && <Badge color="blue" className="ml-1.5">General used car</Badge>}
                       </td>
                       <td className="px-3 py-3 text-slate-700">{[m.brand, m.model].filter(Boolean).join(' ') || '—'}</td>
                       <td className="px-3 py-3 text-slate-700">{d.length ? d.join(', ') : '—'}</td>

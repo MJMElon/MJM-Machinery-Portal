@@ -13,6 +13,7 @@ import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
 import MachinePage from './pages/machinery/MachinePage.jsx'
 import CmmsHome from './pages/machinery/CmmsHome.jsx'
+import MachineImport from './pages/machinery/MachineImport.jsx'
 import SupplierList from './pages/machinery/SupplierList.jsx'
 import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
 import UserAccessEdit from './pages/machinery/UserAccessEdit.jsx'
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="machines/new" element={<MachinePage mode="new" />} />
+            <Route path="machines/import" element={<MachineImport />} />
             <Route path="machines/:id" element={<MachinePage mode="view" />} />
             <Route path="machines/:id/edit" element={<MachinePage mode="edit" />} />
             <Route path="suppliers" element={<SupplierList />} />

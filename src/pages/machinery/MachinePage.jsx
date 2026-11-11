@@ -211,7 +211,7 @@ export default function MachinePage({ mode }) {
           <span className="inline-flex flex-wrap items-center gap-3">
             {title}
             {ro && <Badge color={form.is_active ? 'green' : 'slate'}>{form.is_active ? 'Active' : 'Inactive'}</Badge>}
-            {ro && form.general_use && <Badge color="blue">General use</Badge>}
+            {ro && form.general_use && <Badge color="blue">General used car</Badge>}
           </span>
         }
         right={
@@ -288,8 +288,8 @@ export default function MachinePage({ mode }) {
           <div>
             <Row ro={ro} label="Fuel" type="select" value={form.fuel_type} onChange={set('fuel_type')} options={[['diesel', 'Diesel'], ['petrol', 'Petrol'], ['none', 'None']]} show={{ diesel: 'Diesel', petrol: 'Petrol', none: 'None' }[form.fuel_type]} />
             <Row ro={ro} label="Tank capacity (L)" type="number" step="1" value={form.tank_capacity_l} onChange={set('tank_capacity_l')} />
+            <Tick label="General used car" checked={form.general_use} onChange={set('general_use')} ro={ro} />
             <Tick label="KPDN diesel subsidy" checked={form.kpdn_subsidy} onChange={set('kpdn_subsidy')} ro={ro} />
-            <Tick label="General use" checked={form.general_use} onChange={set('general_use')} ro={ro} />
           </div>
           <div>
             <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-3 border-b border-slate-100 py-2.5">
