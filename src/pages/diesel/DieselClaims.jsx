@@ -159,10 +159,10 @@ export default function DieselClaims() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 align-middle">
-                        <Link to={`/diesel/claims/${c.id}`} className="block text-slate-800 hover:text-brand">
-                          <span className="text-amber-700">Cash fuel claim: {cash.n}</span>
-                          <span className="mx-2 text-slate-300">·</span>
-                          <span className="text-emerald-700">Subsidy fuel claim: {sub.n}</span>
+                        {/* Side by side when there is room; each on its own line when the column is narrow */}
+                        <Link to={`/diesel/claims/${c.id}`} className="flex flex-wrap gap-x-5 gap-y-0.5 text-slate-800 hover:text-brand">
+                          <span className="whitespace-nowrap text-amber-700">Cash fuel claim: {cash.n}</span>
+                          <span className="whitespace-nowrap text-emerald-700">Subsidy fuel claim: {sub.n}</span>
                         </Link>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums align-middle">{num(cash.litres + sub.litres, 2)} L</td>
