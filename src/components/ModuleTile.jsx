@@ -26,7 +26,7 @@ const SIZES = {
   }
 }
 
-export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, size = 'md' }) {
+export function ModuleTile({ to, href, onClick, label, Icon, Art, badge, disabled, note, size = 'md' }) {
   const z = SIZES[size]
   const frame = `group relative flex aspect-square w-full flex-col items-center justify-center overflow-hidden ${z.round} border border-slate-200/80 bg-white text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-300/50 active:translate-y-0`
   const body = Art ? (
@@ -55,6 +55,12 @@ export function ModuleTile({ to, href, label, Icon, Art, badge, disabled, note, 
       </div>
     )
   }
+  if (onClick)
+    return (
+      <button type="button" onClick={onClick} className={`${cls} text-left`} draggable={false}>
+        {body}
+      </button>
+    )
   return href ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={cls} draggable={false}>
       {body}

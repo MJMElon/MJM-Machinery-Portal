@@ -12,10 +12,22 @@ const INNER = 'px-4 sm:px-5 lg:px-6'
 
 // Laptop-first layout. On the main page the MJM title is big and centred; on
 // every other page MJM moves to the left and the page title sits in the middle.
+// True when this page runs inside a module window (an iframe on a desktop
+// page): then there is no top bar, the window's title bar takes its place.
+export const EMBEDDED = window.self !== window.top
+
 export function Shell() {
   const { pathname } = useLocation()
   const title = pageTitle(pathname)
   const gutter = title ? INNER : GUTTER
+  if (EMBEDDED)
+    return (
+      <CompanyProvider>
+        <main className="min-h-[100dvh] w-full px-4 pb-8 pt-4 sm:px-5">
+          <Outlet />
+        </main>
+      </CompanyProvider>
+    )
   return (
     <CompanyProvider>
       <div className="flex min-h-[100dvh] w-full flex-col">

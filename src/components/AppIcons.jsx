@@ -105,3 +105,60 @@ export function ReportIcon({ className }) {
     </span>
   )
 }
+
+// ---- Machinery Manage modules ------------------------------------------------
+
+// Maintenance Work Manage: clipboard with a wrench.
+export function WorkManageIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-work" from="#2563eb" to="#1d4ed8" label="Maintenance Work Manage">
+        <rect x="17" y="14" width="30" height="38" rx="4" />
+        <path d="M25 14v-3h14v3" />
+        <path d="M24 26h16M24 33h10" />
+        <path d="M31 46l9-9a4 4 0 1 1 3 3l-9 9z" />
+      </Tile>
+    </span>
+  )
+}
+
+// Machinery Profile: excavator with an ID card corner.
+export function MachineProfileIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-prof" from="#f59e0b" to="#d97706" label="Machinery Profile">
+        <rect x="12" y="40" width="26" height="9" rx="4.5" />
+        <path d="M16 40v-8h9v-6h6l3 6h3v8" />
+        <path d="M34 26l8-11 7 9" />
+        <path d="M49 24v6h-5" />
+        <path d="M14 16h14M14 22h8" />
+      </Tile>
+    </span>
+  )
+}
+
+// Supplier Workshop List: workshop roof over a wrench.
+export function SupplierIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-supp" from="#0f766e" to="#115e59" label="Supplier Workshop List">
+        <path d="M12 28l20-14 20 14" />
+        <path d="M17 26v24h30V26" />
+        <path d="M27 50V38h10v12" />
+      </Tile>
+    </span>
+  )
+}
+
+// MachTrek: route pin and track.
+export function MachTrekIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-trek" from="#7c3aed" to="#6d28d9" label="MachTrek">
+        <path d="M32 50s-12-11-12-21a12 12 0 0 1 24 0c0 10-12 21-12 21z" />
+        <circle cx="32" cy="29" r="4" />
+        <path d="M18 52h28" />
+      </Tile>
+    </span>
+  )
+}

@@ -12,6 +12,7 @@ import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
 import MachinePage from './pages/machinery/MachinePage.jsx'
+import CmmsHome from './pages/machinery/CmmsHome.jsx'
 import SupplierList from './pages/machinery/SupplierList.jsx'
 import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
 import UserAccessEdit from './pages/machinery/UserAccessEdit.jsx'
@@ -42,7 +43,7 @@ export default function App() {
           <Route path="/settings/users/:userId" element={<UserAccessEdit />} />
           <Route path="/admin/companies" element={<Navigate to="/settings" replace />} />
           <Route path="/cmms" element={<CmmsLayout />}>
-            <Route index element={<Navigate to="/cmms/work" replace />} />
+            <Route index element={<CmmsHome />} />
             <Route path="work" element={<WorkManage />} />
             <Route path="work/all" element={<WorkConsolidated />} />
             <Route path="work/case/:id" element={<CaseDetail />} />
