@@ -4,11 +4,15 @@ import { DieselIcon, MachineryIcon, SettingsIcon } from '../components/AppIcons.
 import { Card, Spinner } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useCompany } from '../lib/CompanyContext.jsx'
+import { useWindows } from '../components/Windows.jsx'
+import { EMBEDDED } from '../components/Shell.jsx'
 
 // Portal main page: the selected company (top-right switcher) and its modules.
 export default function PortalHome() {
   const { isSuperAdmin } = useAuth()
   const { current, loaded, error } = useCompany()
+  const { open } = useWindows()
+  if (EMBEDDED) return <p className="p-6 text-center text-sm text-slate-500">This is the CMMS 2 main page. Close this window to go back to it.</p>
 
   if (!loaded)
     return (
@@ -57,7 +61,7 @@ export default function PortalHome() {
           disabled={!current.diesel_enabled}
           note={current.diesel_enabled ? null : 'Not enabled'}
         />
-        <ModuleTile key="settings" to="/settings" label="Settings" Icon={SettingsIcon} />
+        <ModuleTile key="settings" onClick={() => open({ key: 'settings', label: 'Settings', Icon: SettingsIcon, path: '/settings' })} label="Settings" Icon={SettingsIcon} />
       </TileGrid>
     </div>
   )

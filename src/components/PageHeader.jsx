@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import BackButton from './BackButton.jsx'
+import { EMBEDDED } from './Shell.jsx'
 
 // Row under the top bar: a labelled back button, an optional heading, and an
 // optional `right` slot for page actions. The page title itself is in the top bar.
@@ -10,7 +11,7 @@ export default function PageHeader({ backTo, backLabel, title, subtitle, right }
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3 lg:min-h-14">
       <div className="min-w-0">
-        {(backTo || backLabel) && (
+        {(backTo || backLabel) && !(EMBEDDED && backTo === '/') && (
           <div className="mb-2">
             <BackButton onClick={() => (backTo ? navigate(backTo) : navigate(-1))} label={backLabel || 'Back'} />
           </div>

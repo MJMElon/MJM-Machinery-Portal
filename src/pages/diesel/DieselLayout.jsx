@@ -4,6 +4,7 @@ import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt } from '
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
 import BackButton from '../../components/BackButton.jsx'
+import { EMBEDDED } from '../../components/Shell.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // Diesel Manage: four modules. The landing page shows them as square icons;
@@ -68,7 +69,7 @@ export default function DieselLayout() {
   // The top bar names the module (Fuel Claims, Fuel Usage, …).
   return (
     <div>
-      {!deep && (
+      {!deep && !EMBEDDED && (
         <div className="mb-4">
           <BackButton onClick={back} label="Back to CMMS main page" />
         </div>
