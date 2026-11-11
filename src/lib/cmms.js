@@ -36,6 +36,9 @@ export async function saveMachine(companyId, { id, ...fields }) {
   return data?.id || id
 }
 
+/** Running number of a machine within its company: M0001, M0002, … (given on save, never editable). */
+export const machineNo = (m) => (m?.machine_no != null ? 'M' + String(m.machine_no).padStart(4, '0') : '—')
+
 export const MACHINE_TYPES = ['Light vehicle', 'Pickup', 'Lorry', 'Van', 'Bus', 'Excavator', 'Bulldozer', 'Wheel loader', 'Backhoe', 'Tractor', 'Forklift', 'Crane', 'Generator', 'Compressor', 'Other']
 export const SERVICE_UNITS = [
   ['Liter/Km', 'Liter / Km'],

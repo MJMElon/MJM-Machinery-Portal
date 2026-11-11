@@ -12,6 +12,7 @@ import {
   isPdf,
   listPortalPeople,
   machineFileUrl,
+  machineNo,
   openMachineFile,
   removeMachineFile,
   saveMachine,
@@ -71,6 +72,7 @@ export default function MachinePage({ mode }) {
   const access = useCmmsAccess(current?.id)
   const editing = mode === 'edit' || mode === 'new'
   const [form, setForm] = useState(EMPTY)
+  const [machine, setMachine] = useState(null)
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(mode !== 'new')
   const [error, setError] = useState('')
@@ -90,6 +92,7 @@ export default function MachinePage({ mode }) {
       // Drivers: the users who have CMMS 2 access (Intranet icon or a role here).
       const withRole = new Set(perms.filter((p) => Object.keys(p.perms || {}).length).map((p) => p.user_id))
       setPeople(pp.filter((p) => p.is_super_admin || p.intranet_cmms || p.intranet_fuel || withRole.has(p.user_id) || m?.driver_ids?.includes(p.user_id)))
+      setMachine(m)
       if (m) {
         const f = { ...EMPTY }
         for (const k of Object.keys(EMPTY)) if (m[k] != null) f[k] = m[k]
@@ -200,7 +203,7 @@ export default function MachinePage({ mode }) {
     )
 
   const ro = !editing
-  const title = mode === 'new' ? 'New machine / vehicle' : form.name || 'Machine'
+  const title = mode === 'new' ? 'New machine / vehicle' : `${machineNo(machine)} · ${form.name || 'Machine'}`
 
   return (
     <form onSubmit={save} className="space-y-4">
@@ -246,6 +249,7 @@ export default function MachinePage({ mode }) {
         <h3 className="mb-4 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">Machine Particular</h3>
         <div className="grid gap-x-10 gap-y-1 lg:grid-cols-2">
           <div>
+            <Row ro label="Machine no." value={mode === 'new' ? 'Given on save' : machineNo(machine)} />
             <Row ro={ro} label="Code / name" required value={form.name} onChange={set('name')} placeholder="e.g. VNL1234 or EX-03" />
             <Row ro={ro} label="Type" value={form.machine_type} onChange={set('machine_type')} list="machine-types" placeholder="Light vehicle, Lorry, Excavator…" />
             <Row ro={ro} label="Brand" value={form.brand} onChange={set('brand')} placeholder="Toyota" />

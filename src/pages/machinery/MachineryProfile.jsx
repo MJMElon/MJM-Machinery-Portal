@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { coverState, deleteMachine, listMachines, listPortalPeople, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
+import { coverState, deleteMachine, listMachines, listPortalPeople, machineNo, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
 // Machinery Profile: every machine AND vehicle of the company. Cases link to
@@ -48,7 +48,7 @@ export default function MachineryProfile() {
     const t = q.trim().toLowerCase()
     if (!t) return rows
     return rows.filter((m) =>
-      [m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, ...drivers(m)].some((v) => String(v || '').toLowerCase().includes(t))
+      [machineNo(m), m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, ...drivers(m)].some((v) => String(v || '').toLowerCase().includes(t))
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, q, people])
@@ -112,10 +112,11 @@ export default function MachineryProfile() {
           <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? 'Nothing matches the search.' : 'No machines or vehicles yet.'}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-sm">
+            <table className="w-full min-w-[1120px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-2.5">Code / Reg. no.</th>
+                  <th className="w-24 px-5 py-2.5">No.</th>
+                  <th className="px-3 py-2.5">Code / Reg. no.</th>
                   <th className="px-3 py-2.5">Type</th>
                   <th className="px-3 py-2.5">Brand / Model</th>
                   <th className="px-3 py-2.5">Driver</th>
@@ -130,7 +131,8 @@ export default function MachineryProfile() {
                   const d = drivers(m)
                   return (
                     <tr key={m.id} className="hover:bg-slate-50/60">
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-3 font-semibold tabular-nums text-slate-500">{machineNo(m)}</td>
+                      <td className="px-3 py-3">
                         <Link to={`/cmms/machines/${m.id}`} className="font-semibold text-slate-800 hover:text-brand">
                           {m.name}
                         </Link>
