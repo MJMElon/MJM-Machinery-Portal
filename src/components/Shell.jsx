@@ -58,8 +58,8 @@ function pageTitle(path) {
 }
 
 // Top bar.
-// Main page: "Back to MJM Intranet" button (left), "CMMS 2" (centre), user tools (right).
-// Inner pages: company switcher (left), "CMMS 2" above the section name (centre).
+// Main page: "Back to MJM Intranet" button + company switcher (left), "CMMS 2" (centre), user tools (right).
+// Inner pages: the same back button + company switcher (left), "CMMS 2" above the section name (centre).
 function TopBar({ title, gutter }) {
   const { user, logout } = useAuth()
   const home = !title
@@ -68,9 +68,9 @@ function TopBar({ title, gutter }) {
       <div
         className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 ${gutter} ${home ? 'h-20 sm:h-24' : 'h-16 sm:h-[76px]'}`}
       >
-        {/* Left: back to the Intranet (main page only) + the company switcher */}
+        {/* Left: back to the Intranet (every page, so it is still there when a module window is expanded) + the company switcher */}
         <div className="flex min-w-0 items-center gap-3">
-          {home && <BackButton href={INTRANET_URL} label="Back to MJM Intranet" />}
+          <BackButton href={INTRANET_URL} label="Back to MJM Intranet" top />
           <div className="hidden min-w-0 sm:block">
             <CompanySwitcher />
           </div>
