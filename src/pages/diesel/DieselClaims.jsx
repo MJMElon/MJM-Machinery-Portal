@@ -5,7 +5,7 @@ import { Button, Card } from '../../components/ui.jsx'
 import { IconDownload, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
-import { CLAIM_STATUS, deleteClaim, listClaimLines, listClaims, listPeople, listVehicles, personLabel, removeReceipt, vehicleLabel } from '../../lib/diesel.js'
+import { CLAIM_STATUS, deleteClaim, listClaimLines, listClaims, listPeople, personLabel, removeReceipt } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, today } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
@@ -21,7 +21,6 @@ export default function DieselClaims() {
   const navigate = useNavigate()
   const [claims, setClaims] = useState([])
   const [lines, setLines] = useState([])
-  const [vehicles, setVehicles] = useState([])
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -29,11 +28,10 @@ export default function DieselClaims() {
 
   const load = useCallback(async () => {
     try {
-      const [c, p, v] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => [])])
+      const [c, p] = await Promise.all([listClaims(company.id, { mine: user.id }), []])
       const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
       setClaims(c)
       setLines(ls)
-      setVehicles(v)
       setPeople(p)
       setError('')
     } catch (e) {
@@ -49,14 +47,11 @@ export default function DieselClaims() {
   }, [load])
 
   const person = new Map(people.map((p) => [p.user_id, p]))
-  const vById = new Map(vehicles.map((v) => [v.id, v]))
-  // One claim shows as two rows: the cash (claimable) receipts and the
-  // subsidised fleet-card receipts, each summed up.
+  // Cash (claimable) receipts and subsidised fleet-card receipts, summed up.
   const sumUp = (ls) => {
     const litres = ls.reduce((s, l) => s + Number(l.litres || 0), 0)
     const amount = ls.reduce((s, l) => s + Number(l.amount || 0), 0)
-    const vehicles = [...new Set(ls.map((l) => (l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : 'No vehicle')))]
-    return { n: ls.length, litres, amount, unit: litres > 0 ? amount / litres : null, vehicles }
+    return { n: ls.length, litres, amount }
   }
   const linesOf = (id) => lines.filter((l) => l.claim_id === id)
   // Latest first: submission date, then creation.
@@ -136,64 +131,53 @@ export default function DieselClaims() {
           <Empty>No claims yet. Press New claim after filling up.</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="w-36 px-5 py-2.5">No.</th>
-                  <th className="w-40 px-3 py-2.5">Description</th>
-                  <th className="px-3 py-2.5">Vehicle no.</th>
-                  <th className="w-24 px-3 py-2.5 text-right">Litre</th>
-                  <th className="w-24 px-3 py-2.5 text-right">Unit price</th>
-                  <th className="w-36 px-3 py-2.5 text-right">Total fuel expenses</th>
-                  <th className="w-36 px-3 py-2.5 text-right">Claim payable amount</th>
+                  <th className="w-28 px-5 py-2.5">No.</th>
+                  <th className="px-3 py-2.5">Description</th>
+                  <th className="w-28 px-3 py-2.5 text-right">Litre</th>
+                  <th className="w-40 px-3 py-2.5 text-right">Total fuel expenses</th>
+                  <th className="w-44 px-3 py-2.5 text-right">Claim payable amount</th>
                   <th className="w-40 px-3 py-2.5 text-center">Action</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {rows.map((c, i) => {
                   const ls = linesOf(c.id)
                   const cash = sumUp(ls.filter((l) => l.payment !== 'fleet_card'))
                   const sub = sumUp(ls.filter((l) => l.payment === 'fleet_card'))
-                  const kinds = [
-                    { key: 'cash', label: 'Cash fuel claim', note: 'Non-subsidised', cls: 'text-amber-700', t: cash, payable: cash.amount },
-                    { key: 'sub', label: 'Subsidy fuel claim', note: 'KPDN subsidy', cls: 'text-emerald-700', t: sub, payable: 0 }
-                  ]
-                  return kinds.map((k, j) => (
-                    <tr key={`${c.id}-${k.key}`} className={`hover:bg-slate-50/60 ${j === 0 ? 'border-t border-slate-200' : 'border-t border-dashed border-slate-100'}`}>
-                      {j === 0 && (
-                        <td className="px-5 py-3 align-top" rowSpan={2}>
-                          <Link to={`/diesel/claims/${c.id}`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
-                            Fuel claim #{claimNo(c, i)}
-                          </Link>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                            <span>{day(c.submitted_on || c.fill_date)}</span>
-                            <StatusBadge status={c.status} />
-                          </div>
-                        </td>
-                      )}
-                      <td className="px-3 py-2.5">
-                        <Link to={`/diesel/claims/${c.id}`} className="font-medium text-slate-800 hover:text-brand">
-                          {k.label}
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-50/60">
+                      <td className="px-5 py-3 align-top">
+                        <Link to={`/diesel/claims/${c.id}`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
+                          {claimNo(c, i)}
                         </Link>
-                        <span className={`block text-xs ${k.cls}`}>{k.note}{k.t.n ? ` · ${k.t.n} receipt${k.t.n === 1 ? '' : 's'}` : ''}</span>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                          <span>{day(c.submitted_on || c.fill_date)}</span>
+                          <StatusBadge status={c.status} />
+                        </div>
                       </td>
-                      <td className="px-3 py-2.5 text-slate-700">{k.t.n ? k.t.vehicles.join(', ') : '—'}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{k.t.n ? `${num(k.t.litres, 2)} L` : '—'}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{k.t.unit != null ? k.t.unit.toFixed(3) : '—'}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{k.t.n ? money(k.t.amount) : '—'}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900">{k.t.n ? money(k.payable) : '—'}</td>
-                      {j === 0 && (
-                        <td className="px-3 py-3 align-top" rowSpan={2}>
-                          <div className="flex items-center justify-center gap-0.5">
-                            <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
-                            <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
-                            <ActionButton to={`/diesel/claims/${c.id}?print=1`} label="Print" Icon={IconPrint} />
-                            <ActionButton onClick={canDelete(c) ? () => remove(c) : null} label="Delete" Icon={IconTrash} danger disabled={busyId === c.id} />
-                          </div>
-                        </td>
-                      )}
+                      <td className="px-3 py-3 align-top">
+                        <Link to={`/diesel/claims/${c.id}`} className="block text-slate-800 hover:text-brand">
+                          <span className="text-amber-700">Cash fuel claim: {cash.n}</span>
+                          <span className="mx-2 text-slate-300">·</span>
+                          <span className="text-emerald-700">Subsidy fuel claim: {sub.n}</span>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums align-top">{num(cash.litres + sub.litres, 2)} L</td>
+                      <td className="px-3 py-3 text-right tabular-nums align-top">{money(cash.amount + sub.amount)}</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 align-top">{money(cash.amount)}</td>
+                      <td className="px-3 py-3 align-top">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
+                          <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
+                          <ActionButton to={`/diesel/claims/${c.id}?print=1`} label="Print" Icon={IconPrint} />
+                          <ActionButton onClick={canDelete(c) ? () => remove(c) : null} label="Delete" Icon={IconTrash} danger disabled={busyId === c.id} />
+                        </div>
+                      </td>
                     </tr>
-                  ))
+                  )
                 })}
               </tbody>
             </table>
