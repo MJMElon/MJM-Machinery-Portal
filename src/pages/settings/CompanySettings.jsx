@@ -114,15 +114,19 @@ export default function CompanySettings() {
 
 function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
   const [area, setArea] = useState(company.area_ha ?? '')
+  const [head, setHead] = useState({ address: company.address || '', phone: company.phone || '', fax: company.fax || '', email: company.email || '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
-  const dirty = String(area ?? '') !== String(company.area_ha ?? '')
+  const dirty =
+    String(area ?? '') !== String(company.area_ha ?? '') ||
+    ['address', 'phone', 'fax', 'email'].some((k) => (head[k] || '') !== (company[k] || ''))
+  const setHeadField = (k) => (e) => setHead((h) => ({ ...h, [k]: e.target.value }))
 
   async function save() {
     setBusy(true)
     setMsg('')
     try {
-      await updateCompany(company.id, { area_ha: toNum(area) })
+      await updateCompany(company.id, { area_ha: toNum(area), address: head.address.trim() || null, phone: head.phone.trim() || null, fax: head.fax.trim() || null, email: head.email.trim() || null })
       await onSaved()
       setMsg('Saved')
     } catch (e) {
@@ -135,8 +139,25 @@ function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
   return (
     <Card className="space-y-4 self-start p-5">
       <SectionTitle>Company profile</SectionTitle>
-      <Field label="Company name" hint="From MJM Intranet (Master Manage → Company).">
+      <Field label="Company name">
         <TextInput value={company.name} disabled />
+      </Field>
+      <Field label="Registration no.">
+        <TextInput value={company.registration_no || ''} disabled />
+      </Field>
+      <Field label="Address (printed on claim forms)">
+        <TextArea rows={2} value={head.address} onChange={setHeadField('address')} placeholder="2nd Floor, Lot 1180, Bangunan Bei, Jalan Krokop 2, 98000 Miri, Sarawak." />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Tel">
+          <TextInput value={head.phone} onChange={setHeadField('phone')} placeholder="085-419907" />
+        </Field>
+        <Field label="Fax">
+          <TextInput value={head.fax} onChange={setHeadField('fax')} placeholder="085-413264" />
+        </Field>
+      </div>
+      <Field label="Email">
+        <TextInput type="email" value={head.email} onChange={setHeadField('email')} placeholder="company@outlook.com" />
       </Field>
       <Field label="Total area (ha)">
         <TextInput

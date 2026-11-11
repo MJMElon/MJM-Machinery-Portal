@@ -5,6 +5,7 @@ import { Badge, Button, Card, Modal } from '../../components/ui.jsx'
 import { IconCheck, IconPencil, IconPrint, IconTrash, IconX } from '../../components/icons.jsx'
 import { ErrorBox, Loading, StatusBadge, inputCls } from '../../components/diesel/shared.jsx'
 import {
+  CLAIM_STATUS,
   deleteClaim,
   getClaim,
   getClaimLines,
@@ -187,17 +188,81 @@ export default function ClaimView() {
       {claim && (
         <>
           <Card className="overflow-hidden print:border-0 print:shadow-none">
-            {/* Printout header only: the screen already shows the claim number in the page header */}
-            <div className="hidden items-start justify-between border-b border-slate-200 p-5 print:flex">
-              <div>
-                <p className="font-display text-xl font-extrabold tracking-tight text-slate-900">Fuel claim #{claimNo(claim, 0)}</p>
-                <p className="text-sm text-slate-600">{company.name}</p>
-                <p className="text-sm text-slate-600">Claimant: {claimantName}</p>
+            {/* Printout: letterhead, "FUEL CLAIM FORM", the claimant, then a plain table */}
+            <div className="hidden print:block">
+              <div className="border-b-2 border-slate-900 pb-3">
+                <p className="font-display text-2xl font-extrabold tracking-tight text-slate-900">
+                  {company.name}
+                  {company.registration_no && <span className="ml-2 align-baseline text-[11px] font-normal italic tracking-normal text-slate-600">{company.registration_no}</span>}
+                </p>
+                {company.address && <p className="text-[11px] text-slate-700">{company.address}</p>}
+                {(company.phone || company.fax || company.email) && (
+                  <p className="text-[11px] text-slate-700">
+                    {[company.phone && `Tel: ${company.phone}`, company.fax && `Fax: ${company.fax}`, company.email && `Email: ${company.email}`].filter(Boolean).join('   ')}
+                  </p>
+                )}
               </div>
-              <div className="text-right text-sm text-slate-600">
-                <p>Submission date: {day(claim.submitted_on || claim.fill_date)}</p>
-                <StatusBadge status={claim.status} />
+              <p className="mt-5 text-center font-display text-lg font-extrabold uppercase tracking-wide text-slate-900 underline underline-offset-4">Fuel claim form</p>
+              <div className="mt-4 flex items-end justify-between text-sm text-slate-900">
+                <p>
+                  <b>Name</b> : {claimantName}
+                </p>
+                <p className="text-right text-xs text-slate-600">
+                  Claim no. <b className="text-slate-900">{claimNo(claim, 0)}</b> · Submission date {day(claim.submitted_on || claim.fill_date)} · {CLAIM_STATUS[claim.status]?.label || claim.status}
+                </p>
               </div>
+              <table className="mt-3 w-full border-collapse text-[11px] text-slate-900">
+                <thead>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th className="border border-slate-700 px-1.5 py-1.5">No.</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Vehicle no.</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Date</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Receipt no.</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Description</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Litre</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Unit price (RM)</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Total fuel expenses (RM)</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Payment</th>
+                    <th className="border border-slate-700 px-1.5 py-1.5">Claim payable (RM)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={l.id}>
+                      <td className="border border-slate-700 px-1.5 py-1 text-center">{i + 1}</td>
+                      <td className="border border-slate-700 px-1.5 py-1">{l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : '—'}</td>
+                      <td className="border border-slate-700 px-1.5 py-1 text-center">{day(l.fill_date)}</td>
+                      <td className="border border-slate-700 px-1.5 py-1 break-all">{l.receipt_no || '—'}</td>
+                      <td className="border border-slate-700 px-1.5 py-1">
+                        {[l.description, l.station].filter(Boolean).join(' · ') || '—'}
+                        {l.remark && <span className="block text-[10px] text-slate-600">Remark: {l.remark}</span>}
+                      </td>
+                      <td className="border border-slate-700 px-1.5 py-1 text-right tabular-nums">{l.litres != null ? num(l.litres, 2) : '—'}</td>
+                      <td className="border border-slate-700 px-1.5 py-1 text-right tabular-nums">{l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
+                      <td className="border border-slate-700 px-1.5 py-1 text-right tabular-nums">{Number(l.amount || 0).toFixed(2)}</td>
+                      <td className="border border-slate-700 px-1.5 py-1 text-center">{l.payment === 'fleet_card' ? 'Fleet card (KPDN)' : 'Cash'}</td>
+                      <td className="border border-slate-700 px-1.5 py-1 text-right font-semibold tabular-nums">{(l.payment === 'cash' ? Number(l.amount || 0) : 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-100 font-bold">
+                    <td className="border border-slate-700 px-1.5 py-1.5 text-right" colSpan={5}>
+                      Total
+                    </td>
+                    <td className="border border-slate-700 px-1.5 py-1.5 text-right tabular-nums">{num(litres, 2)}</td>
+                    <td className="border border-slate-700 px-1.5 py-1.5" />
+                    <td className="border border-slate-700 px-1.5 py-1.5 text-right tabular-nums">{total.toFixed(2)}</td>
+                    <td className="border border-slate-700 px-1.5 py-1.5" />
+                    <td className="border border-slate-700 px-1.5 py-1.5 text-right tabular-nums">{payable.toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              {claim.notes && <p className="mt-2 text-[11px] text-slate-700">Notes: {claim.notes}</p>}
+              {claim.reviewed_at && (
+                <p className="mt-1 text-[11px] text-slate-700">
+                  Reviewed {day(claim.reviewed_at.slice(0, 10))} by {personLabel(person.get(claim.reviewed_by)) || 'admin'}
+                  {claim.review_note ? ` · ${claim.review_note}` : ''}
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-sm text-slate-600 print:hidden">
               <span>Submission date: <b className="text-slate-800">{day(claim.submitted_on || claim.fill_date)}</b></span>
@@ -205,7 +270,7 @@ export default function ClaimView() {
               <span>Payable amount: <b className="text-brand-dark">{money(payable)}</b></span>
               <span>Total litres: <b className="text-slate-800">{num(litres, 2)} L</b></span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto print:hidden">
               <table className="w-full min-w-[1180px] border-t border-slate-200 text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -285,7 +350,6 @@ export default function ClaimView() {
                           <div className={`${tall} justify-center text-xs text-red-500`}>No receipt</div>
                         )}
                       </td>
-                      <td className="hidden px-2 py-3 text-xs text-slate-500 print:table-cell">{l.receipt_path ? `Receipt ${i + 1}` : 'No receipt'}</td>
                       {showApproval && i === 0 && (
                         <td className="px-2 py-3 print:hidden" rowSpan={lines.length}>
                           {approval}
@@ -308,7 +372,7 @@ export default function ClaimView() {
               </table>
             </div>
             {(claim.notes || claim.reviewed_at || payable === 0) && (
-              <div className="space-y-1 px-4 py-3 text-sm text-slate-600">
+              <div className="space-y-1 px-4 py-3 text-sm text-slate-600 print:hidden">
                 {claim.notes && <p>Notes: {claim.notes}</p>}
                 {claim.reviewed_at && (
                   <p>
@@ -319,13 +383,13 @@ export default function ClaimView() {
                 {payable === 0 && <Badge>Nothing to pay back — fleet card only</Badge>}
               </div>
             )}
-            <div className="mx-5 mt-6 hidden grid-cols-3 gap-8 text-xs text-slate-500 print:grid">
+            <div className="mt-12 hidden grid-cols-3 gap-10 text-[11px] text-slate-700 print:grid">
               <div className="border-t border-slate-400 pt-1">Claimant signature</div>
               <div className="border-t border-slate-400 pt-1">Checked by</div>
               <div className="border-t border-slate-400 pt-1">Approved by</div>
             </div>
             {/* Receipts on the printout */}
-            <div className="m-5 hidden grid-cols-2 gap-4 print:grid">
+            <div className="mt-6 hidden grid-cols-2 gap-4 print:grid">
               {lines.map((l, i) => imgs[l.id] && (
                 <figure key={l.id}>
                   <img src={imgs[l.id]} alt={`Receipt ${i + 1}`} className="max-h-[45vh] rounded border border-slate-200" />

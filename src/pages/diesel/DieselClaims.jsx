@@ -134,7 +134,7 @@ export default function DieselClaims() {
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="w-28 px-5 py-2.5">No.</th>
+                  <th className="w-72 px-5 py-2.5">No.</th>
                   <th className="px-3 py-2.5">Description</th>
                   <th className="w-28 px-3 py-2.5 text-right">Litre</th>
                   <th className="w-40 px-3 py-2.5 text-right">Total fuel expenses</th>
@@ -149,26 +149,26 @@ export default function DieselClaims() {
                   const sub = sumUp(ls.filter((l) => l.payment === 'fleet_card'))
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/60">
-                      <td className="px-5 py-3 align-top">
-                        <Link to={`/diesel/claims/${c.id}`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
-                          {claimNo(c, i)}
-                        </Link>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                          <span>{day(c.submitted_on || c.fill_date)}</span>
+                      <td className="whitespace-nowrap px-5 py-2.5 align-middle">
+                        <div className="flex items-center gap-3">
+                          <Link to={`/diesel/claims/${c.id}`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
+                            {claimNo(c, i)}
+                          </Link>
+                          <span className="text-xs text-slate-500">{day(c.submitted_on || c.fill_date)}</span>
                           <StatusBadge status={c.status} />
                         </div>
                       </td>
-                      <td className="px-3 py-3 align-top">
+                      <td className="px-3 py-2.5 align-middle">
                         <Link to={`/diesel/claims/${c.id}`} className="block text-slate-800 hover:text-brand">
                           <span className="text-amber-700">Cash fuel claim: {cash.n}</span>
                           <span className="mx-2 text-slate-300">·</span>
                           <span className="text-emerald-700">Subsidy fuel claim: {sub.n}</span>
                         </Link>
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums align-top">{num(cash.litres + sub.litres, 2)} L</td>
-                      <td className="px-3 py-3 text-right tabular-nums align-top">{money(cash.amount + sub.amount)}</td>
-                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 align-top">{money(cash.amount)}</td>
-                      <td className="px-3 py-3 align-top">
+                      <td className="px-3 py-2.5 text-right tabular-nums align-middle">{num(cash.litres + sub.litres, 2)} L</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums align-middle">{money(cash.amount + sub.amount)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(cash.amount)}</td>
+                      <td className="px-3 py-2.5 align-middle">
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
                           <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
