@@ -5,6 +5,7 @@ import { Badge, Button, Card, Select } from '../../components/ui.jsx'
 import { IconDownload, IconFuel, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, MonthSelect, Stats, StatusBadge, monthsOf } from '../../components/diesel/shared.jsx'
 import { UsageModal } from '../../components/diesel/CardModals.jsx'
+import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
 import { deleteCardRecord, listCardData, listClaimLines, listClaims, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, sum, thisMonth } from '../../lib/format.js'
 
@@ -73,6 +74,11 @@ export default function DieselUsage() {
   const rows = fills.filter((f) => (!month || f.fill_date.startsWith(month)) && (!vehicle || f.vehicle_id === vehicle))
   const cash = rows.filter((r) => r.source === 'cash')
   const card = rows.filter((r) => r.source === 'card')
+  // One dashboard per vehicle that has fuel recorded (claims or card fill-ups):
+  // litres and RM per month, subsidised (fleet card) vs cash.
+  const perVehicle = vehicles
+    .map((v) => ({ v, lines: fills.filter((f) => f.vehicle_id === v.id).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' })) }))
+    .filter((x) => x.lines.length > 0)
 
   async function removeUsage(id) {
     if (!window.confirm('Delete this card fill-up? This cannot be undone.')) return
@@ -121,6 +127,14 @@ export default function DieselUsage() {
         }
       />
       <ErrorBox>{error}</ErrorBox>
+
+      {!loading && perVehicle.length > 0 && (
+        <div className="space-y-5">
+          {perVehicle.map(({ v, lines }) => (
+            <FuelDashboard key={v.id} lines={lines} title={vehicleLabel(v)} />
+          ))}
+        </div>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <MonthSelect months={months} value={month} onChange={setMonth} allLabel="All months" />
         <div className="sm:w-60">
