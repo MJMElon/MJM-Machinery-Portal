@@ -26,6 +26,7 @@ import ClaimView from './pages/diesel/ClaimView.jsx'
 import ClaimReview from './pages/diesel/ClaimReview.jsx'
 import DieselUsage from './pages/diesel/DieselUsage.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
+import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
 import DieselReport from './pages/diesel/DieselReport.jsx'
 
 export default function App() {
@@ -49,10 +50,10 @@ export default function App() {
             <Route path="work/all" element={<WorkConsolidated />} />
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
-            <Route path="machines/new" element={<MachinePage mode="new" />} />
+            <Route path="machines/new" element={<MachinePage key="new" mode="new" />} />
             <Route path="machines/import" element={<MachineImport />} />
-            <Route path="machines/:id" element={<MachinePage mode="view" />} />
-            <Route path="machines/:id/edit" element={<MachinePage mode="edit" />} />
+            <Route path="machines/:id" element={<MachinePage key="view" mode="view" />} />
+            <Route path="machines/:id/edit" element={<MachinePage key="edit" mode="edit" />} />
             <Route path="suppliers" element={<SupplierList />} />
             <Route path="users" element={<Navigate to="/settings/users" replace />} />
           </Route>
@@ -65,6 +66,9 @@ export default function App() {
             <Route path="claims/:id/edit" element={<ClaimEdit />} />
             <Route path="usage" element={<DieselUsage />} />
             <Route path="cards" element={<FleetCardManage />} />
+            <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
+            <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
+            <Route path="cards/:id/edit" element={<FleetCardPage key="edit" mode="edit" />} />
             <Route path="report" element={<DieselReport />} />
             {/* old links */}
             <Route path="all" element={<Navigate to="/diesel/claims" replace />} />

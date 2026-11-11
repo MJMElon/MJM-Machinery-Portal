@@ -26,6 +26,7 @@ export const CLAIM_STATUS = {
   paid: { label: 'Paid', color: 'blue' }
 }
 export const CARD_STATUS = {
+  application: { label: 'Applying', color: 'amber' },
   active: { label: 'Active', color: 'green' },
   blocked: { label: 'Blocked', color: 'amber' },
   cancelled: { label: 'Cancelled', color: 'slate' }
@@ -305,12 +306,39 @@ export async function listCardData(companyId, from) {
   return { cards, usage, reloads }
 }
 
+// Fleet card application check list. Each item is kept in the card's
+// `checklist` json as { done, date, note } under its key.
+export const CARD_CHECKLIST = [
+  { group: 'Company', key: 'vehicle_sticker', label: 'Vehicle sticker' },
+  { group: 'Company', key: 'puspakom', label: 'Puspakom test' },
+  { group: 'Company', key: 'insurance', label: 'Convert of insurance' },
+  { group: 'Company', key: 'road_tax', label: 'Renew road tax' },
+  { group: 'Company', key: 'subsidy_apply', label: 'Subsidy application' },
+  { group: 'Company', key: 'subsidy_awarded', label: 'Awarded subsidy' },
+  { group: 'Company', key: 'card_apply', label: 'Apply fleet card (subsidy linked to fleet card)' },
+  { group: 'Company', key: 'card_tested', label: 'Tested fleet card' },
+  { group: 'Driver', key: 'medical', label: 'Medical check' },
+  { group: 'Driver', key: 'gdl', label: 'GDL course' }
+]
+export const checklistDone = (card) => CARD_CHECKLIST.filter((i) => card?.checklist?.[i.key]?.done).length
+
+export async function getCard(id) {
+  const { data, error } = await supabase.from(DIESEL.cards).select('*').eq('id', id).maybeSingle()
+  if (error) throw friendly(error)
+  return data
+}
+
 export async function saveCard(companyId, { id, ...fields }) {
   const q = id
     ? supabase.from(DIESEL.cards).update(fields).eq('id', id)
     : supabase.from(DIESEL.cards).insert({ company_id: companyId, ...fields })
-  const { error } = await q
+  const { data, error } = await q.select('id').single()
   if (error) throw friendly(error, { '23505': 'A card with this number already exists.' })
+  return data?.id || id
+}
+export async function deleteCard(id) {
+  const { error } = await supabase.from(DIESEL.cards).delete().eq('id', id)
+  if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Cancelled instead.' })
 }
 
 export async function addReload(companyId, row) {
