@@ -11,6 +11,7 @@ import WorkManage from './pages/machinery/WorkManage.jsx'
 import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
+import MachinePage from './pages/machinery/MachinePage.jsx'
 import SupplierList from './pages/machinery/SupplierList.jsx'
 import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
 import UserAccessEdit from './pages/machinery/UserAccessEdit.jsx'
@@ -46,6 +47,9 @@ export default function App() {
             <Route path="work/all" element={<WorkConsolidated />} />
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
+            <Route path="machines/new" element={<MachinePage mode="new" />} />
+            <Route path="machines/:id" element={<MachinePage mode="view" />} />
+            <Route path="machines/:id/edit" element={<MachinePage mode="edit" />} />
             <Route path="suppliers" element={<SupplierList />} />
             <Route path="users" element={<Navigate to="/settings/users" replace />} />
           </Route>

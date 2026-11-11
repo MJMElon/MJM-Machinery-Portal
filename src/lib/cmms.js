@@ -21,7 +21,80 @@ export async function listMachines(companyId) {
   if (error) throw friendly(error)
   return data || []
 }
-export const saveMachine = (companyId, m) => save(MACHINES, companyId, m)
+export async function getMachine(id) {
+  const { data, error } = await supabase.from(MACHINES).select('*').eq('id', id).maybeSingle()
+  if (error) throw friendly(error)
+  return data
+}
+/** Saves and returns the row's id (new rows get one). */
+export async function saveMachine(companyId, { id, ...fields }) {
+  const q = id
+    ? supabase.from(MACHINES).update(fields).eq('id', id).select('id').single()
+    : supabase.from(MACHINES).insert({ company_id: companyId, ...fields }).select('id').single()
+  const { data, error } = await q
+  if (error) throw friendly(error)
+  return data?.id || id
+}
+
+export const MACHINE_TYPES = ['Light vehicle', 'Pickup', 'Lorry', 'Van', 'Bus', 'Excavator', 'Bulldozer', 'Wheel loader', 'Backhoe', 'Tractor', 'Forklift', 'Crane', 'Generator', 'Compressor', 'Other']
+export const SERVICE_UNITS = [
+  ['Liter/Km', 'Liter / Km'],
+  ['Liter/Hour', 'Liter / Hour']
+]
+
+// ---- machine files (photos, reg card, director's resolution) ----------------
+const MACHINE_BUCKET = 'machinery_machine_files'
+export const isPdf = (path) => /\.pdf$/i.test(path || '')
+
+async function shrinkImage(file, max = 1600) {
+  if (!file.type.startsWith('image/')) return file
+  try {
+    const bmp = await createImageBitmap(file)
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bmp.width * scale)
+    canvas.height = Math.round(bmp.height * scale)
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85))
+    return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file
+  } catch {
+    return file
+  }
+}
+
+/** Uploads a photo / PDF for a machine of the company; returns the storage path. */
+export async function uploadMachineFile(companyId, file, { image = false } = {}) {
+  if (image && !file.type.startsWith('image/')) throw new Error('Please choose a photo (JPG or PNG).')
+  if (!file.type.startsWith('image/') && file.type !== 'application/pdf') throw new Error('Please choose a photo or a PDF.')
+  const upload = await shrinkImage(file)
+  if (upload.size > 10 * 1024 * 1024) throw new Error('The file is too big (max 10 MB).')
+  const ext = upload.type === 'application/pdf' ? 'pdf' : upload.type === 'image/png' ? 'png' : upload.type === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${companyId}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(MACHINE_BUCKET).upload(path, upload, { contentType: upload.type })
+  if (error) throw new Error(error.message?.includes('row-level security') ? 'You may not upload files for this company.' : 'Could not upload the file. Please try again.')
+  return path
+}
+export async function machineFileUrl(path, seconds = 600) {
+  if (!path) return null
+  const { data, error } = await supabase.storage.from(MACHINE_BUCKET).createSignedUrl(path, seconds)
+  if (error || !data) return null
+  return data.signedUrl
+}
+export async function openMachineFile(path) {
+  const url = await machineFileUrl(path, 60)
+  if (!url) throw new Error('Could not open the file.')
+  window.open(url, '_blank', 'noopener')
+}
+export function removeMachineFile(path) {
+  if (path) supabase.storage.from(MACHINE_BUCKET).remove([path]).catch(() => {})
+}
+
+/** Expiry state of a dated cover (insurance, road tax, Puspakom): 'expired' | 'soon' | 'ok' | null. */
+export function coverState(to, soonDays = 30) {
+  if (!to) return null
+  const d = Math.round((new Date(to) - new Date(new Date().toDateString())) / 86400000)
+  return d < 0 ? 'expired' : d <= soonDays ? 'soon' : 'ok'
+}
 export async function deleteMachine(id) {
   try {
     await remove(MACHINES, id)

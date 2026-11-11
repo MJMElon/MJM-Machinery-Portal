@@ -50,8 +50,19 @@ function Unit({ unit, left, children }) {
 }
 
 export function ClaimForm({ company, user, vehicles, claim, lines: initialLines, onSaved, onCancel }) {
-  const usable = useMemo(() => vehicles.filter((v) => v.is_active || initialLines?.some((l) => l.vehicle_id === v.id)), [vehicles, initialLines])
-  const mine = usable.find((v) => v.driver_id === user.id)
+  // Vehicle list: the vehicles this person drives (Machinery Profile →
+  // drivers) plus the company's general-use vehicles; a vehicle already on
+  // the claim stays listed. Own vehicle first, so a new row starts with it.
+  const drives = (v) => (v.driver_ids?.length ? v.driver_ids.includes(user.id) : v.driver_id === user.id)
+  const usable = useMemo(
+    () =>
+      vehicles
+        .filter((v) => (v.is_active && (drives(v) || v.general_use)) || initialLines?.some((l) => l.vehicle_id === v.id))
+        .sort((a, b) => Number(drives(b)) - Number(drives(a))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vehicles, initialLines, user.id]
+  )
+  const mine = usable.find(drives)
   const [submittedOn, setSubmittedOn] = useState(claim?.submitted_on || claim?.fill_date || today())
   const [lines, setLines] = useState(() =>
     initialLines?.length
