@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconImage, IconPencil, IconTrash, IconWarning, IconX } from '../../components/icons.jsx'
@@ -273,9 +273,18 @@ export default function MachinePage({ mode }) {
             <Row ro={ro} label="Purchase price" type="number" step="0.01" value={form.purchase_price} onChange={set('purchase_price')} show={form.purchase_price !== '' ? money(form.purchase_price) : ''} />
             <Row ro={ro} label="Remarks" type="textarea" value={form.notes} onChange={set('notes')} />
             <Photos photos={form.photos} urls={urls} ro={ro} busy={busy} onAdd={addPhoto} onRemove={(p) => setForm((f) => ({ ...f, photos: f.photos.filter((x) => x !== p) }))} />
-            <Period label="Insurance" from={form.insurance_from} to={form.insurance_to} ro={ro} onFrom={set('insurance_from')} onTo={set('insurance_to')} />
-            <Period label="Road tax" from={form.road_tax_from} to={form.road_tax_to} ro={ro} onFrom={set('road_tax_from')} onTo={set('road_tax_to')} />
-            <Period label="Puspakom" from={form.puspakom_from} to={form.puspakom_to} ro={ro} onFrom={set('puspakom_from')} onTo={set('puspakom_to')} />
+            <Period label="Insurance" from={form.insurance_from} to={form.insurance_to} ro={ro} onFrom={set('insurance_from')} onTo={set('insurance_to')} refNo={machine?.insurance_no} />
+            <Period label="Road tax" from={form.road_tax_from} to={form.road_tax_to} ro={ro} onFrom={set('road_tax_from')} onTo={set('road_tax_to')} refNo={machine?.road_tax_no} />
+            <Period label="Puspakom" from={form.puspakom_from} to={form.puspakom_to} ro={ro} onFrom={set('puspakom_from')} onTo={set('puspakom_to')} refNo={machine?.puspakom_no} />
+            {ro && id && (
+              <p className="pt-2 text-xs text-slate-500">
+                Renewals are recorded under{' '}
+                <Link to="/renewal" className="font-medium text-brand hover:underline">
+                  Machinery Renewal
+                </Link>
+                ; the newest one shows here.
+              </p>
+            )}
           </div>
         </div>
         <datalist id="machine-types">
@@ -374,7 +383,7 @@ function Tick({ label, checked, onChange, ro, hint }) {
 }
 
 // From / To dates in one row, with an expiry chip.
-function Period({ label, from, to, ro, onFrom, onTo }) {
+function Period({ label, from, to, ro, onFrom, onTo, refNo }) {
   const s = coverState(to)
   const chip = s && (
     <Badge color={s === 'expired' ? 'red' : s === 'soon' ? 'amber' : 'green'} className="ml-2">
@@ -388,6 +397,7 @@ function Period({ label, from, to, ro, onFrom, onTo }) {
         <p className="py-2 text-sm text-slate-800">
           {from || to ? `From ${from ? day(from) : '—'} to ${to ? day(to) : '—'}` : <span className="text-slate-400">—</span>}
           {chip}
+          {refNo && <span className="block text-xs text-slate-500">{refNo}</span>}
         </p>
       ) : (
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm text-slate-500">

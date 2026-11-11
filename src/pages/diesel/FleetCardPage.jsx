@@ -42,6 +42,9 @@ const EMPTY = {
   licence_expiry: "",
   notes: "",
   checklist: {},
+  kpdn_apply: false,
+  login_id: "",
+  login_password: "",
 };
 const box = `${inputCls} h-10 px-3 text-sm`;
 const dateCls = `${inputCls} h-8 px-2 text-xs`;
@@ -88,6 +91,9 @@ export default function FleetCardPage({ mode }) {
           licence_expiry: c.licence_expiry || "",
           notes: c.notes || "",
           checklist: c.checklist || {},
+          kpdn_apply: Boolean(c.kpdn_apply),
+          login_id: c.login_id || "",
+          login_password: c.login_password || "",
         });
       }
       setError("");
@@ -155,6 +161,9 @@ export default function FleetCardPage({ mode }) {
         card_no: form.card_no.trim() || null,
         status: form.status,
         licence_expiry: form.licence_expiry || null,
+        kpdn_apply: Boolean(form.kpdn_apply),
+        login_id: form.login_id.trim() || null,
+        login_password: form.login_password.trim() || null,
         notes: form.notes.trim() || null,
         checklist: form.checklist,
       });
@@ -294,10 +303,10 @@ export default function FleetCardPage({ mode }) {
       <ErrorBox>{error}</ErrorBox>
 
       <div className="space-y-4">
-        {/* Card details (profile) first, the application check list below */}
+        {/* 1. Vehicle */}
         <Card className="p-5">
           <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-            Fleet card profile
+            Vehicle
           </h3>
           <div className="grid gap-x-10 lg:grid-cols-2">
             <div>
@@ -353,36 +362,15 @@ export default function FleetCardPage({ mode }) {
                   className={box}
                 />
                 <datalist id="fuel-stations">
-                  {["Petronas", "Shell", "Petron", "Caltex", "BHP"].map((s) => (
-                    <option key={s} value={s} />
-                  ))}
+                  {["Petronas", "Shell", "Petron", "Caltex", "BHP"].map(
+                    (st2) => (
+                      <option key={st2} value={st2} />
+                    ),
+                  )}
                 </datalist>
-              </Row>
-              <Row
-                label="Subsidy volume (L / month)"
-                ro={ro}
-                show={quota != null ? `${num(quota, 2)} L` : ""}
-              >
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.subsidy_litres}
-                  onChange={set("subsidy_litres")}
-                  className={box}
-                />
               </Row>
             </div>
             <div>
-              <Row label="Fleet card number" ro={ro} show={form.card_no}>
-                <input
-                  value={form.card_no}
-                  onChange={set("card_no")}
-                  maxLength={40}
-                  placeholder="Once the card is awarded"
-                  className={box}
-                />
-              </Row>
               <Row label="Status" ro={ro} show={st.label}>
                 <select
                   value={form.status}
@@ -400,6 +388,178 @@ export default function FleetCardPage({ mode }) {
                 <input
                   value={form.notes}
                   onChange={set("notes")}
+                  className={box}
+                />
+              </Row>
+              <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-3 border-b border-slate-100 py-2.5">
+                <span className="pt-2 text-sm font-semibold text-slate-700">
+                  Applying for KPDN subsidy?
+                </span>
+                <div className="pt-2.5">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.kpdn_apply)}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, kpdn_apply: e.target.checked }))
+                    }
+                    disabled={ro}
+                    className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* 2. Application check list, only when applying for the subsidy */}
+        {form.kpdn_apply && (
+          <Card className="p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+                Application check list
+              </h3>
+              <Badge color={allDone ? "green" : "amber"}>
+                {done} / {CARD_CHECKLIST.length} done
+              </Badge>
+            </div>
+            <div className="grid gap-x-6 lg:grid-cols-2">
+              {["Company", "Driver"].map((group) => (
+                <div key={group} className="mb-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {group}
+                  </p>
+                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                    {CARD_CHECKLIST.filter((i) => i.group === group).map(
+                      (i) => {
+                        const it = item(i.key);
+                        return (
+                          <label
+                            key={i.key}
+                            className={`flex items-center gap-3 px-3 py-2 text-sm ${ro ? "" : "cursor-pointer hover:bg-slate-50"}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(it.done)}
+                              onChange={tick(i.key)}
+                              disabled={ro}
+                              className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
+                            />
+                            <span
+                              className={`flex-1 ${it.done ? "text-slate-500 line-through" : "text-slate-800"}`}
+                            >
+                              {i.label}
+                            </span>
+                            {ro ? (
+                              <span className="text-xs text-slate-500">
+                                {it.done && it.date ? day(it.date) : ""}
+                              </span>
+                            ) : (
+                              <span className="w-36 shrink-0">
+                                <input
+                                  type="date"
+                                  value={it.date || ""}
+                                  onChange={(e) =>
+                                    setItem(i.key, { date: e.target.value })
+                                  }
+                                  className={dateCls}
+                                  title="Date done"
+                                />
+                              </span>
+                            )}
+                          </label>
+                        );
+                      },
+                    )}
+                    {group === "Driver" && (
+                      <div className="flex items-center gap-3 px-3 py-2 text-sm">
+                        <span className="h-5 w-5" />
+                        <span className="flex-1 text-slate-800">
+                          Licence expiry date
+                        </span>
+                        {ro ? (
+                          <span className="text-xs text-slate-700">
+                            {form.licence_expiry
+                              ? day(form.licence_expiry)
+                              : "—"}
+                            {licence != null && licence < 0 && (
+                              <Badge color="red" className="ml-2">
+                                Expired
+                              </Badge>
+                            )}
+                            {licence != null &&
+                              licence >= 0 &&
+                              licence <= 60 && (
+                                <Badge color="amber" className="ml-2">
+                                  Expiring soon
+                                </Badge>
+                              )}
+                          </span>
+                        ) : (
+                          <span className="w-36 shrink-0">
+                            <input
+                              type="date"
+                              value={form.licence_expiry}
+                              onChange={set("licence_expiry")}
+                              className={dateCls}
+                            />
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* 3. Fleet card details */}
+        <Card className="p-5">
+          <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+            Fleet card details
+          </h3>
+          <div className="grid gap-x-10 lg:grid-cols-2">
+            <div>
+              <Row label="Fleet card number" ro={ro} show={form.card_no}>
+                <input
+                  value={form.card_no}
+                  onChange={set("card_no")}
+                  maxLength={40}
+                  placeholder="Once the card is awarded"
+                  className={box}
+                />
+              </Row>
+              <Row
+                label="Subsidy volume (L / month)"
+                ro={ro}
+                show={quota != null ? `${num(quota, 2)} L` : ""}
+              >
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.subsidy_litres}
+                  onChange={set("subsidy_litres")}
+                  className={box}
+                />
+              </Row>
+            </div>
+            <div>
+              <Row label="Login user ID" ro={ro} show={form.login_id}>
+                <input
+                  value={form.login_id}
+                  onChange={set("login_id")}
+                  maxLength={80}
+                  autoComplete="off"
+                  className={box}
+                />
+              </Row>
+              <Row label="Password record" ro={ro} show={form.login_password}>
+                <input
+                  value={form.login_password}
+                  onChange={set("login_password")}
+                  maxLength={80}
+                  autoComplete="off"
                   className={box}
                 />
               </Row>
@@ -427,100 +587,6 @@ export default function FleetCardPage({ mode }) {
               </div>
             </div>
           )}
-        </Card>
-
-        {/* Check list */}
-        <Card className="p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-              Application check list
-            </h3>
-            <Badge color={allDone ? "green" : "amber"}>
-              {done} / {CARD_CHECKLIST.length} done
-            </Badge>
-          </div>
-          <div className="grid gap-x-6 lg:grid-cols-2">
-            {["Company", "Driver"].map((group) => (
-              <div key={group} className="mb-3">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  {group}
-                </p>
-                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-                  {CARD_CHECKLIST.filter((i) => i.group === group).map((i) => {
-                    const it = item(i.key);
-                    return (
-                      <label
-                        key={i.key}
-                        className={`flex items-center gap-3 px-3 py-2 text-sm ${ro ? "" : "cursor-pointer hover:bg-slate-50"}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(it.done)}
-                          onChange={tick(i.key)}
-                          disabled={ro}
-                          className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
-                        />
-                        <span
-                          className={`flex-1 ${it.done ? "text-slate-500 line-through" : "text-slate-800"}`}
-                        >
-                          {i.label}
-                        </span>
-                        {ro ? (
-                          <span className="text-xs text-slate-500">
-                            {it.done && it.date ? day(it.date) : ""}
-                          </span>
-                        ) : (
-                          <span className="w-36 shrink-0">
-                            <input
-                              type="date"
-                              value={it.date || ""}
-                              onChange={(e) =>
-                                setItem(i.key, { date: e.target.value })
-                              }
-                              className={dateCls}
-                              title="Date done"
-                            />
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                  {group === "Driver" && (
-                    <div className="flex items-center gap-3 px-3 py-2 text-sm">
-                      <span className="h-5 w-5" />
-                      <span className="flex-1 text-slate-800">
-                        Licence expiry date
-                      </span>
-                      {ro ? (
-                        <span className="text-xs text-slate-700">
-                          {form.licence_expiry ? day(form.licence_expiry) : "—"}
-                          {licence != null && licence < 0 && (
-                            <Badge color="red" className="ml-2">
-                              Expired
-                            </Badge>
-                          )}
-                          {licence != null && licence >= 0 && licence <= 60 && (
-                            <Badge color="amber" className="ml-2">
-                              Expiring soon
-                            </Badge>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="w-36 shrink-0">
-                          <input
-                            type="date"
-                            value={form.licence_expiry}
-                            onChange={set("licence_expiry")}
-                            className={dateCls}
-                          />
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
         </Card>
       </div>
 

@@ -276,3 +276,42 @@ function friendly(error) {
   }
   return error
 }
+
+// ---- machinery renewals (insurance / road tax / Puspakom) --------------------
+const RENEWALS = 'machinery_renewals'
+export const RENEWAL_KINDS = [
+  { key: 'insurance', label: 'Insurance', refLabel: 'Insurance (policy no.)' },
+  { key: 'road_tax', label: 'Road tax', refLabel: 'Road tax' },
+  { key: 'puspakom', label: 'Puspakom', refLabel: 'Puspakom' }
+]
+export async function listRenewals(companyId, machineId) {
+  let q = supabase.from(RENEWALS).select('*').eq('company_id', companyId).order('last_date', { ascending: false })
+  if (machineId) q = q.eq('machine_id', machineId)
+  const { data, error } = await q.limit(5000)
+  if (error) {
+    if (error.code === '42P01') return [] // before the renewals migration
+    throw friendly(error)
+  }
+  return data || []
+}
+export async function saveRenewal(companyId, { id, ...fields }) {
+  const q = id
+    ? supabase.from(RENEWALS).update(fields).eq('id', id)
+    : supabase.from(RENEWALS).insert({ company_id: companyId, ...fields })
+  const { error } = await q
+  if (error) throw friendly(error)
+}
+export async function deleteRenewal(id) {
+  const { error } = await supabase.from(RENEWALS).delete().eq('id', id)
+  if (error) throw friendly(error)
+}
+/** Expiry = last renewal + months − 1 day (yyyy-mm-dd). */
+export function expiryOf(last, months) {
+  if (!last || !months) return ''
+  const d = new Date(last + 'T00:00:00')
+  d.setMonth(d.getMonth() + Number(months))
+  d.setDate(d.getDate() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+/** Days from today to a date (negative = past). */
+export const daysLeft = (to) => (to ? Math.round((new Date(to + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000) : null)

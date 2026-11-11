@@ -14,6 +14,7 @@ import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
 import MachinePage from './pages/machinery/MachinePage.jsx'
 import CmmsHome from './pages/machinery/CmmsHome.jsx'
 import MachineImport from './pages/machinery/MachineImport.jsx'
+import MachineryRenewal from './pages/machinery/MachineryRenewal.jsx'
 import SupplierList from './pages/machinery/SupplierList.jsx'
 import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
 import UserAccessEdit from './pages/machinery/UserAccessEdit.jsx'
@@ -28,7 +29,6 @@ import DieselUsage from './pages/diesel/DieselUsage.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
 import DieselUsers from './pages/diesel/DieselUsers.jsx'
-import DieselReport from './pages/diesel/DieselReport.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -42,6 +42,7 @@ export default function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
           <Route path="/settings" element={<CompanySettings />} />
+          <Route path="/renewal" element={<MachineryRenewal />} />
           <Route path="/settings/users" element={<CmmsUsers />} />
           <Route path="/settings/users/:userId" element={<UserAccessEdit />} />
           <Route path="/admin/companies" element={<Navigate to="/settings" replace />} />
@@ -70,7 +71,7 @@ export default function App() {
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
             <Route path="cards/:id/edit" element={<FleetCardPage key="edit" mode="edit" />} />
-            <Route path="report" element={<DieselReport />} />
+            <Route path="report" element={<Navigate to="/diesel/usage" replace />} />
             {/* old links */}
             <Route path="all" element={<Navigate to="/diesel/claims" replace />} />
             <Route path="vehicles" element={<Navigate to="/cmms/machines" replace />} />

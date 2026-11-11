@@ -176,3 +176,17 @@ export function FuelUsersIcon({ className }) {
     </span>
   )
 }
+
+// Machinery Renewal: calendar with a refresh arrow.
+export function RenewalIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-renew" from="#0ea5e9" to="#0369a1" label="Machinery Renewal">
+        <rect x="12" y="16" width="40" height="34" rx="4" />
+        <path d="M12 26h40M22 11v9M42 11v9" />
+        <path d="M38 38a6 6 0 1 1-2-4.5" />
+        <path d="M38 30v4h-4" />
+      </Tile>
+    </span>
+  )
+}

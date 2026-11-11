@@ -9,9 +9,10 @@ import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
 import { deleteCardRecord, listCardData, listClaimLines, listClaims, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, sum, thisMonth } from '../../lib/format.js'
 
-// Diesel Usage: every fill-up of the company in one log — cash claims (not
-// rejected) and fleet card fill-ups — by month, vehicle and driver. Diesel
-// admins record fleet card fill-ups here.
+// Fuel Usage Report: a dashboard per vehicle, then one month's totals by
+// vehicle (with km/L and over-tank checks) and by driver, and the fill-up log
+// — cash claims (not rejected) and fleet card fill-ups. Card fill-ups are
+// recorded here.
 export default function DieselUsage() {
   const { company, access } = useOutletContext()
   const [fills, setFills] = useState([])
@@ -74,6 +75,50 @@ export default function DieselUsage() {
   const rows = fills.filter((f) => (!month || f.fill_date.startsWith(month)) && (!vehicle || f.vehicle_id === vehicle))
   const cash = rows.filter((r) => r.source === 'cash')
   const card = rows.filter((r) => r.source === 'card')
+
+  // ---- Report tables for the chosen month (all vehicles)
+  const inMonth = fills.filter((f) => !month || f.fill_date.startsWith(month))
+  // Fuel economy: fill-ups of one vehicle sorted by odometer; km between two
+  // fill-ups ÷ litres of the later one (cash and card alike).
+  function efficiency(vid) {
+    const list = fills.filter((f) => f.vehicle_id === vid && f.odometer_km != null).sort((a, b) => a.odometer_km - b.odometer_km)
+    let km = 0
+    let litres = 0
+    for (let i = 1; i < list.length; i++) {
+      if (month && !list[i].fill_date.startsWith(month)) continue
+      const d = list[i].odometer_km - list[i - 1].odometer_km
+      if (d > 0) {
+        km += d
+        litres += Number(list[i].litres)
+      }
+    }
+    return { km, kmPerL: litres > 0 ? km / litres : null }
+  }
+  const byVehicle = vehicles
+    .map((v) => {
+      const list = inMonth.filter((f) => f.vehicle_id === v.id)
+      const c = list.filter((r) => r.source === 'cash')
+      const k = list.filter((r) => r.source === 'card')
+      const overTank = v.tank_capacity_l ? list.filter((r) => Number(r.litres) > Number(v.tank_capacity_l)).length : 0
+      return { v, count: list.length, cashL: sum(c, 'litres'), cashRM: sum(c), cardL: sum(k, 'litres'), cardRM: sum(k), litres: sum(list, 'litres'), amount: sum(list), ...efficiency(v.id), overTank }
+    })
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.amount - a.amount)
+  const byDriver = new Map()
+  for (const r of inMonth) {
+    const key = r.driver || ''
+    const d = byDriver.get(key) || { cashL: 0, cashRM: 0, cardL: 0, cardRM: 0 }
+    if (r.source === 'cash') {
+      d.cashL += Number(r.litres)
+      d.cashRM += Number(r.amount)
+    } else {
+      d.cardL += Number(r.litres)
+      d.cardRM += Number(r.amount)
+    }
+    byDriver.set(key, d)
+  }
+  const th = (label, right) => <th className={`p-3 font-medium ${right ? 'text-right' : 'text-left'}`}>{label}</th>
+  const td = (v, right, cls = '') => <td className={`p-3 ${right ? 'text-right' : ''} ${cls}`}>{v}</td>
   // One dashboard per vehicle that has fuel recorded (claims or card fill-ups):
   // litres and RM per month, subsidised (fleet card) vs cash.
   const perVehicle = vehicles
@@ -156,7 +201,77 @@ export default function DieselUsage() {
           ['Fleet Card', `${num(sum(card, 'litres'))} L · ${money(sum(card))}`]
         ]}
       />
+      {!loading && (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <Card className="overflow-x-auto">
+            <h3 className="border-b border-slate-200 px-4 py-3 font-semibold text-slate-800">By vehicle</h3>
+            {byVehicle.length === 0 ? (
+              <Empty>No fill-ups in this month.</Empty>
+            ) : (
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs text-slate-500">
+                    {th('Vehicle')}
+                    {th('Cash', 1)}
+                    {th('Fleet card', 1)}
+                    {th('Total litres', 1)}
+                    {th('Total (RM)', 1)}
+                    {th('Distance', 1)}
+                    {th('km / L', 1)}
+                    {th('Check')}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {byVehicle.map((r) => (
+                    <tr key={r.v.id}>
+                      {td(<span className="font-medium text-slate-800">{vehicleLabel(r.v)}</span>)}
+                      {td(r.cashL ? `${num(r.cashL)} L · ${money(r.cashRM)}` : '—', 1)}
+                      {td(r.cardL ? `${num(r.cardL)} L · ${money(r.cardRM)}` : '—', 1)}
+                      {td(`${num(r.litres)} L`, 1)}
+                      {td(money(r.amount), 1, 'font-medium')}
+                      {td(r.km ? `${num(r.km, 0)} km` : '—', 1)}
+                      {td(r.kmPerL ? num(r.kmPerL, 2) : '—', 1)}
+                      {td(r.overTank ? <Badge color="red">{r.overTank} fill(s) larger than the tank</Badge> : '')}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+          <Card className="overflow-x-auto">
+            <h3 className="border-b border-slate-200 px-4 py-3 font-semibold text-slate-800">By driver</h3>
+            {byDriver.size === 0 ? (
+              <Empty>No fill-ups in this month.</Empty>
+            ) : (
+              <table className="w-full min-w-[440px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs text-slate-500">
+                    {th('Driver')}
+                    {th('Cash', 1)}
+                    {th('Fleet card', 1)}
+                    {th('Total (RM)', 1)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {[...byDriver.entries()]
+                    .sort((a, b) => b[1].cashRM + b[1].cardRM - (a[1].cashRM + a[1].cardRM))
+                    .map(([k, d]) => (
+                      <tr key={k || 'none'}>
+                        {td(k ? personLabel(person.get(k)) : 'Driver not recorded')}
+                        {td(d.cashL ? `${num(d.cashL)} L · ${money(d.cashRM)}` : '—', 1)}
+                        {td(d.cardL ? `${num(d.cardL)} L · ${money(d.cardRM)}` : '—', 1)}
+                        {td(money(d.cashRM + d.cardRM), 1, 'font-medium')}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        </div>
+      )}
+
       <Card className="overflow-hidden">
+        <h3 className="border-b border-slate-200 px-4 py-3 font-semibold text-slate-800">Fill-up log</h3>
         {loading ? (
           <Loading />
         ) : rows.length === 0 ? (

@@ -11,7 +11,8 @@ export default function PageHeader({ backTo, backLabel, title, subtitle, right }
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3 lg:min-h-14">
       <div className="min-w-0">
-        {(backTo || backLabel) && !(EMBEDDED && backTo === '/') && (
+        {/* Outside a module window the top bar's "<" takes the person back */}
+        {(backTo || backLabel) && EMBEDDED && backTo !== '/' && (
           <div className="mb-2">
             <BackButton onClick={() => (backTo ? navigate(backTo) : navigate(-1))} label={backLabel || 'Back'} />
           </div>

@@ -30,3 +30,11 @@ alter table public.machinery_diesel_cards
 select c.name as company, d.card_no, d.status, d.provider, d.subsidy_litres
   from public.machinery_diesel_cards d join public.machinery_companies c on c.id = d.company_id
  order by c.name, d.card_no;
+
+-- Applying for the KPDN subsidy (shows the check list) and the fuel
+-- station's login record for the card.
+alter table public.machinery_diesel_cards
+  add column if not exists kpdn_apply     boolean not null default false,
+  add column if not exists login_id       text check (char_length(login_id) <= 80),
+  add column if not exists login_password text check (char_length(login_password) <= 80);
+update public.machinery_diesel_cards set kpdn_apply = true where kpdn_apply = false and checklist <> '{}'::jsonb;

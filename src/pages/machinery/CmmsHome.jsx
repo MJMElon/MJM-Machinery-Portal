@@ -1,5 +1,4 @@
 import { Desktop } from '../../components/Desktop.jsx'
-import BackButton from '../../components/BackButton.jsx'
 import { MachTrekIcon, MachineProfileIcon, SupplierIcon, WorkManageIcon } from '../../components/AppIcons.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
 
@@ -18,7 +17,6 @@ export default function CmmsHome() {
     return <p className="p-6 text-center text-sm text-slate-500">This is the Machinery Manage main page. Close this window to go back to it.</p>
   return (
     <div>
-      <BackButton to="/" label="Back to CMMS main page" />
       <Desktop modules={CMMS_MODULES} orderKey="cmms" />
     </div>
   )

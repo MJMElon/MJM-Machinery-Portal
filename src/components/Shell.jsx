@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
 import { INTRANET_URL } from '../lib/supabase.js'
@@ -49,12 +49,13 @@ function pageTitle(path) {
   if (path === '/') return ''
   if (path.startsWith('/cmms')) return 'Machinery Manage'
   if (path.startsWith('/diesel/claims')) return 'Fuel Claims'
-  if (path.startsWith('/diesel/usage')) return 'Fuel Usage'
+  if (path.startsWith('/diesel/usage')) return 'Fuel Usage Report'
   if (path.startsWith('/diesel/cards')) return 'Fleet Card Manage'
-  if (path.startsWith('/diesel/report')) return 'Report'
+  if (path.startsWith('/diesel/report')) return 'Fuel Usage Report'
   if (path.startsWith('/diesel/users')) return 'User setting'
   if (path.startsWith('/diesel')) return 'Fuel Manage'
   if (path.startsWith('/settings')) return 'Settings'
+  if (path.startsWith('/renewal')) return 'Machinery Renewal'
   return ''
 }
 
@@ -76,10 +77,16 @@ function intranetUrl(company) {
   }
 }
 
+// Module main pages (a desktop of icons): their back goes to the CMMS 2 main page.
+const MODULE_ROOTS = ['/cmms', '/diesel', '/settings', '/renewal']
+
 function TopBar({ title, gutter }) {
   const { user, logout } = useAuth()
   const { current } = useCompany()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
   const home = !title
+  const moduleRoot = MODULE_ROOTS.includes(pathname.replace(/\/$/, ''))
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
       <div
@@ -87,7 +94,13 @@ function TopBar({ title, gutter }) {
       >
         {/* Left: back to the Intranet (every page, so it is still there when a module window is expanded) + the company switcher */}
         <div className="flex min-w-0 items-center gap-3">
-          <BackButton href={intranetUrl(current)} label="Back to MJM Intranet" top />
+          {home ? (
+            <BackButton href={intranetUrl(current)} label="Back to MJM Intranet" top />
+          ) : moduleRoot ? (
+            <BackButton to="/" label="Back to CMMS main page" />
+          ) : (
+            <BackButton onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))} label="Back" />
+          )}
           <div className="hidden min-w-0 sm:block">
             <CompanySwitcher />
           </div>

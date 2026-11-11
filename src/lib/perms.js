@@ -48,7 +48,7 @@ export const MODULES = [
         special: ['view_all', 'approve', 'pay'],
         hint: 'View / add / edit / delete apply to the person’s own claims'
       },
-      { key: 'usage', label: 'Fuel Usage', actions: ['view', 'add', 'delete'], special: [] },
+      { key: 'usage', label: 'Fuel Usage Report', actions: ['view', 'add', 'delete'], special: [] },
       { key: 'cards', label: 'Fleet Card Manage', actions: ['view', 'add', 'edit', 'delete'], special: [] },
       { key: 'report', label: 'Report', actions: ['view'], special: [] }
     ]
@@ -117,13 +117,13 @@ export const ROLE_MODEL = [
       },
       {
         section: 'usage',
-        label: 'Fuel Usage',
+        label: 'Fuel Usage Report',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'manage', label: 'Record / delete card fill-ups', actions: ['add', 'delete'] }
         ]
       },
-      { section: 'report', label: 'Report', options: [{ key: 'view', label: 'View page', actions: ['view'] }] }
+      { section: 'report', label: 'Report (old)', options: [{ key: 'view', label: 'View Fuel Usage Report', actions: ['view'] }] }
     ]
   }
 ]

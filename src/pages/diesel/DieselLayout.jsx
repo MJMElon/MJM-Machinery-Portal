@@ -1,10 +1,8 @@
-import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
+import { Outlet, useMatch, useNavigate } from 'react-router-dom'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
-import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt, IconUsers } from '../../components/icons.jsx'
+import { IconBack, IconCard, IconFuel, IconLock, IconReceipt, IconUsers } from '../../components/icons.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
-import BackButton from '../../components/BackButton.jsx'
-import { EMBEDDED } from '../../components/Shell.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // Diesel Manage: four modules. The landing page shows them as square icons;
@@ -13,9 +11,8 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 // Settings → User setting).
 export const DIESEL_MODULES = [
   { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
-  { to: '/diesel/usage', label: 'Fuel Usage', Icon: IconFuel, need: (a) => a.can('usage', 'view'), hint: 'Every fill-up (cash and fleet card) by vehicle and driver' },
+  { to: '/diesel/usage', label: 'Fuel Usage\nReport', Icon: IconFuel, need: (a) => a.can('usage', 'view') || a.can('report', 'view'), hint: 'Dashboards, monthly totals by vehicle and driver, fill-up log' },
   { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
-  { to: '/diesel/report', label: 'Report', Icon: IconChart, need: (a) => a.can('report', 'view'), hint: 'Monthly totals by vehicle and driver, export' },
   { to: '/diesel/users', label: 'User setting', Icon: IconUsers, need: (a) => a.admin || a.pay, hint: 'Who reviews and approves whose fuel claims' }
 ]
 
@@ -25,7 +22,6 @@ export default function DieselLayout() {
   const { isSuperAdmin } = useAuth()
   const access = useDieselAccess(current?.diesel_enabled ? current.id : null)
   const landing = Boolean(useMatch({ path: '/diesel', end: true }))
-  const location = useLocation()
   const back = () => navigate('/')
 
   if (!loaded || !access.loaded)
@@ -63,18 +59,11 @@ export default function DieselLayout() {
     )
 
   const nav = DIESEL_MODULES.filter((n) => n.need(access))
-  // Inside a claim (view / edit / new) only the page's own "Back to claim list" shows.
-  const deep = location.pathname.split('/').filter(Boolean).length > 2
 
   // Landing page and every module: just "Back to CMMS main page" and the content.
   // The top bar names the module (Fuel Claims, Fuel Usage, …).
   return (
     <div>
-      {!deep && !EMBEDDED && (
-        <div className="mb-4">
-          <BackButton onClick={back} label="Back to CMMS main page" />
-        </div>
-      )}
       <Outlet context={{ company: current, access }} />
       {landing && !access.claim && !access.report && (
         <p className="mx-auto mt-6 max-w-xl rounded-xl bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
