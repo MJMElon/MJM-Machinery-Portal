@@ -61,8 +61,24 @@ function pageTitle(path) {
 // Top bar.
 // Main page: "Back to MJM Intranet" button + company switcher (left), "CMMS 2" (centre), user tools (right).
 // Inner pages: the same back button + company switcher (left), "CMMS 2" above the section name (centre).
+// Back to the Intranet with the company in use, so its Business boxes switch
+// to the same company (the Intranet reads gw_company on its home page).
+function intranetUrl(company) {
+  if (!company) return INTRANET_URL
+  try {
+    const u = new URL(INTRANET_URL)
+    u.searchParams.set('gw_company', company.code || company.name)
+    u.searchParams.set('gw_company_name', company.name)
+    if (company.short_name) u.searchParams.set('gw_company_short', company.short_name)
+    return u.toString()
+  } catch {
+    return INTRANET_URL
+  }
+}
+
 function TopBar({ title, gutter }) {
   const { user, logout } = useAuth()
+  const { current } = useCompany()
   const home = !title
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
@@ -71,7 +87,7 @@ function TopBar({ title, gutter }) {
       >
         {/* Left: back to the Intranet (every page, so it is still there when a module window is expanded) + the company switcher */}
         <div className="flex min-w-0 items-center gap-3">
-          <BackButton href={INTRANET_URL} label="Back to MJM Intranet" top />
+          <BackButton href={intranetUrl(current)} label="Back to MJM Intranet" top />
           <div className="hidden min-w-0 sm:block">
             <CompanySwitcher />
           </div>
