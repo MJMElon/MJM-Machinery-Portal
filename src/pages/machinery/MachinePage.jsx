@@ -256,7 +256,7 @@ export default function MachinePage({ mode }) {
             <Row ro={ro} label="Chassis no." value={form.chassis_no} onChange={set('chassis_no')} />
             <Row ro={ro} label="Engine no." value={form.engine_no} onChange={set('engine_no')} />
             <Row ro={ro} label="Market value" type="number" step="0.01" value={form.market_value} onChange={set('market_value')} show={form.market_value !== '' ? money(form.market_value) : ''} />
-            <Row ro={ro} label="Ideal fuel consumption" type="number" step="0.001" value={form.ideal_fuel_consumption} onChange={set('ideal_fuel_consumption')} hint={`per ${form.service_unit === 'Liter/Hour' ? 'hour' : 'km'}`} />
+            <Row ro={ro} label="Ideal fuel consumption" type="number" step="0.001" value={form.ideal_fuel_consumption} onChange={set('ideal_fuel_consumption')} />
             <Row ro={ro} label="Possible working units" type="number" step="0.01" value={form.possible_working_units} onChange={set('possible_working_units')} />
             <Row ro={ro} label="Service unit" type="select" value={form.service_unit} onChange={set('service_unit')} options={SERVICE_UNITS} show={SERVICE_UNITS.find((o) => o[0] === form.service_unit)?.[1] || form.service_unit} />
             <FileRow label="Reg card" path={form.reg_card_path} url={urls[form.reg_card_path]} ro={ro} busy={busy} onPick={setDoc('reg_card_path')} onClear={() => setForm((f) => ({ ...f, reg_card_path: '' }))} />
@@ -283,46 +283,26 @@ export default function MachinePage({ mode }) {
 
       <Card className="p-5 sm:p-6">
         <h3 className="mb-1 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">Fuel &amp; drivers</h3>
-        <p className="mb-4 text-xs text-slate-500">Used by Fuel Manage: the drivers see this vehicle in their fuel claims and it is pre-selected for them.</p>
+        <div className="mb-3" />
         <div className="grid gap-x-10 gap-y-1 lg:grid-cols-2">
           <div>
             <Row ro={ro} label="Fuel" type="select" value={form.fuel_type} onChange={set('fuel_type')} options={[['diesel', 'Diesel'], ['petrol', 'Petrol'], ['none', 'None']]} show={{ diesel: 'Diesel', petrol: 'Petrol', none: 'None' }[form.fuel_type]} />
-            <Row ro={ro} label="Tank capacity (L)" type="number" step="1" value={form.tank_capacity_l} onChange={set('tank_capacity_l')} hint="Fill-ups larger than this are flagged in the Fuel report" />
-            <Tick label="KPDN diesel subsidy" checked={form.kpdn_subsidy} onChange={set('kpdn_subsidy')} ro={ro} hint="On the subsidised-diesel fleet card (shows in Fuel Manage → Fleet Card Manage)" />
-            <Tick label="General use" checked={form.general_use} onChange={set('general_use')} ro={ro} hint="A light vehicle anyone in the company may use: everyone can pick it in a fuel claim" />
+            <Row ro={ro} label="Tank capacity (L)" type="number" step="1" value={form.tank_capacity_l} onChange={set('tank_capacity_l')} />
+            <Tick label="KPDN diesel subsidy" checked={form.kpdn_subsidy} onChange={set('kpdn_subsidy')} ro={ro} />
+            <Tick label="General use" checked={form.general_use} onChange={set('general_use')} ro={ro} />
           </div>
           <div>
             <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-3 border-b border-slate-100 py-2.5">
-              <span className="pt-2 text-sm font-semibold text-slate-700">Driver(s)</span>
-              <div>
-                <div className="flex flex-wrap gap-1.5">
-                  {form.driver_ids.length === 0 && <span className="pt-2 text-sm text-slate-400">{ro ? '—' : 'No driver assigned'}</span>}
-                  {form.driver_ids.map((uid) => (
-                    <span key={uid} className="inline-flex h-9 items-center gap-1 rounded-full bg-brand-light px-3 text-sm font-medium text-brand-dark">
-                      {userLabel(person.get(uid))}
-                      {!ro && (
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, driver_ids: f.driver_ids.filter((x) => x !== uid) }))} className="rounded-full p-0.5 hover:bg-white/60" aria-label="Remove driver">
-                          <IconX width={14} height={14} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-                {!ro && (
-                  <select
-                    value=""
-                    onChange={(e) => e.target.value && setForm((f) => ({ ...f, driver_ids: [...f.driver_ids, e.target.value] }))}
-                    className="mt-2 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                  >
-                    <option value="">+ Add driver (users with CMMS 2 access)…</option>
-                    {people.filter((p) => !form.driver_ids.includes(p.user_id)).map((p) => (
-                      <option key={p.user_id} value={p.user_id}>
-                        {userLabel(p)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
+              <span className="pt-2 text-sm font-semibold text-slate-700">Driver</span>
+              {ro ? (
+                <p className="py-2 text-sm text-slate-800">{form.driver_ids[0] ? userLabel(person.get(form.driver_ids[0])) : <span className="text-slate-400">—</span>}</p>
+              ) : (
+                <DriverPicker
+                  value={form.driver_ids[0] || ''}
+                  people={people}
+                  onChange={(uid) => setForm((f) => ({ ...f, driver_ids: uid ? [uid] : [] }))}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -382,18 +362,8 @@ function Tick({ label, checked, onChange, ro, hint }) {
   return (
     <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-3 border-b border-slate-100 py-2.5">
       <span className="pt-2 text-sm font-semibold text-slate-700">{label}</span>
-      <div className="pt-2">
-        {ro ? (
-          <span className="text-sm text-slate-800">{checked ? 'Yes' : 'No'}</span>
-        ) : (
-          <label className="flex items-start gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={Boolean(checked)} onChange={onChange} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand" />
-            <span>
-              {checked ? 'Yes' : 'No'}
-              {hint && <span className="block text-xs text-slate-500">{hint}</span>}
-            </span>
-          </label>
-        )}
+      <div className="pt-2.5">
+        <input type="checkbox" checked={Boolean(checked)} onChange={onChange} disabled={ro} className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100" title={hint} />
       </div>
     </div>
   )
@@ -498,6 +468,61 @@ function Photos({ photos, urls, ro, busy, onAdd, onRemove }) {
           )
         )}
       </div>
+    </div>
+  )
+}
+
+// Searchable driver list: type part of a name or e-mail, pick from the matches.
+function DriverPicker({ value, people, onChange }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const chosen = people.find((p) => p.user_id === value)
+  const t = q.trim().toLowerCase()
+  const matches = people.filter((p) => !t || [p.full_name, p.email].some((v) => String(v || '').toLowerCase().includes(t))).slice(0, 12)
+  return (
+    <div className="relative">
+      {chosen && !open ? (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-10 items-center rounded-lg bg-brand-light px-3 text-sm font-medium text-brand-dark">{userLabel(chosen)}</span>
+          <button type="button" onClick={() => onChange('')} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-red-600" aria-label="Remove driver">
+            <IconX width={16} height={16} />
+          </button>
+        </div>
+      ) : (
+        <input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Type a name to search…"
+          className={box}
+        />
+      )}
+      {open && !chosen && (
+        <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {matches.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">No match</li>}
+          {matches.map((p) => (
+            <li key={p.user_id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onChange(p.user_id)
+                  setQ('')
+                  setOpen(false)
+                }}
+                className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-slate-50"
+              >
+                <span className="font-medium text-slate-800">{p.full_name || p.email}</span>
+                {p.full_name && <span className="text-xs text-slate-400">{p.email}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

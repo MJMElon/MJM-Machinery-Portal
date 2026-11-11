@@ -77,7 +77,6 @@ export default function MachineryProfile() {
     <div className="space-y-4">
       <PageHeader
         title="Machinery Profile"
-        subtitle={`${current?.name || ''} · ${rows.length} machine${rows.length === 1 ? '' : 's'} / vehicle${rows.length === 1 ? '' : 's'}`}
         right={
           <div className="flex flex-wrap items-center gap-2">
             {kpdn > 0 && (
@@ -114,7 +113,7 @@ export default function MachineryProfile() {
                   <th className="px-5 py-2.5">Code / Reg. no.</th>
                   <th className="px-3 py-2.5">Type</th>
                   <th className="px-3 py-2.5">Brand / Model</th>
-                  <th className="px-3 py-2.5">Driver(s)</th>
+                  <th className="px-3 py-2.5">Driver</th>
                   <th className="px-3 py-2.5">Fuel</th>
                   <th className="px-3 py-2.5">Cover</th>
                   <th className="w-24 px-3 py-2.5">Status</th>
@@ -168,10 +167,6 @@ export default function MachineryProfile() {
           </div>
         )}
       </Card>
-      <p className="text-xs text-slate-500">
-        Drivers assigned here see this vehicle in their fuel claims. Tick “General use” on a light vehicle that anyone may drive;
-        it is then offered to everyone in the company. Tick “KPDN diesel subsidy” for a vehicle on the subsidised-diesel fleet card.
-      </p>
     </div>
   )
 }

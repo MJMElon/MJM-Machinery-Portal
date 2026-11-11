@@ -3,7 +3,9 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
 import { INTRANET_URL } from '../lib/supabase.js'
-import { IconBack, IconCheck, IconLogout } from './icons.jsx'
+import { IconCheck, IconLogout } from './icons.jsx'
+import BackButton from './BackButton.jsx'
+import { WindowsProvider } from './Windows.jsx'
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
@@ -30,12 +32,14 @@ export function Shell() {
     )
   return (
     <CompanyProvider>
-      <div className="flex min-h-[100dvh] w-full flex-col">
-        <TopBar title={title} gutter={gutter} />
-        <main className={`w-full flex-1 pb-12 pt-6 sm:pt-8 ${gutter}`}>
-          <Outlet />
-        </main>
-      </div>
+      <WindowsProvider>
+        <div className="flex min-h-[100dvh] w-full flex-col">
+          <TopBar title={title} gutter={gutter} />
+          <main className={`w-full flex-1 pb-20 pt-6 sm:pt-8 ${gutter}`}>
+            <Outlet />
+          </main>
+        </div>
+      </WindowsProvider>
     </CompanyProvider>
   )
 }
@@ -66,17 +70,7 @@ function TopBar({ title, gutter }) {
       >
         {/* Left: back to the Intranet (main page only) + the company switcher */}
         <div className="flex min-w-0 items-center gap-3">
-          {home && (
-            <a
-              href={INTRANET_URL}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white pl-2.5 pr-3 text-[13px] font-semibold text-slate-800 hover:border-brand/50 hover:text-brand"
-              title="Back to MJM Intranet"
-            >
-              <IconBack width={15} height={15} className="text-slate-400" />
-              <span className="hidden sm:inline">Back to MJM Intranet</span>
-              <span className="sm:hidden">Intranet</span>
-            </a>
-          )}
+          {home && <BackButton href={INTRANET_URL} label="Back to MJM Intranet" />}
           <div className="hidden min-w-0 sm:block">
             <CompanySwitcher />
           </div>
@@ -123,7 +117,7 @@ function TopBar({ title, gutter }) {
 // The list is sorted by company code (smallest first); the user can drag rows
 // to their own order, remembered in this browser.
 function CompanySwitcher({ wide = false }) {
-  const { companies, current, select, businessesOf } = useCompany()
+  const { companies, current, select } = useCompany()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -143,7 +137,6 @@ function CompanySwitcher({ wide = false }) {
   const active = companies.filter((c) => c.is_active !== false)
   const byCode = [...active].sort((a, b) => (a.code || '\uffff').localeCompare(b.code || '\uffff') || a.name.localeCompare(b.name))
   const list = [...byCode].sort((a, b) => rankOf(order, byCode, a.id) - rankOf(order, byCode, b.id))
-  const bizNames = (c) => businessesOf(c).map((b) => b.name).join(', ')
 
   function drop(targetId) {
     if (!dragId || dragId === targetId) return
@@ -167,10 +160,7 @@ function CompanySwitcher({ wide = false }) {
         title="Change company"
       >
         <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-        <span className="min-w-0 flex-1 truncate text-left">
-          {current.name}
-          {bizNames(current) && <span className="ml-1.5 font-normal text-slate-400">· {bizNames(current)}</span>}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-left">{current.name}</span>
         <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -214,14 +204,10 @@ function CompanySwitcher({ wide = false }) {
               } ${dragId === c.id ? 'opacity-50' : ''}`}
             >
               <span className="text-slate-300" aria-hidden="true">⋮⋮</span>
-              <span className="min-w-0 flex-1 truncate">
-                <span className="font-medium text-slate-800">{c.name}</span>
-                {bizNames(c) && <span className="text-slate-400"> · {bizNames(c)}</span>}
-              </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{c.name}</span>
               {c.id === current.id && <IconCheck width={18} height={18} className="shrink-0 text-brand" />}
             </button>
           ))}
-          <p className="px-4 pb-1 pt-2 text-[11px] text-slate-400">Sorted by company code. Drag a row to change your order.</p>
         </div>
       )}
     </div>

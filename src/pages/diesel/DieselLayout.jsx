@@ -3,6 +3,7 @@ import { Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt } from '../../components/icons.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
+import BackButton from '../../components/BackButton.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // Diesel Manage: four modules. The landing page shows them as square icons;
@@ -68,12 +69,9 @@ export default function DieselLayout() {
   return (
     <div>
       {!deep && (
-        <button
-          onClick={back}
-          className="-ml-2 mb-4 inline-flex h-9 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-brand print:hidden"
-        >
-          <IconBack width={16} height={16} /> Back to CMMS main page
-        </button>
+        <div className="mb-4">
+          <BackButton onClick={back} label="Back to CMMS main page" />
+        </div>
       )}
       <Outlet context={{ company: current, access }} />
       {landing && !access.claim && !access.report && (

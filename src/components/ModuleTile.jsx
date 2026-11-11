@@ -149,7 +149,7 @@ export function TileGrid({ children, orderKey }) {
             <div
               key={id}
               data-tile={id}
-              className={`touch-none transition-opacity ${storageKey ? 'cursor-grab active:cursor-grabbing' : ''} ${lifted ? 'opacity-30' : ''}`}
+              className={`relative touch-none transition-opacity ${storageKey ? 'cursor-grab active:cursor-grabbing' : ''} ${lifted ? 'opacity-30' : ''}`}
               onPointerDown={(e) => start(e, id)}
               onPointerMove={move}
               onPointerUp={end}
@@ -163,6 +163,7 @@ export function TileGrid({ children, orderKey }) {
               }}
             >
               {el}
+              {storageKey && <Grip />}
             </div>
           )
         })}
@@ -176,17 +177,21 @@ export function TileGrid({ children, orderKey }) {
           {byId[drag.id]}
         </div>
       )}
-      {storageKey && (
-        <p className="mt-6 text-center text-xs text-slate-400">
-          Hold and drag a button to move it; it drops where you let go.{' '}
-          {order.length > 0 && (
-            <button onClick={() => commit([])} className="text-xs font-medium text-brand hover:underline">
-              Reset order
-            </button>
-          )}
-        </p>
-      )}
     </div>
+  )
+}
+
+// Small drag handle in the corner of a tile: shows it can be moved.
+function Grip() {
+  return (
+    <svg viewBox="0 0 10 16" className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-2.5 text-slate-300" fill="currentColor" aria-hidden="true">
+      <circle cx="2.5" cy="2.5" r="1.5" />
+      <circle cx="7.5" cy="2.5" r="1.5" />
+      <circle cx="2.5" cy="8" r="1.5" />
+      <circle cx="7.5" cy="8" r="1.5" />
+      <circle cx="2.5" cy="13.5" r="1.5" />
+      <circle cx="7.5" cy="13.5" r="1.5" />
+    </svg>
   )
 }
 
