@@ -52,6 +52,7 @@ function pageTitle(path) {
   if (path.startsWith('/diesel/usage')) return 'Fuel Usage'
   if (path.startsWith('/diesel/cards')) return 'Fleet Card Manage'
   if (path.startsWith('/diesel/report')) return 'Report'
+  if (path.startsWith('/diesel/users')) return 'User setting'
   if (path.startsWith('/diesel')) return 'Fuel Manage'
   if (path.startsWith('/settings')) return 'Settings'
   return ''

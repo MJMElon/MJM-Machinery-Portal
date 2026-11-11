@@ -27,6 +27,7 @@ import ClaimReview from './pages/diesel/ClaimReview.jsx'
 import DieselUsage from './pages/diesel/DieselUsage.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
+import DieselUsers from './pages/diesel/DieselUsers.jsx'
 import DieselReport from './pages/diesel/DieselReport.jsx'
 
 export default function App() {
@@ -73,7 +74,7 @@ export default function App() {
             {/* old links */}
             <Route path="all" element={<Navigate to="/diesel/claims" replace />} />
             <Route path="vehicles" element={<Navigate to="/cmms/machines" replace />} />
-            <Route path="users" element={<Navigate to="/settings/users" replace />} />
+            <Route path="users" element={<DieselUsers />} />
           </Route>
           {/* Old links (Machinery System / Maintenance Request / Incoming Photos) */}
           <Route path="/machinery" element={<Navigate to="/cmms" replace />} />

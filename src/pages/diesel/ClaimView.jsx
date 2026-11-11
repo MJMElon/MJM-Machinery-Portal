@@ -21,6 +21,11 @@ import {
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
+import { EMBEDDED } from '../../components/Shell.jsx'
+
+// Printing from inside a module window (iframe) is unreliable: open the claim
+// in its own tab with ?print=1, which prints at once and closes afterwards.
+export const printUrl = (id) => `${window.location.origin}${window.location.pathname}#/diesel/claims/${id}?print=1`
 
 // One fuel claim: header, the receipt rows, totals, the receipts, and (for
 // people with the right) approve / reject / mark paid. Print gives a clean claim
@@ -66,8 +71,13 @@ export default function ClaimView() {
 
   useEffect(() => {
     if (!loading && claim && params.get('print') === '1') {
+      const closeAfter = () => window.close() // only works for a tab opened by the Print button
+      window.addEventListener('afterprint', closeAfter)
       const t = setTimeout(() => window.print(), Object.keys(imgs).length ? 800 : 200)
-      return () => clearTimeout(t)
+      return () => {
+        clearTimeout(t)
+        window.removeEventListener('afterprint', closeAfter)
+      }
     }
   }, [loading, claim, imgs, params])
 
@@ -165,7 +175,7 @@ export default function ClaimView() {
           right={
             claim && (
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => window.print()}>
+                <Button variant="secondary" onClick={() => (EMBEDDED ? window.open(printUrl(claim.id), '_blank', 'noopener') : window.print())}>
                   <IconPrint width={18} height={18} /> Print
                 </Button>
                 {canEdit && (

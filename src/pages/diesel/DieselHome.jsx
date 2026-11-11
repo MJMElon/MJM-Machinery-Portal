@@ -1,14 +1,15 @@
 import { useOutletContext } from 'react-router-dom'
 import { Desktop } from '../../components/Desktop.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
-import { DieselClaimsIcon, DieselUsageIcon, FleetCardIcon, ReportIcon } from '../../components/AppIcons.jsx'
+import { DieselClaimsIcon, DieselUsageIcon, FleetCardIcon, FuelUsersIcon, ReportIcon } from '../../components/AppIcons.jsx'
 import { DIESEL_MODULES } from './DieselLayout.jsx'
 
 const ART = {
   '/diesel/claims': DieselClaimsIcon,
   '/diesel/usage': DieselUsageIcon,
   '/diesel/cards': FleetCardIcon,
-  '/diesel/report': ReportIcon
+  '/diesel/report': ReportIcon,
+  '/diesel/users': FuelUsersIcon
 }
 
 // Fuel Manage landing page: the four modules as square icons (draggable into

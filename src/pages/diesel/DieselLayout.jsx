@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
-import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt } from '../../components/icons.jsx'
+import { IconBack, IconCard, IconChart, IconFuel, IconLock, IconReceipt, IconUsers } from '../../components/icons.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
 import BackButton from '../../components/BackButton.jsx'
@@ -15,7 +15,8 @@ export const DIESEL_MODULES = [
   { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
   { to: '/diesel/usage', label: 'Fuel Usage', Icon: IconFuel, need: (a) => a.can('usage', 'view'), hint: 'Every fill-up (cash and fleet card) by vehicle and driver' },
   { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
-  { to: '/diesel/report', label: 'Report', Icon: IconChart, need: (a) => a.can('report', 'view'), hint: 'Monthly totals by vehicle and driver, export' }
+  { to: '/diesel/report', label: 'Report', Icon: IconChart, need: (a) => a.can('report', 'view'), hint: 'Monthly totals by vehicle and driver, export' },
+  { to: '/diesel/users', label: 'User setting', Icon: IconUsers, need: (a) => a.admin || a.pay, hint: 'Who reviews and approves whose fuel claims' }
 ]
 
 export default function DieselLayout() {

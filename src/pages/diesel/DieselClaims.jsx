@@ -8,6 +8,7 @@ import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
 import { CLAIM_STATUS, deleteClaim, listClaimLines, listClaims, listPeople, personLabel, removeReceipt } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, today } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
+import { EMBEDDED } from '../../components/Shell.jsx'
 
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
 
@@ -172,7 +173,11 @@ export default function DieselClaims() {
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
                           <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
-                          <ActionButton to={`/diesel/claims/${c.id}?print=1`} label="Print" Icon={IconPrint} />
+                          {EMBEDDED ? (
+                            <ActionButton href={`${window.location.origin}${window.location.pathname}#/diesel/claims/${c.id}?print=1`} label="Print" Icon={IconPrint} />
+                          ) : (
+                            <ActionButton to={`/diesel/claims/${c.id}?print=1`} label="Print" Icon={IconPrint} />
+                          )}
                           <ActionButton onClick={canDelete(c) ? () => remove(c) : null} label="Delete" Icon={IconTrash} danger disabled={busyId === c.id} />
                         </div>
                       </td>
@@ -188,10 +193,16 @@ export default function DieselClaims() {
   )
 }
 
-function ActionButton({ to, onClick, label, Icon, danger, disabled }) {
+function ActionButton({ to, href, onClick, label, Icon, danger, disabled }) {
   const cls = `flex h-9 w-9 items-center justify-center rounded-lg ${
     danger ? 'text-slate-400 hover:bg-red-50 hover:text-red-600' : 'text-slate-500 hover:bg-slate-100 hover:text-brand'
   } disabled:cursor-not-allowed disabled:opacity-30`
+  if (href)
+    return (
+      <a href={href} target="_blank" rel="noopener" className={cls} title={label} aria-label={label}>
+        <Icon width={18} height={18} />
+      </a>
+    )
   if (!to && !onClick)
     return (
       <span className={`${cls} cursor-not-allowed opacity-30`} title={`${label} not available`} aria-hidden="true">
