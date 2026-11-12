@@ -30,41 +30,53 @@ const padNo = (claim) => (claim.claim_no != null ? String(claim.claim_no).padSta
 
 const CSS = `
 @page { size: A4 portrait; margin: 0; }
-html, body { margin: 0; padding: 0; background: #fff; color: #111; }
-body { font: 11px/1.45 Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+html, body { margin: 0; padding: 0; background: #fff; color: #111827; }
+body { font: 11px/1.45 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 table { border-collapse: collapse; }
 .page { width: 100%; }
 .page > thead td, .page > tfoot td { height: 14mm; padding: 0; }
-.page > tbody > tr > td { padding: 0 14mm; vertical-align: top; }
-.head { text-align: center; border-bottom: 2px solid #111; padding-bottom: 8px; }
-.head .name { font-size: 20px; font-weight: 800; line-height: 1.2; }
-.head .reg { font-size: 10px; font-style: italic; color: #444; }
-.head .line { font-size: 10.5px; color: #333; margin-top: 2px; }
-.title { margin: 18px 0 14px; text-align: center; font-size: 15px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; }
-.meta { font-size: 11.5px; }
-.meta div { margin: 2px 0; }
-.meta b { display: inline-block; min-width: 110px; }
-.lines { width: 100%; margin-top: 12px; }
-.lines th, .lines td { border: 1px solid #333; padding: 4px 5px; }
-.lines th { background: #eee; font-weight: 700; text-align: center; }
-.lines td.c { text-align: center; }
-.lines td.r { text-align: right; font-variant-numeric: tabular-nums; }
-.lines td.wrap { word-break: break-all; }
-.lines tr.total td { background: #eee; font-weight: 700; }
-.lines .remark { display: block; font-size: 10px; color: #444; }
-.notes { margin-top: 8px; font-size: 10.5px; color: #333; }
-.sign { width: 100%; margin-top: 36px; font-size: 11px; break-inside: avoid; }
-.sign td { width: 33.33%; padding: 0 12px 0 0; vertical-align: top; }
-.sign .label { font-weight: 400; }
-.sign .space { height: 44px; }
-.sign .line { width: 80%; border-bottom: 1px solid #111; padding: 0 2px 3px; min-height: 14px; }
-.sign .role { padding-top: 4px; }
+.page > tbody > tr > td { padding: 0 15mm; vertical-align: top; }
+.head { text-align: center; padding-bottom: 10px; border-bottom: 2px solid #111827; }
+.head .name { font-size: 21px; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
+.head .reg { font-size: 10px; color: #6b7280; margin-top: 1px; }
+.head .line { font-size: 10.5px; color: #374151; margin-top: 3px; }
+.title { margin: 20px 0 14px; text-align: center; font-size: 16px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.meta { width: 100%; font-size: 11.5px; }
+.meta td { padding: 1.5px 0; vertical-align: top; }
+.meta td.k { width: 118px; color: #6b7280; }
+.meta td.v { font-weight: 600; }
+.lines { width: 100%; margin-top: 14px; font-size: 10.5px; }
+.lines th { background: #111827; color: #fff; font-weight: 600; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; padding: 6px 7px; text-align: left; vertical-align: bottom; }
+.lines td { padding: 6px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+.lines tbody tr:nth-child(even) td { background: #f9fafb; }
+.lines .c { text-align: center; }
+.lines .r { text-align: right; font-variant-numeric: tabular-nums; }
+.lines th.r { text-align: right; }
+.lines .wrap { word-break: break-all; }
+.lines .veh { color: #374151; }
+.lines .remark { display: block; font-size: 9.5px; color: #6b7280; }
+.lines .amt { font-weight: 600; }
+.sum { width: 100%; margin-top: 10px; }
+.sum td { vertical-align: top; }
+.sum .box { margin-left: auto; width: 240px; border-top: 2px solid #111827; padding-top: 6px; font-size: 11px; }
+.sum .box table { width: 100%; }
+.sum .box td { padding: 2px 0; }
+.sum .box .k { color: #6b7280; }
+.sum .box .r { text-align: right; font-variant-numeric: tabular-nums; }
+.sum .box .total td { padding-top: 5px; font-weight: 800; font-size: 13px; }
+.notes { margin-top: 10px; font-size: 10.5px; color: #374151; }
+.sign { width: 100%; margin-top: 40px; font-size: 11px; break-inside: avoid; }
+.sign td { width: 33.33%; padding: 0 14px 0 0; vertical-align: top; }
+.sign .label { color: #6b7280; }
+.sign .space { height: 46px; }
+.sign .line { width: 85%; border-bottom: 1px solid #111827; padding: 0 2px 3px; min-height: 14px; font-weight: 600; }
+.sign .role { padding-top: 4px; font-weight: 600; }
 .receipts { break-before: page; }
-.receipts h2 { font-size: 12px; margin: 0 0 8px; }
+.receipts h2 { font-size: 12px; font-weight: 700; margin: 0 0 8px; letter-spacing: .04em; text-transform: uppercase; }
 .receipts table { width: 100%; }
 .receipts td { width: 50%; padding: 0 6px 10px 0; vertical-align: top; break-inside: avoid; }
-.receipts img { display: block; max-width: 100%; max-height: 118mm; border: 1px solid #ccc; }
-.receipts figcaption, .receipts .cap { font-size: 10px; color: #555; margin-top: 2px; }
+.receipts img { display: block; max-width: 100%; max-height: 118mm; border: 1px solid #e5e7eb; border-radius: 4px; }
+.receipts .cap { font-size: 10px; color: #6b7280; margin-top: 3px; }
 `
 
 /** The claim form as a complete HTML document (string). */
@@ -75,20 +87,26 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
   const no = padNo(claim)
   const contact = [company.phone && `Tel: ${company.phone}`, company.fax && `Fax: ${company.fax}`, company.email && `Email: ${company.email}`]
     .filter(Boolean)
-    .join('   ')
+    .join('    ')
+
+  // "Diesel - Petronas Senai, JPB 1234": what was bought and where, then the vehicle.
+  const describe = (l) => {
+    const what = [l.description, l.station].filter(Boolean).join(' - ')
+    const veh = l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : ''
+    return `${esc(what || '—')}${veh ? `<span class="veh">, ${esc(veh)}</span>` : ''}`
+  }
 
   const rows = lines
     .map(
       (l, i) => `
       <tr>
         <td class="c">${i + 1}</td>
-        <td>${esc(l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : '—')}</td>
-        <td class="c">${esc(day(l.fill_date))}</td>
+        <td>${esc(day(l.fill_date))}</td>
         <td class="wrap">${esc(l.receipt_no || '—')}</td>
-        <td>${esc([l.description, l.station].filter(Boolean).join(' · ') || '—')}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
-        <td class="r">${l.litres != null ? esc(num(l.litres, 2)) : '—'}</td>
+        <td>${describe(l)}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
+        <td class="r">${l.litres != null ? Number(l.litres).toFixed(2) : '—'}</td>
         <td class="r">${l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
-        <td class="r">${Number(l.amount || 0).toFixed(2)}</td>
+        <td class="r amt">${Number(l.amount || 0).toFixed(2)}</td>
       </tr>`
     )
     .join('')
@@ -122,28 +140,33 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
     ${contact ? `<div class="line">${esc(contact)}</div>` : ''}
   </div>
   <div class="title">Fuel claim form</div>
-  <div class="meta">
-    <div><b>Name</b> : ${esc(claimantName)}</div>
-    ${no ? `<div><b>Claim No.</b> : ${esc(no)}</div>` : ''}
-    <div><b>Submission Date</b> : ${esc(day(claim.submitted_on || claim.fill_date))}</div>
-  </div>
+  <table class="meta">
+    <tr><td class="k">Name</td><td class="v">${esc(claimantName)}</td></tr>
+    ${no ? `<tr><td class="k">Claim No.</td><td class="v">${esc(no)}</td></tr>` : ''}
+    <tr><td class="k">Submission Date</td><td class="v">${esc(day(claim.submitted_on || claim.fill_date))}</td></tr>
+  </table>
   <table class="lines">
+    <colgroup>
+      <col style="width:6%" /><col style="width:12%" /><col style="width:16%" /><col />
+      <col style="width:12%" /><col style="width:12%" /><col style="width:13%" />
+    </colgroup>
     <thead>
       <tr>
-        <th>No.</th><th>Vehicle No.</th><th>Date</th><th>Receipt No.</th><th>Description</th>
-        <th>Litre</th><th>Unit Price (RM)</th><th>Amount (RM)</th>
+        <th class="c">No.</th><th>Receipt Date</th><th>Receipt No.</th><th>Description</th>
+        <th class="r">Litre</th><th class="r">Unit price<br />(RM)</th><th class="r">Amount<br />(RM)</th>
       </tr>
     </thead>
     <tbody>
-      ${rows || '<tr><td colspan="8" class="c">No cash receipt on this claim.</td></tr>'}
-      <tr class="total">
-        <td colspan="5" class="r">TOTAL (RM)</td>
-        <td class="r">${esc(num(litres, 2))}</td>
-        <td></td>
-        <td class="r">${total.toFixed(2)}</td>
-      </tr>
+      ${rows || '<tr><td colspan="7" class="c">No cash receipt on this claim.</td></tr>'}
     </tbody>
   </table>
+  <table class="sum"><tr><td>
+    <div class="box"><table>
+      <tr><td class="k">Total litres</td><td class="r">${litres.toFixed(2)} L</td></tr>
+      <tr><td class="k">Receipts</td><td class="r">${lines.length}</td></tr>
+      <tr class="total"><td>TOTAL PAYABLE (RM)</td><td class="r">${esc(num(total, 2))}</td></tr>
+    </table></div>
+  </td></tr></table>
   ${claim.notes ? `<div class="notes">Notes: ${esc(claim.notes)}</div>` : ''}
   <table class="sign">
     <tr><td class="label">Prepared By:</td><td class="label">Verified By:</td><td class="label">Approved By:</td></tr>
@@ -153,7 +176,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
   </table>
   ${
     receiptRows.length
-      ? `<div class="receipts"><h2>Receipts — fuel claim ${esc(no)}</h2><table>${receiptRows.join('')}</table></div>`
+      ? `<div class="receipts"><h2>Receipts · Fuel claim ${esc(no)}</h2><table>${receiptRows.join('')}</table></div>`
       : ''
   }
 </td></tr></tbody>
