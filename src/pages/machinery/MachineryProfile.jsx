@@ -21,6 +21,7 @@ export default function MachineryProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
+  const [tab, setTab] = useState('active') // active | inactive | insurance_only, like the old CMMS tabs
   const [locations, setLocations] = useState([])
   const [loc, setLoc] = useState('') // '' = all, 'none' = without a location, else a location id
   const [busyId, setBusyId] = useState(null)
@@ -54,9 +55,11 @@ export default function MachineryProfile() {
   const locationName = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations])
   const countIn = (id) => rows.filter((m) => (id === 'none' ? !locationName.has(m.location_id) : m.location_id === id)).length
 
+  const countStatus = (s) => rows.filter((m) => machineStatus(m) === s).length
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    const inLoc = !loc || !hasLocations ? rows : rows.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
+    const inTab = rows.filter((m) => machineStatus(m) === tab)
+    const inLoc = !loc || !hasLocations ? inTab : inTab.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
     if (!t) return inLoc
     return inLoc.filter((m) =>
       [machineNo(m), m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, locationName.get(m.location_id), ...drivers(m)].some((v) =>
@@ -64,7 +67,7 @@ export default function MachineryProfile() {
       )
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, q, people, loc, locationName])
+  }, [rows, q, people, loc, locationName, tab])
 
   async function remove(m) {
     if (!window.confirm(`Delete ${m.name}? This cannot be undone.`)) return
@@ -113,6 +116,23 @@ export default function MachineryProfile() {
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
       <Card className="overflow-hidden">
+        {/* Status tabs, like the old CMMS: Active / Inactive / Insurance Only */}
+        <div className="flex border-b border-slate-200 bg-slate-50/60">
+          {Object.entries(MACHINE_STATUS).map(([k, v]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTab(k)}
+              className={`relative px-6 py-3 text-sm font-bold transition ${
+                tab === k ? 'bg-white text-brand' : k === 'inactive' ? 'text-red-600 hover:bg-white/60' : k === 'insurance_only' ? 'text-sky-700 hover:bg-white/60' : 'text-slate-600 hover:bg-white/60'
+              }`}
+            >
+              {v.label}
+              <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{countStatus(k)}</span>
+              {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
           <h3 className="font-semibold text-slate-800">Listing</h3>
           <div className="flex flex-wrap items-center gap-2">
@@ -135,7 +155,7 @@ export default function MachineryProfile() {
             <Spinner className="h-7 w-7" />
           </div>
         ) : shown.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (loc && !q.trim() ? 'No machines or vehicles in this location.' : 'Nothing matches the search.') : 'No machines or vehicles yet.'}</p>
+          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (q.trim() ? 'Nothing matches the search.' : loc ? 'No machines or vehicles in this location.' : `No ${MACHINE_STATUS[tab].label.toLowerCase()} machines or vehicles.`) : 'No machines or vehicles yet.'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1120px] text-sm">
@@ -145,11 +165,11 @@ export default function MachineryProfile() {
                   <th className="px-3 py-2.5">Code / Reg. no.</th>
                   {hasLocations && <th className="px-3 py-2.5">Location</th>}
                   <th className="px-3 py-2.5">Type</th>
-                  <th className="px-3 py-2.5">Brand / Model</th>
+                  <th className="px-3 py-2.5">Brand</th>
+                  <th className="px-3 py-2.5">Model</th>
                   <th className="px-3 py-2.5">Driver</th>
                   <th className="px-3 py-2.5">Fuel</th>
                   <th className="px-3 py-2.5">Cover</th>
-                  <th className="w-24 px-3 py-2.5">Status</th>
                   <th className="w-32 px-3 py-2.5 text-center">Action</th>
                 </tr>
               </thead>
@@ -171,7 +191,8 @@ export default function MachineryProfile() {
                         {m.machine_type || '—'}
                         {m.general_use && <Badge color="blue" className="ml-1.5">General-use car</Badge>}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">{[m.brand, m.model].filter(Boolean).join(' ') || '—'}</td>
+                      <td className="px-3 py-3 text-slate-700">{m.brand || '—'}</td>
+                      <td className="px-3 py-3 text-slate-700">{m.model || '—'}</td>
                       <td className="px-3 py-3 text-slate-700">{d.length ? d.join(', ') : '—'}</td>
                       <td className="px-3 py-3 text-slate-700">
                         {m.fuel_type === 'none' ? '—' : m.fuel_type === 'petrol' ? 'Petrol' : 'Diesel'}
@@ -183,9 +204,6 @@ export default function MachineryProfile() {
                           <Cover label="Road tax" to={m.road_tax_to} />
                           <Cover label="Puspakom" to={m.puspakom_to} />
                         </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <Badge color={MACHINE_STATUS[machineStatus(m)].color}>{MACHINE_STATUS[machineStatus(m)].label}</Badge>
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-center gap-0.5">
