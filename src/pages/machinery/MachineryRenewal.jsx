@@ -12,6 +12,7 @@ import {
   listMachines,
   listRenewals,
   machineNo,
+  machineStatus,
   openMachineFile,
   removeMachineFile,
   saveRenewal,
@@ -60,7 +61,8 @@ export default function MachineryRenewal() {
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
-    const list = machines.filter((m) => m.is_active !== false && (!t || [m.name, m.reg_no, machineNo(m), m.brand, m.model].some((v) => String(v || '').toLowerCase().includes(t))))
+    // Active and insurance-only machines are tracked; inactive ones are not.
+    const list = machines.filter((m) => machineStatus(m) !== 'inactive' && (!t || [m.name, m.reg_no, machineNo(m), m.brand, m.model].some((v) => String(v || '').toLowerCase().includes(t))))
     // soonest expiry of the chosen kind first; no cover at the end
     const key = (m) => cover(m, sortKey).days ?? 1e9
     return list.sort((a, b) => key(a) - key(b))

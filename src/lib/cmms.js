@@ -39,6 +39,14 @@ export async function saveMachine(companyId, { id, ...fields }) {
 /** Running number of a machine within its company: M0001, M0002, … (given on save, never editable). */
 export const machineNo = (m) => (m?.machine_no != null ? 'M' + String(m.machine_no).padStart(4, '0') : '—')
 
+export const MACHINE_STATUS = {
+  active: { label: 'Active', color: 'green' },
+  inactive: { label: 'Inactive', color: 'slate' },
+  insurance_only: { label: 'Insurance only', color: 'amber' }
+}
+/** Status of a machine row (older rows only carry is_active). */
+export const machineStatus = (m) => m?.status || (m?.is_active === false ? 'inactive' : 'active')
+
 export const MACHINE_TYPES = ['Light vehicle', 'Pickup', 'Lorry', 'Van', 'Bus', 'Excavator', 'Bulldozer', 'Wheel loader', 'Backhoe', 'Tractor', 'Forklift', 'Crane', 'Generator', 'Compressor', 'Other']
 export const SERVICE_UNITS = [
   ['Liter/Km', 'Liter / Km'],

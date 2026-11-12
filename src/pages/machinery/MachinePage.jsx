@@ -4,8 +4,10 @@ import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconImage, IconPencil, IconTrash, IconWarning, IconX } from '../../components/icons.jsx'
 import {
+  MACHINE_STATUS,
   MACHINE_TYPES,
   SERVICE_UNITS,
+  machineStatus,
   coverState,
   deleteMachine,
   getMachine,
@@ -36,6 +38,7 @@ const EMPTY = {
   reg_no: '',
   is_active: true,
   location_id: '',
+  status: 'active',
   serial_no: '',
   chassis_no: '',
   engine_no: '',
@@ -102,6 +105,7 @@ export default function MachinePage({ mode }) {
         const f = { ...EMPTY }
         for (const k of Object.keys(EMPTY)) if (m[k] != null) f[k] = m[k]
         f.is_active = m.is_active !== false
+        f.status = machineStatus(m)
         f.driver_ids = m.driver_ids?.length ? m.driver_ids : m.driver_id ? [m.driver_id] : []
         f.photos = m.photos || []
         setForm(f)
@@ -167,7 +171,8 @@ export default function MachinePage({ mode }) {
       for (const k of TEXT_FIELDS) row[k] = form[k]?.trim?.() ? form[k].trim() : null
       for (const k of NUMBER_FIELDS) row[k] = form[k] === '' || form[k] == null ? null : Number(form[k])
       for (const k of DATE_FIELDS) row[k] = form[k] || null
-      row.is_active = form.is_active !== false && form.is_active !== 'false'
+      row.status = form.status || 'active'
+      row.is_active = row.status === 'active'
       row.fuel_type = form.fuel_type || 'diesel'
       row.kpdn_subsidy = Boolean(form.kpdn_subsidy)
       row.general_use = Boolean(form.general_use)
@@ -220,7 +225,7 @@ export default function MachinePage({ mode }) {
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
             {title}
-            {ro && <Badge color={form.is_active ? 'green' : 'slate'}>{form.is_active ? 'Active' : 'Inactive'}</Badge>}
+            {ro && <Badge color={MACHINE_STATUS[form.status]?.color || 'slate'}>{MACHINE_STATUS[form.status]?.label || form.status}</Badge>}
             {ro && form.general_use && <Badge color="blue">General-use car</Badge>}
           </span>
         }
@@ -262,7 +267,7 @@ export default function MachinePage({ mode }) {
             <Row ro={ro} label="Brand" value={form.brand} onChange={set('brand')} placeholder="Toyota" />
             <Row ro={ro} label="Model" value={form.model} onChange={set('model')} placeholder="Hilux 2 cabs" />
             <Row ro={ro} label="Registration no." value={form.reg_no} onChange={set('reg_no')} placeholder="VNL 1234" />
-            <Row ro={ro} label="Status" type="select" value={form.is_active ? 'true' : 'false'} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value === 'true' }))} options={[['true', 'Active'], ['false', 'Inactive']]} show={form.is_active ? 'Active' : 'Inactive'} />
+            <Row ro={ro} label="Status" type="select" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value, is_active: e.target.value === 'active' }))} options={Object.entries(MACHINE_STATUS).map(([k, v]) => [k, v.label])} show={MACHINE_STATUS[form.status]?.label || form.status} />
             {locations.length > 0 && (
               <Row
                 ro={ro}
