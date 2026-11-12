@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, Field, SectionTitle, Spinner, TextArea, TextInput } from '../../components/ui.jsx'
 import { IconPlus, IconRefresh, IconTrash } from '../../components/icons.jsx'
-import { createBlock, deleteBlock, listBlocks, parseNumbers, syncFromIntranet, updateBlock, updateCompany } from '../../lib/companies.js'
+import { createBlock, deleteBlock, fromIntranet, listBlocks, parseNumbers, syncFromIntranet, updateBlock, updateCompany } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -117,16 +117,20 @@ function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
   const [head, setHead] = useState({ address: company.address || '', phone: company.phone || '', fax: company.fax || '', email: company.email || '' })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  // Billing details of an Intranet company are kept in the Intranet company
+  // profile (Master Manage → Company → Billing details) and arrive by sync.
+  const synced = fromIntranet(company)
   const dirty =
     String(area ?? '') !== String(company.area_ha ?? '') ||
-    ['address', 'phone', 'fax', 'email'].some((k) => (head[k] || '') !== (company[k] || ''))
+    (!synced && ['address', 'phone', 'fax', 'email'].some((k) => (head[k] || '') !== (company[k] || '')))
   const setHeadField = (k) => (e) => setHead((h) => ({ ...h, [k]: e.target.value }))
 
   async function save() {
     setBusy(true)
     setMsg('')
     try {
-      await updateCompany(company.id, { area_ha: toNum(area), address: head.address.trim() || null, phone: head.phone.trim() || null, fax: head.fax.trim() || null, email: head.email.trim() || null })
+      const letterhead = synced ? {} : { address: head.address.trim() || null, phone: head.phone.trim() || null, fax: head.fax.trim() || null, email: head.email.trim() || null }
+      await updateCompany(company.id, { area_ha: toNum(area), ...letterhead })
       await onSaved()
       setMsg('Saved')
     } catch (e) {
@@ -145,19 +149,24 @@ function ProfileCard({ company, blockTotal, blockCount, onSaved }) {
       <Field label="Registration no.">
         <TextInput value={company.registration_no || ''} disabled />
       </Field>
-      <Field label="Address (printed on claim forms)">
-        <TextArea rows={2} value={head.address} onChange={setHeadField('address')} placeholder="2nd Floor, Lot 1180, Bangunan Bei, Jalan Krokop 2, 98000 Miri, Sarawak." />
+      {synced && (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          Billing address, tel, fax and email are set in MJM Intranet (Master Manage → Company → Billing details) and arrive here with the sync.
+        </p>
+      )}
+      <Field label="Billing address (printed on claim forms)">
+        <TextArea rows={2} value={synced ? company.address || '' : head.address} onChange={setHeadField('address')} disabled={synced} placeholder="2nd Floor, Lot 1180, Bangunan Bei, Jalan Krokop 2, 98000 Miri, Sarawak." />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tel">
-          <TextInput value={head.phone} onChange={setHeadField('phone')} placeholder="085-419907" />
+          <TextInput value={synced ? company.phone || '' : head.phone} onChange={setHeadField('phone')} disabled={synced} placeholder="085-419907" />
         </Field>
         <Field label="Fax">
-          <TextInput value={head.fax} onChange={setHeadField('fax')} placeholder="085-413264" />
+          <TextInput value={synced ? company.fax || '' : head.fax} onChange={setHeadField('fax')} disabled={synced} placeholder="085-413264" />
         </Field>
       </div>
       <Field label="Email">
-        <TextInput type="email" value={head.email} onChange={setHeadField('email')} placeholder="company@outlook.com" />
+        <TextInput type="email" value={synced ? company.email || '' : head.email} onChange={setHeadField('email')} disabled={synced} placeholder="company@outlook.com" />
       </Field>
       <Field label="Total area (ha)">
         <TextInput
