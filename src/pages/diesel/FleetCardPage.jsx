@@ -16,6 +16,8 @@ import {
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
+  cardBalances,
+  cardLedger,
   checklistDone,
   deleteCard,
   deleteCardRecord,
@@ -27,10 +29,13 @@ import {
   saveCard,
   vehicleLabel,
 } from "../../lib/diesel.js";
-import { day, money, num, thisMonth, today } from "../../lib/format.js";
+import { day, money, monthLabel, num, thisMonth, today } from "../../lib/format.js";
 
 // One fleet card: the application check list (vehicle, company items, driver
-// items) and, once the card is in use, this month's fill-ups and reloads.
+// items) and, once the card is in use, the card's RM balance month by month
+// (reloads in, fuel taken out; must tally with the fuel station), then this
+// month's fill-ups and reloads. Reloads recorded on fuel claims appear here
+// too, marked "from fuel claim"; they are changed on the claim.
 // /diesel/cards/new applies; /diesel/cards/:id views; /diesel/cards/:id/edit edits.
 const EMPTY = {
   vehicle_id: "",
@@ -60,6 +65,8 @@ export default function FleetCardPage({ mode }) {
   const [vehicles, setVehicles] = useState([]);
   const [people, setPeople] = useState([]);
   const [data, setData] = useState({ usage: [], reloads: [] });
+  const [ledger, setLedger] = useState(null); // null until the database has machinery_card_ledger
+  const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,12 +74,14 @@ export default function FleetCardPage({ mode }) {
 
   const load = useCallback(async () => {
     try {
-      const [c, v, p, d] = await Promise.all([
+      const [c, v, p, d, lg] = await Promise.all([
         id ? getCard(id) : null,
         listVehicles(company.id),
         listPeople(company.id).catch(() => []),
         id ? listCardData(company.id) : { usage: [], reloads: [] },
+        id ? cardLedger(company.id).catch(() => null) : null,
       ]);
+      setLedger(lg);
       if (id && (!c || c.company_id !== company.id))
         throw new Error("Fleet card not found in this company.");
       setVehicles(v);
@@ -212,6 +221,22 @@ export default function FleetCardPage({ mode }) {
   );
   const usedL = usage.reduce((s, u) => s + Number(u.litres || 0), 0);
   const quota = form.subsidy_litres === "" ? null : Number(form.subsidy_litres);
+  // RM balance: every reload less every fill-up on this card, month by month.
+  const mine = (ledger || []).filter((r) => r.card_id === id);
+  const balanceNow = cardBalances(mine)[id] || 0;
+  const ledgerYears = [...new Set(mine.map((r) => Number(r.month.slice(0, 4))))].sort((a, b) => b - a);
+  if (ledgerYears.length && !ledgerYears.includes(ledgerYear)) ledgerYears.push(ledgerYear);
+  const months = [...new Set(mine.filter((r) => r.month.startsWith(String(ledgerYear))).map((r) => r.month))].sort();
+  const openingBalance = cardBalances(mine, `${ledgerYear - 1}-12`)[id] || 0;
+  let running = openingBalance;
+  const ledgerRows = months.map((m) => {
+    const inRM = mine.filter((r) => r.month === m && r.kind === "reload").reduce((s, r) => s + Number(r.amount), 0);
+    const out = mine.filter((r) => r.month === m && r.kind === "usage");
+    const outRM = out.reduce((s, r) => s + Number(r.amount), 0);
+    const outL = out.reduce((s, r) => s + Number(r.litres || 0), 0);
+    running += inRM - outRM;
+    return { month: m, inRM, outRM, outL, balance: running };
+  });
   const licence = form.licence_expiry
     ? Math.round(
         (new Date(form.licence_expiry) - new Date(new Date().toDateString())) /
@@ -591,6 +616,73 @@ export default function FleetCardPage({ mode }) {
         </Card>
       </div>
 
+      {/* Reloads and balance, month by month (reloads by hand or from fuel claims, less fuel taken on the card) */}
+      {id && form.status !== "application" && (
+        <Card className="overflow-hidden">
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-3">
+            <h3 className="font-semibold text-slate-800">Reloads &amp; balance</h3>
+            <select
+              value={ledgerYear}
+              onChange={(e) => setLedgerYear(Number(e.target.value))}
+              className={`${inputCls} h-9 w-28 px-2 text-sm`}
+              aria-label="Year"
+            >
+              {(ledgerYears.length ? ledgerYears : [ledgerYear]).map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <span className="flex-1" />
+            <span className="text-sm text-slate-500">Card balance now</span>
+            <span className={`text-lg font-bold tabular-nums ${balanceNow < 0 ? "text-red-600" : "text-brand-dark"}`}>
+              {ledger ? money(balanceNow) : "—"}
+            </span>
+          </div>
+          {!ledger ? (
+            <Empty>Run the Fuel SQL migration 20261126 (fleet card reloads from claims) to see the balance.</Empty>
+          ) : ledgerRows.length === 0 ? (
+            <Empty>No reload or fill-up in {ledgerYear}.</Empty>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="px-5 py-2.5">Month</th>
+                    <th className="px-3 py-2.5 text-right">Reloads (RM)</th>
+                    <th className="px-3 py-2.5 text-right">Fuel taken (RM)</th>
+                    <th className="px-3 py-2.5 text-right">Fuel taken (L)</th>
+                    <th className="px-3 py-2.5 text-right">Balance at month end (RM)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {openingBalance !== 0 && (
+                    <tr className="text-slate-500">
+                      <td className="px-5 py-2.5" colSpan={4}>
+                        Balance brought forward
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{money(openingBalance)}</td>
+                    </tr>
+                  )}
+                  {ledgerRows.map((r) => (
+                    <tr key={r.month} className={r.month === month ? "bg-brand-light/40" : ""}>
+                      <td className="px-5 py-2.5 font-medium text-slate-800">{monthLabel(r.month)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{r.inRM ? `+ ${money(r.inRM)}` : "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{r.outRM ? `− ${money(r.outRM)}` : "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{r.outL ? `${num(r.outL, 2)} L` : "—"}</td>
+                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.balance < 0 ? "text-red-600" : "text-slate-900"}`}>{money(r.balance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="px-5 py-2.5 text-xs text-slate-500">
+                Fuel taken = fill-ups recorded on this card plus fleet-card receipts on fuel claims for its vehicle. Reloads = those typed here plus fleet card reloads on fuel claims.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* This month, once the card is in use */}
       {id && form.status !== "application" && (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -651,11 +743,14 @@ export default function FleetCardPage({ mode }) {
                   >
                     <span className="text-slate-500">{day(r.reload_date)}</span>
                     <span className="text-slate-500">{r.reference}</span>
+                    {r.claim_line_id && (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">from fuel claim</span>
+                    )}
                     <span className="flex-1" />
                     <span className="font-medium text-emerald-600">
                       + {money(r.amount)}
                     </span>
-                    {access.can("cards", "delete") && (
+                    {access.can("cards", "delete") && !r.claim_line_id && (
                       <button
                         type="button"
                         onClick={() => removeRecord("reload", r.id)}

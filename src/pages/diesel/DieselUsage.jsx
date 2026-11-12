@@ -43,7 +43,7 @@ export default function DieselUsage() {
       setFills(
         [
           ...lines
-            .filter((l) => claimById.get(l.claim_id)?.status !== 'rejected')
+            .filter((l) => l.line_kind !== 'reload' && claimById.get(l.claim_id)?.status !== 'rejected')
             .map((l) => ({
               ...l,
               source: l.payment === 'fleet_card' ? 'card' : 'cash',
