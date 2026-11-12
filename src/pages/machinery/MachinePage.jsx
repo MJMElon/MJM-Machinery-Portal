@@ -64,6 +64,7 @@ const EMPTY = {
   tank_capacity_l: '',
   kpdn_subsidy: false,
   general_use: false,
+  hq_vehicle: false,
   driver_ids: []
 }
 const NUMBER_FIELDS = ['market_value', 'ideal_fuel_consumption', 'possible_working_units', 'year_made', 'purchase_price', 'tank_capacity_l']
@@ -176,6 +177,7 @@ export default function MachinePage({ mode }) {
       row.fuel_type = form.fuel_type || 'diesel'
       row.kpdn_subsidy = Boolean(form.kpdn_subsidy)
       row.general_use = Boolean(form.general_use)
+      row.hq_vehicle = Boolean(form.hq_vehicle)
       row.driver_ids = form.driver_ids
       row.photos = form.photos
       // Only sent when the company has locations (so saving still works before the locations migration).
@@ -226,6 +228,7 @@ export default function MachinePage({ mode }) {
           <span className="inline-flex flex-wrap items-center gap-3">
             {title}
             {ro && <Badge color={MACHINE_STATUS[form.status]?.color || 'slate'}>{MACHINE_STATUS[form.status]?.label || form.status}</Badge>}
+            {ro && form.hq_vehicle && <Badge color="violet">HQ vehicle</Badge>}
             {ro && form.general_use && <Badge color="blue">General-use car</Badge>}
           </span>
         }
@@ -324,6 +327,7 @@ export default function MachinePage({ mode }) {
           <div>
             <Row ro={ro} label="Fuel" type="select" value={form.fuel_type} onChange={set('fuel_type')} options={[['diesel', 'Diesel'], ['petrol', 'Petrol'], ['none', 'None']]} show={{ diesel: 'Diesel', petrol: 'Petrol', none: 'None' }[form.fuel_type]} />
             <Row ro={ro} label="Tank capacity (L)" type="number" step="1" value={form.tank_capacity_l} onChange={set('tank_capacity_l')} />
+            <Tick label="HQ vehicle" checked={form.hq_vehicle} onChange={set('hq_vehicle')} ro={ro} />
             <Tick label="General-use car" checked={form.general_use} onChange={set('general_use')} ro={ro} />
             <Tick label="KPDN diesel subsidy" checked={form.kpdn_subsidy} onChange={set('kpdn_subsidy')} ro={ro} />
           </div>

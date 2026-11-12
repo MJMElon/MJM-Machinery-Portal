@@ -122,16 +122,17 @@ export default function DieselUsage() {
   const th = (label, right) => <th className={`p-3 font-medium ${right ? 'text-right' : 'text-left'}`}>{label}</th>
   const td = (v, right, cls = '') => <td className={`p-3 ${right ? 'text-right' : ''} ${cls}`}>{v}</td>
   // One row per vehicle (reg no. + driver) with two small month charts.
-  // HQ vehicles = road vehicles (light vehicle, lorry, pickup, van, bus, truck),
+  // HQ vehicles = machines with the "HQ vehicle" tick in Machinery Profile,
   // grouped under their fleet card; Estate machines = everything else.
-  const isRoad = (v) => /light|lorry|pickup|pick-up|van|bus|truck/i.test(v.machine_type || '')
+  const isHq = (v) => Boolean(v.hq_vehicle)
   const linesOf = (vid) => fills.filter((f) => f.vehicle_id === vid).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' }))
   const driverOf = (v) => {
     const id = v.driver_ids?.[0] || v.driver_id
     return id ? personLabel(person.get(id)) : '—'
   }
   const years = [...new Set([new Date().getFullYear(), ...fills.map((f) => Number(f.fill_date.slice(0, 4)))])].sort((a, b) => b - a)
-  const tabVehicles = vehicles.filter((v) => (tab === 'hq' ? isRoad(v) : !isRoad(v)) && v.is_active !== false)
+  // Active and Insurance-only machines (Inactive ones are left out).
+  const tabVehicles = vehicles.filter((v) => (tab === 'hq' ? isHq(v) : !isHq(v)) && (v.status ? v.status !== 'inactive' : v.is_active !== false))
   const cardOfVehicle = new Map(cards.filter((c) => c.vehicle_id && c.status !== 'cancelled').map((c) => [c.vehicle_id, c]))
   // groups: [{ key, title, vehicles }] — by fleet card for HQ, one group for Estate
   const groups = (() => {
@@ -228,7 +229,7 @@ export default function DieselUsage() {
             </div>
           </div>
           {tabVehicles.length === 0 ? (
-            <Empty>{tab === 'hq' ? 'No HQ vehicles (light vehicles, lorries…) in Machinery Profile yet.' : 'No estate machines in Machinery Profile yet.'}</Empty>
+            <Empty>{tab === 'hq' ? 'No HQ vehicles yet. Tick "HQ vehicle" in Machinery Profile.' : 'No estate machines in Machinery Profile yet.'}</Empty>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">

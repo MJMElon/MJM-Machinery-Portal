@@ -44,7 +44,8 @@ const HEADINGS = {
   fuel_type: ['fuel', 'fueltype'],
   tank_capacity_l: ['tankcapacity', 'tankcapacityl', 'tank'],
   kpdn_subsidy: ['kpdn', 'kpdndieselsubsidy', 'kpdnsubsidy'],
-  general_use: ['generalusedcar', 'generaluse', 'generalcar']
+  general_use: ['generalusedcar', 'generaluse', 'generalcar'],
+  hq_vehicle: ['hqvehicle', 'hq', 'hqcar']
 }
 const TEMPLATE = [
   'Code', 'Registration No', 'Type', 'Brand', 'Model', 'Status', 'Serial No', 'Chasis No', 'Engine No', 'Market Value', 'ACC Code', 'Year Made',
@@ -126,7 +127,8 @@ function rowToMachine(headers, row) {
     fuel_type: /petrol/i.test(txt('fuel_type') || '') ? 'petrol' : /none|^-$/i.test(txt('fuel_type') || '') ? 'none' : 'diesel',
     tank_capacity_l: num(get('tank_capacity_l')),
     kpdn_subsidy: yes(get('kpdn_subsidy')),
-    general_use: yes(get('general_use'))
+    general_use: yes(get('general_use')),
+    hq_vehicle: yes(get('hq_vehicle'))
   }
   for (const k of ['insurance', 'road_tax', 'puspakom']) {
     if (get(k) != null && !m[`${k}_from`] && !m[`${k}_to`]) [m[`${k}_from`], m[`${k}_to`]] = period(get(k))

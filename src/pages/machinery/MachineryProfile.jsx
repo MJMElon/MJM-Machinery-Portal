@@ -189,6 +189,7 @@ export default function MachineryProfile() {
                       {hasLocations && <td className="px-3 py-3 text-slate-700">{locationName.get(m.location_id) || '—'}</td>}
                       <td className="px-3 py-3 text-slate-700">
                         {m.machine_type || '—'}
+                        {m.hq_vehicle && <Badge color="violet" className="ml-1.5">HQ</Badge>}
                         {m.general_use && <Badge color="blue" className="ml-1.5">General-use car</Badge>}
                       </td>
                       <td className="px-3 py-3 text-slate-700">{m.brand || '—'}</td>
