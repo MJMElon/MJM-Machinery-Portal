@@ -83,7 +83,8 @@ export default function ClaimView() {
   }, [loading, claim, params])
   const canEdit = claim && own && claim.status === 'pending' && access.can('claims', 'edit')
   const canDelete = claim && ((own && claim.status === 'pending' && access.can('claims', 'delete')) || isSuperAdmin)
-  const canReview = claim && (access.admin || access.pay) && (!own || isSuperAdmin) && access.reviewable(claim.claimant_id)
+  // Nobody reviews their own claim, super admins included.
+  const canReview = claim && (access.admin || access.pay) && !own && access.reviewable(claim.claimant_id)
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
   const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
   const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)

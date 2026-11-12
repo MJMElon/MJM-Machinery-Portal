@@ -11,7 +11,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const C1 = '#2a78d6'
 const C2 = '#eb6834'
 
-export function FuelDashboard({ lines, title }) {
+export function FuelDashboard({ lines, title, compact = true }) {
   const years = useMemo(() => {
     const ys = new Set(lines.map((l) => Number(l.fill_date.slice(0, 4))))
     ys.add(new Date().getFullYear())
@@ -39,7 +39,7 @@ export function FuelDashboard({ lines, title }) {
   const sum = (k) => data.reduce((s, d) => s + d[k], 0)
 
   return (
-    <div className="space-y-3">
+    <div className={`space-y-3 ${compact ? 'mx-auto w-full lg:w-[85%]' : ''}`}>
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm font-semibold text-slate-800">{title || 'Fuel history'}</p>
         <div className="w-28">
@@ -84,7 +84,7 @@ export function FuelDashboard({ lines, title }) {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <Chart
-            title="Litres per month"
+            title="Monthly Fuel Usage (Litre)"
             unit="L"
             fmt={(v) => `${num(v)} L`}
             series={[
@@ -94,7 +94,7 @@ export function FuelDashboard({ lines, title }) {
             data={data}
           />
           <Chart
-            title="Amount per month (RM)"
+            title="Monthly Fuel Expenses (RM)"
             unit="RM"
             fmt={money}
             series={[
@@ -115,13 +115,13 @@ function Chart({ title, series, data, fmt }) {
   const H = 150
   const padL = 40
   const padB = 22
-  const padT = 8
+  const padT = 14
   const innerW = W - padL - 10
   const innerH = H - padT - padB
   const totals = data.map((d) => series.reduce((s, x) => s + d[x.key], 0))
   const max = Math.max(1, ...totals)
   const step = niceStep(max)
-  const top = Math.ceil(max / step) * step
+  const top = Math.ceil(max / step + 0.2) * step // headroom for the value label above the tallest bar
   const y = (v) => padT + innerH - (v / top) * innerH
   const slot = innerW / 12
   const barW = Math.min(18, slot * 0.5)
@@ -180,6 +180,11 @@ function Chart({ title, series, data, fmt }) {
                 <text x={padL + i * slot + slot / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="#64748b">
                   {MONTHS[i]}
                 </text>
+                {totals[i] > 0 && (
+                  <text x={padL + i * slot + slot / 2} y={Math.max(padT + 8, y(totals[i]) - 3)} textAnchor="middle" fontSize="9" fontWeight="600" fill="#334155">
+                    {short(totals[i])}
+                  </text>
+                )}
               </g>
             )
           })}
@@ -204,9 +209,69 @@ function Chart({ title, series, data, fmt }) {
   )
 }
 
+// 1234.5 → 1,235; 12345 → 12.3k
+const short = (v) => (v >= 10000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v).toLocaleString('en-MY'))
+
 function niceStep(max) {
   const raw = max / 4
   const p = Math.pow(10, Math.floor(Math.log10(raw)))
   const n = raw / p
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p
 }
+
+/**
+ * Small month-by-month bar chart for a table row (Fuel Usage Report):
+ * 12 stacked bars (fleet card vs cash) with the month total above each.
+ * `rows` are fill-ups ({ fill_date, litres, amount, payment }); `metric` is
+ * 'litres' or 'amount'.
+ */
+export function MiniBars({ rows, year, metric, fmt }) {
+  const data = useMemo(() => {
+    const m = MONTHS.map(() => ({ card: 0, cash: 0 }))
+    for (const r of rows) {
+      if (Number(r.fill_date.slice(0, 4)) !== year) continue
+      const i = Number(r.fill_date.slice(5, 7)) - 1
+      m[i][r.payment === 'fleet_card' ? 'card' : 'cash'] += Number(r[metric]) || 0
+    }
+    return m
+  }, [rows, year, metric])
+  const totals = data.map((d) => d.card + d.cash)
+  const max = Math.max(1, ...totals)
+  const W = 360
+  const H = 74
+  const padT = 12
+  const padB = 14
+  const innerH = H - padT - padB
+  const slot = W / 12
+  const barW = Math.min(16, slot * 0.55)
+  const y = (v) => padT + innerH - (v / max) * innerH
+  const sum = totals.reduce((s, v) => s + v, 0)
+  return (
+    <div className="min-w-[220px]">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-[74px] w-full" role="img" aria-label={metric}>
+        {data.map((d, i) => {
+          const x = i * slot + (slot - barW) / 2
+          const yCard = y(d.card)
+          const yTop = y(d.card + d.cash)
+          return (
+            <g key={i}>
+              {d.card > 0 && <rect x={x} y={yCard} width={barW} height={y(0) - yCard} fill={C1} rx="2" />}
+              {d.cash > 0 && <rect x={x} y={yTop} width={barW} height={yCard - yTop} fill={C2} rx="2" />}
+              {totals[i] > 0 && (
+                <text x={i * slot + slot / 2} y={Math.max(9, yTop - 2)} textAnchor="middle" fontSize="8.5" fontWeight="600" fill="#334155">
+                  {short(totals[i])}
+                </text>
+              )}
+              <text x={i * slot + slot / 2} y={H - 3} textAnchor="middle" fontSize="8.5" fill="#94a3b8">
+                {MONTHS[i][0]}
+              </text>
+            </g>
+          )
+        })}
+        <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <p className="text-right text-[11px] font-semibold text-slate-700">{fmt(sum)} / year</p>
+    </div>
+  )
+}
+export const FUEL_COLORS = { card: C1, cash: C2 }
