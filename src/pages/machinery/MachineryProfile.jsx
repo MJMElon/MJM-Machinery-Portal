@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Badge, Button, Card, Spinner, TextInput } from '../../components/ui.jsx'
+import { Badge, Button, Card, Select, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
 import { coverState, deleteMachine, listMachines, listPortalPeople, machineNo, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
+import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
 // Machinery Profile: every machine AND vehicle of the company. Cases link to
@@ -20,13 +21,17 @@ export default function MachineryProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
+  const [locations, setLocations] = useState([])
+  const [loc, setLoc] = useState('') // '' = all, 'none' = without a location, else a location id
   const [busyId, setBusyId] = useState(null)
 
   const load = useCallback(async () => {
     if (!current) return
     try {
-      const [m, p] = await Promise.all([listMachines(current.id), listPortalPeople().catch(() => [])])
+      const [m, p, l] = await Promise.all([listMachines(current.id), listPortalPeople().catch(() => []), listLocations(current.id).catch(() => [])])
       setRows(m)
+      setLocations(l)
+      setLoc((v) => (v && v !== 'none' && !l.some((x) => x.id === v) ? '' : v))
       setPeople(p)
       setError('')
     } catch (e) {
@@ -44,14 +49,22 @@ export default function MachineryProfile() {
   const person = useMemo(() => new Map(people.map((p) => [p.user_id, p])), [people])
   const drivers = (m) => (m.driver_ids?.length ? m.driver_ids : m.driver_id ? [m.driver_id] : []).map((id) => userLabel(person.get(id)))
 
+  // Locations come from Settings → Company profile; the column and filter only show when the company has some.
+  const hasLocations = locations.length > 0
+  const locationName = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations])
+  const countIn = (id) => rows.filter((m) => (id === 'none' ? !locationName.has(m.location_id) : m.location_id === id)).length
+
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    if (!t) return rows
-    return rows.filter((m) =>
-      [machineNo(m), m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, ...drivers(m)].some((v) => String(v || '').toLowerCase().includes(t))
+    const inLoc = !loc || !hasLocations ? rows : rows.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
+    if (!t) return inLoc
+    return inLoc.filter((m) =>
+      [machineNo(m), m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, locationName.get(m.location_id), ...drivers(m)].some((v) =>
+        String(v || '').toLowerCase().includes(t)
+      )
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, q, people])
+  }, [rows, q, people, loc, locationName])
 
   async function remove(m) {
     if (!window.confirm(`Delete ${m.name}? This cannot be undone.`)) return
@@ -102,14 +115,27 @@ export default function MachineryProfile() {
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
           <h3 className="font-semibold text-slate-800">Listing</h3>
-          <TextInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search code, plate, type, brand, driver…" className="h-10 sm:w-80" />
+          <div className="flex flex-wrap items-center gap-2">
+            {hasLocations && (
+              <Select value={loc} onChange={(e) => setLoc(e.target.value)} className="h-10 sm:w-60" aria-label="Location">
+                <option value="">All locations ({rows.length})</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({countIn(l.id)})
+                  </option>
+                ))}
+                <option value="none">No location ({countIn('none')})</option>
+              </Select>
+            )}
+            <TextInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search code, plate, type, brand, driver…" className="h-10 sm:w-80" />
+          </div>
         </div>
         {loading ? (
           <div className="flex justify-center py-12 text-brand">
             <Spinner className="h-7 w-7" />
           </div>
         ) : shown.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? 'Nothing matches the search.' : 'No machines or vehicles yet.'}</p>
+          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (loc && !q.trim() ? 'No machines or vehicles in this location.' : 'Nothing matches the search.') : 'No machines or vehicles yet.'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1120px] text-sm">
@@ -117,6 +143,7 @@ export default function MachineryProfile() {
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-24 px-5 py-2.5">No.</th>
                   <th className="px-3 py-2.5">Code / Reg. no.</th>
+                  {hasLocations && <th className="px-3 py-2.5">Location</th>}
                   <th className="px-3 py-2.5">Type</th>
                   <th className="px-3 py-2.5">Brand / Model</th>
                   <th className="px-3 py-2.5">Driver</th>
@@ -139,6 +166,7 @@ export default function MachineryProfile() {
                         {m.reg_no && m.reg_no.trim().toUpperCase() !== m.name.trim().toUpperCase() && <span className="block text-xs text-slate-500">{m.reg_no}</span>}
                         {m.acc_code && <span className="block text-xs text-slate-400">{m.acc_code}</span>}
                       </td>
+                      {hasLocations && <td className="px-3 py-3 text-slate-700">{locationName.get(m.location_id) || '—'}</td>}
                       <td className="px-3 py-3 text-slate-700">
                         {m.machine_type || '—'}
                         {m.general_use && <Badge color="blue" className="ml-1.5">General-use car</Badge>}

@@ -21,6 +21,7 @@ import {
   userLabel
 } from '../../lib/cmms.js'
 import { listCompanyPerms } from '../../lib/perms.js'
+import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { day, money } from '../../lib/format.js'
 
@@ -34,6 +35,7 @@ const EMPTY = {
   model: '',
   reg_no: '',
   is_active: true,
+  location_id: '',
   serial_no: '',
   chassis_no: '',
   engine_no: '',
@@ -74,6 +76,7 @@ export default function MachinePage({ mode }) {
   const [form, setForm] = useState(EMPTY)
   const [machine, setMachine] = useState(null)
   const [people, setPeople] = useState([])
+  const [locations, setLocations] = useState([])
   const [loading, setLoading] = useState(mode !== 'new')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -83,11 +86,13 @@ export default function MachinePage({ mode }) {
   const load = useCallback(async () => {
     if (!current) return
     try {
-      const [m, pp, perms] = await Promise.all([
+      const [m, pp, perms, locs] = await Promise.all([
         id ? getMachine(id) : null,
         listPortalPeople().catch(() => []),
-        listCompanyPerms(current.id).catch(() => [])
+        listCompanyPerms(current.id).catch(() => []),
+        listLocations(current.id).catch(() => [])
       ])
+      setLocations(locs)
       if (id && (!m || m.company_id !== current.id)) throw new Error('Machine not found in this company.')
       // Drivers: the users who have CMMS 2 access (Intranet icon or a role here).
       const withRole = new Set(perms.filter((p) => Object.keys(p.perms || {}).length).map((p) => p.user_id))
@@ -168,6 +173,8 @@ export default function MachinePage({ mode }) {
       row.general_use = Boolean(form.general_use)
       row.driver_ids = form.driver_ids
       row.photos = form.photos
+      // Only sent when the company has locations (so saving still works before the locations migration).
+      if (locations.length) row.location_id = locations.some((l) => l.id === form.location_id) ? form.location_id : null
       const savedId = await saveMachine(current.id, row)
       uploaded.current = []
       navigate(`/cmms/machines/${savedId}`, { replace: true })
@@ -256,6 +263,17 @@ export default function MachinePage({ mode }) {
             <Row ro={ro} label="Model" value={form.model} onChange={set('model')} placeholder="Hilux 2 cabs" />
             <Row ro={ro} label="Registration no." value={form.reg_no} onChange={set('reg_no')} placeholder="VNL 1234" />
             <Row ro={ro} label="Status" type="select" value={form.is_active ? 'true' : 'false'} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value === 'true' }))} options={[['true', 'Active'], ['false', 'Inactive']]} show={form.is_active ? 'Active' : 'Inactive'} />
+            {locations.length > 0 && (
+              <Row
+                ro={ro}
+                label="Location"
+                type="select"
+                value={form.location_id || ''}
+                onChange={set('location_id')}
+                options={[['', '— Not set —'], ...locations.map((l) => [l.id, l.name])]}
+                show={locations.find((l) => l.id === form.location_id)?.name || ''}
+              />
+            )}
             <Row ro={ro} label="Serial no." value={form.serial_no} onChange={set('serial_no')} />
             <Row ro={ro} label="Chassis no." value={form.chassis_no} onChange={set('chassis_no')} />
             <Row ro={ro} label="Engine no." value={form.engine_no} onChange={set('engine_no')} />

@@ -24,6 +24,7 @@ export const BUSINESS_TABLE = 'machinery_businesses'
 export const BUSINESS_COMPANY_TABLE = 'machinery_business_companies'
 export const CASE_TABLE = 'machinery_cases'
 export const BLOCK_TABLE = 'machinery_company_blocks'
+export const LOCATION_TABLE = 'machinery_company_locations'
 
 // Diesel Manage (ported from the Intranet's Diesel Claims; per company here)
 export const DIESEL = {

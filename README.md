@@ -13,7 +13,7 @@ that company's modules:
   - The main page shows the modules as square icons: Machinery Manage, Diesel Manage, Settings.
   - **MachTrek** link.
 - **Fuel Manage** (per company) — the Intranet's Diesel Claims module, now per company (see [Fuel Manage](#fuel-manage-was-diesel-manage)). Opens on four draggable square buttons.
-- **Settings** → the selected company's profile (total area) and its blocks (name, area, notes).
+- **Settings** → the selected company's profile (total area), its **locations** (plantations / estates / sites under the company; each machine in Machinery Profile can be put under one, and the listing filters by location) and its blocks (name, area, notes).
 - **Settings** also holds, for super admins, the company's staff WhatsApp numbers (a case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers") and the "Sync from MJM Intranet" button. Businesses, companies and **which company has which module** all come from MJM Intranet; there is no company admin page in the portal.
 
 ## Businesses and companies (same as MJM Intranet)
@@ -174,6 +174,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261111120000_permissions_matrix.sql` (permission matrix `machinery_user_perms` + `machinery_can()`, finer RLS per section, fuel claims without a vehicle, module access per company from the Intranet's Icon tags).
 - `supabase/migrations/20261112120000_fuel_claim_lines.sql` (a fuel claim is a header + receipt lines `machinery_diesel_claim_lines`; totals and payable amount kept by trigger; existing claims become one-line claims).
 - `supabase/migrations/20261113120000_claim_approvers_intranet_users.sql` (named approvers `machinery_claim_reviewable()`, Intranet Icon access flags on portal users, `machinery_apply_intranet_users()`).
+- `supabase/migrations/20261123120000_company_locations.sql` (locations of a company `machinery_company_locations`, and `location_id` on `machinery_machines`).
 
 Then link the portal to MJM Intranet (API key → `GW_API_KEY` secret), see [Sign-in](#sign-in-from-mjm-intranet-only-no-login-page).
 

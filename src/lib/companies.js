@@ -1,4 +1,4 @@
-import { supabase, BLOCK_TABLE, BUSINESS_COMPANY_TABLE, BUSINESS_TABLE, COMPANY_TABLE } from './supabase.js'
+import { supabase, BLOCK_TABLE, BUSINESS_COMPANY_TABLE, BUSINESS_TABLE, COMPANY_TABLE, LOCATION_TABLE } from './supabase.js'
 
 // Businesses and companies follow the Intranet's master data: a Business
 // (e.g. Plantation, Machinery) has companies under it, and a company can sit
@@ -194,6 +194,39 @@ export async function updateBlock(id, patch) {
 
 export async function deleteBlock(id) {
   const { error } = await supabase.from(BLOCK_TABLE).delete().eq('id', id)
+  if (error) throw friendly(error)
+}
+
+// ---- locations of a company (plantations / estates / sites) -----------------
+// Machines in Machinery Profile can be put under one of these.
+
+/** Locations of a company, by name ([] before the locations migration). */
+export async function listLocations(companyId) {
+  const { data, error } = await supabase
+    .from(LOCATION_TABLE)
+    .select('id, name, notes')
+    .eq('company_id', companyId)
+    .order('name')
+  if (error) {
+    if (missing(error)) return []
+    throw friendly(error)
+  }
+  return data || []
+}
+
+export async function createLocation(companyId, location) {
+  const { error } = await supabase.from(LOCATION_TABLE).insert({ company_id: companyId, ...location })
+  if (error) throw friendly(error)
+}
+
+export async function updateLocation(id, patch) {
+  const { error } = await supabase.from(LOCATION_TABLE).update(patch).eq('id', id)
+  if (error) throw friendly(error)
+}
+
+/** Machines of the location stay, without a location. */
+export async function deleteLocation(id) {
+  const { error } = await supabase.from(LOCATION_TABLE).delete().eq('id', id)
   if (error) throw friendly(error)
 }
 
