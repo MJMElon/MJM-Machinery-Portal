@@ -1,5 +1,6 @@
 import { receiptUrl, vehicleLabel } from '../../lib/diesel.js'
 import { day } from '../../lib/format.js'
+import { printHtml } from '../../lib/printFrame.js'
 
 // The fuel claim form printout.
 //
@@ -197,43 +198,4 @@ export async function printClaim({ company, claim, lines, vehicles, cards, claim
   )
   const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, images })
   return printHtml(html)
-}
-
-// Print an HTML document from an invisible frame on this page.
-function printHtml(html) {
-  return new Promise((resolve, reject) => {
-    const frame = document.createElement('iframe')
-    frame.setAttribute('aria-hidden', 'true')
-    frame.setAttribute('title', 'Print')
-    frame.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;border:0;visibility:hidden'
-    let removed = false
-    const remove = () => {
-      if (removed) return
-      removed = true
-      frame.remove()
-    }
-    frame.onload = async () => {
-      const w = frame.contentWindow
-      try {
-        // Let the receipt images arrive before the preview is taken.
-        await Promise.all(
-          Array.from(w.document.images).map((im) =>
-            im.complete ? null : new Promise((r) => { im.onload = im.onerror = r })
-          )
-        )
-        // The frame goes once printing is over. Safari may not fire
-        // afterprint, so it goes after a while in any case.
-        w.addEventListener('afterprint', () => setTimeout(remove, 300))
-        setTimeout(remove, 10 * 60 * 1000)
-        w.focus()
-        w.print()
-        resolve()
-      } catch (e) {
-        remove()
-        reject(e)
-      }
-    }
-    frame.srcdoc = html
-    document.body.appendChild(frame)
-  })
 }
