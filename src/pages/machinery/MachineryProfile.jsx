@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { coverState, deleteMachine, listMachines, listPortalPeople, machineNo, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
+import { MACHINE_STATUS, coverState, deleteMachine, listMachines, listPortalPeople, machineNo, machineStatus, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
 // Machinery Profile: every machine AND vehicle of the company. Cases link to
@@ -157,7 +157,7 @@ export default function MachineryProfile() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <Badge color={m.is_active === false ? 'slate' : 'green'}>{m.is_active === false ? 'Inactive' : 'Active'}</Badge>
+                        <Badge color={MACHINE_STATUS[machineStatus(m)].color}>{MACHINE_STATUS[machineStatus(m)].label}</Badge>
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-center gap-0.5">
