@@ -164,11 +164,11 @@ export function MachTrekIcon({ className }) {
   )
 }
 
-// Fuel Manage → User setting: two people.
+// Fuel Manage → Claim approval setting: two people.
 export function FuelUsersIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-fuser" from="#64748b" to="#334155" label="User setting">
+      <Tile id="ic-fuser" from="#64748b" to="#334155" label="Claim approval setting">
         <circle cx="26" cy="24" r="7" />
         <path d="M12 48c0-8 6-13 14-13s14 5 14 13" />
         <circle cx="43" cy="26" r="5.5" />

@@ -28,6 +28,7 @@ export default function DieselClaims() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
+  const [toReview, setToReview] = useState(0)
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +51,27 @@ export default function DieselClaims() {
     setLoading(true)
     load()
   }, [load])
+
+  // Number on the Review claims button: waiting for my approval + approved waiting for payment (accountant)
+  const approver = isSuperAdmin || access.admin
+  const accountant = isSuperAdmin || access.pay
+  useEffect(() => {
+    if (!approver && !accountant) return
+    let active = true
+    listClaims(company.id)
+      .then((all) => {
+        if (!active) return
+        const mine = (c) => c.claimant_id === user.id
+        setToReview(
+          all.filter((c) => (approver && c.status === 'pending' && !mine(c) && access.approves(c.claimant_id)) || (accountant && c.status === 'approved' && (!mine(c) || isSuperAdmin))).length
+        )
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.id, user.id, approver, accountant])
 
   const person = new Map(people.map((p) => [p.user_id, p]))
   // Cash (claimable) receipts and subsidised fleet-card receipts, summed up.
@@ -107,6 +129,7 @@ export default function DieselClaims() {
             {(access.admin || access.pay || access.viewAll) && (
               <Button variant="secondary" onClick={() => navigate('/diesel/claims/review')}>
                 Review claims
+                {toReview > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{toReview}</span>}
               </Button>
             )}
             {access.claim && (

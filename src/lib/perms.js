@@ -104,7 +104,7 @@ export const ROLE_MODEL = [
           { key: 'own', label: 'View own claims record (submit, edit, delete own claims)', actions: ['view', 'add', 'edit', 'delete'] },
           { key: 'all', label: 'View all users’ claims in this company', actions: ['view_all'] },
           { key: 'approve', label: 'Approve claims', actions: ['approve'], approvers: true },
-          { key: 'pay', label: 'Payment: mark claims paid (account)', actions: ['pay'] }
+          { key: 'pay', label: 'Accountant: mark approved claims paid', actions: ['pay'] }
         ]
       },
       {
@@ -130,12 +130,36 @@ export const ROLE_MODEL = [
 
 export const approveFor = (perms) => (Array.isArray(perms?.approve_for) ? perms.approve_for : [])
 
-/** May the signed-in user (with these perms) review claims of this claimant? */
-export const canReviewClaimant = (perms, isSuper, claimantId) => {
+/** May the signed-in user approve / reject claims of this claimant? (approver named for them, or approve-all) */
+export const canApproveClaimant = (perms, isSuper, claimantId) => {
   if (isSuper) return true
-  if (!(has(perms, 'claims', 'approve') || has(perms, 'claims', 'pay'))) return false
+  if (!has(perms, 'claims', 'approve')) return false
   const list = approveFor(perms)
   return list.length === 0 || list.includes(claimantId)
+}
+
+/** May the signed-in user open this claimant's claims for review? Approver of that person, or accountant. */
+export const canReviewClaimant = (perms, isSuper, claimantId) =>
+  canApproveClaimant(perms, isSuper, claimantId) || has(perms, 'claims', 'pay')
+
+// Claim approval setting: a person's role in Fuel Manage.
+export const FUEL_ROLES = [
+  ['user', 'Normal user'],
+  ['accountant', 'Accountant']
+]
+export const fuelRole = (perms) => (has(perms, 'claims', 'pay') ? 'accountant' : 'user')
+/** perms with the role applied: accountant = see all claims + mark paid. */
+export function withFuelRole(perms, role) {
+  const claims = new Set(perms?.claims || [])
+  for (const a of ['view', 'add', 'edit', 'delete']) claims.add(a)
+  if (role === 'accountant') {
+    claims.add('view_all')
+    claims.add('pay')
+  } else {
+    claims.delete('view_all')
+    claims.delete('pay')
+  }
+  return { ...perms, claims: [...claims] }
 }
 
 export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report']
@@ -216,6 +240,7 @@ export function usePerms(companyId) {
       can: (section, action) => isSuperAdmin || has(state.perms, section, action),
       any: (sections) => isSuperAdmin || hasAny(state.perms, sections),
       reviewable: (claimantId) => canReviewClaimant(state.perms, isSuperAdmin, claimantId),
+      approves: (claimantId) => canApproveClaimant(state.perms, isSuperAdmin, claimantId),
       approveFor: approveFor(state.perms)
     }),
     [state, isSuperAdmin]

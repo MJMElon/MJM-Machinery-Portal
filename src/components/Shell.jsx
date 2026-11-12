@@ -50,11 +50,12 @@ export function Shell() {
 function pageTitle(path) {
   if (path === '/') return ''
   if (path.startsWith('/cmms')) return 'Machinery Manage'
+  if (path.startsWith('/diesel/claims/review')) return 'Review claims'
   if (path.startsWith('/diesel/claims')) return 'Fuel Claims'
   if (path.startsWith('/diesel/usage')) return 'Fuel Usage Report'
   if (path.startsWith('/diesel/cards')) return 'Fleet Card Manage'
   if (path.startsWith('/diesel/report')) return 'Fuel Usage Report'
-  if (path.startsWith('/diesel/users')) return 'User setting'
+  if (path.startsWith('/diesel/users')) return 'Claim approval setting'
   if (path.startsWith('/diesel')) return 'Fuel Manage'
   if (path.startsWith('/settings/users')) return 'CMMS 2 user access'
   if (path.startsWith('/settings')) return 'Settings'

@@ -48,7 +48,7 @@ export default function ClaimView() {
 
   const load = useCallback(async () => {
     try {
-      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), access.viewAll ? listPeople(company.id) : [], listClaimCards(company.id).catch(() => [])])
+      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), access.viewAll || access.admin || access.pay ? listPeople(company.id).catch(() => []) : [], listClaimCards(company.id).catch(() => [])])
       if (!c) throw new Error('Claim not found (or you have no access to it).')
       setClaim(c)
       setLines(ls)
@@ -64,7 +64,7 @@ export default function ClaimView() {
     } finally {
       setLoading(false)
     }
-  }, [id, company.id, access.viewAll])
+  }, [id, company.id, access.viewAll, access.admin, access.pay])
 
   useEffect(() => {
     load()
@@ -88,8 +88,11 @@ export default function ClaimView() {
   }, [loading, claim, params])
   const canEdit = claim && own && claim.status === 'pending' && access.can('claims', 'edit')
   const canDelete = claim && ((own && claim.status === 'pending' && access.can('claims', 'delete')) || isSuperAdmin)
-  // Nobody reviews their own claim, super admins included.
-  const canReview = claim && (access.admin || access.pay) && !own && access.reviewable(claim.claimant_id)
+  // Approve / reject: an approver named for this claimant. Mark paid: an
+  // accountant, on approved claims. Nobody approves their own claim.
+  const canApprove = claim && !own && access.approves(claim.claimant_id)
+  const canPay = claim && access.pay && (!own || isSuperAdmin)
+  const canReview = canApprove || canPay
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
   const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
   const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)
@@ -128,32 +131,43 @@ export default function ClaimView() {
 
   const approval = !claim ? null : !canReview ? (
     <p className="text-xs text-slate-500">{own ? 'Your own claim' : claim.status === 'paid' ? 'Paid' : 'Not your approvee'}</p>
-  ) : claim.status === 'pending' && access.admin ? (
-    <div className="flex flex-col gap-2">
-      <Button size="sm" disabled={busy} onClick={() => review('approved')}>
-        <IconCheck width={16} height={16} /> Approve
-      </Button>
-      <Button size="sm" variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
-        <IconX width={16} height={16} /> Reject
-      </Button>
-    </div>
+  ) : claim.status === 'pending' ? (
+    canApprove ? (
+      <div className="flex flex-col gap-2">
+        <Button size="sm" disabled={busy} onClick={() => review('approved')}>
+          <IconCheck width={16} height={16} /> Approve
+        </Button>
+        <Button size="sm" variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
+          <IconX width={16} height={16} /> Reject
+        </Button>
+      </div>
+    ) : (
+      <p className="text-xs text-slate-500">Waiting for approval</p>
+    )
   ) : claim.status === 'approved' ? (
     <div className="flex flex-col gap-2">
-      {access.pay && (
+      {canPay && (
         <Button size="sm" disabled={busy} onClick={() => review('paid')}>
           Mark paid
         </Button>
       )}
-      {access.admin && (
+      {canApprove && (
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
           Back to pending
         </Button>
       )}
     </div>
-  ) : claim.status === 'rejected' && access.admin ? (
+  ) : claim.status === 'rejected' && canApprove ? (
     <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending', null)}>
       Back to pending
     </Button>
+  ) : claim.status === 'paid' && canPay ? (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-semibold text-brand-dark">Paid</p>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => window.confirm('Undo paid? The claim goes back to Approved.') && review('approved')}>
+        Undo paid
+      </Button>
+    </div>
   ) : (
     <p className="text-xs text-slate-500">{claim.status === 'paid' ? 'Paid' : '—'}</p>
   )
@@ -162,8 +176,8 @@ export default function ClaimView() {
     <div className="space-y-4">
       <div>
         <PageHeader
-          backTo="/diesel/claims"
-          backLabel="Back to claim list"
+          backTo={params.get('from') === 'review' ? '/diesel/claims/review' : '/diesel/claims'}
+          backLabel={params.get('from') === 'review' ? 'Back to review' : 'Back to claim list'}
           title={
             claim ? (
               <span className="inline-flex flex-wrap items-center gap-3">
@@ -347,7 +361,7 @@ export default function ClaimView() {
   )
 }
 
-function RejectModal({ onClose, onReject }) {
+export function RejectModal({ onClose, onReject }) {
   const [note, setNote] = useState('')
   return (
     <Modal open onClose={onClose} title="Reject claim">

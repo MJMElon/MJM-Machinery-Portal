@@ -55,6 +55,7 @@ export function useDieselAccess(companyId) {
     report: p.can('report', 'view') || p.can('claims', 'view_all'),
     viewAll: p.can('claims', 'view_all') || p.can('report', 'view'),
     reviewable: p.reviewable,
+    approves: p.approves,
     approveFor: p.approveFor
   }
 }
