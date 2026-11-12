@@ -6,6 +6,7 @@ import { INTRANET_URL } from '../lib/supabase.js'
 import { IconCheck, IconLogout } from './icons.jsx'
 import BackButton from './BackButton.jsx'
 import { WindowsProvider } from './Windows.jsx'
+import Mascots from './Mascots.jsx'
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
@@ -39,6 +40,7 @@ export function Shell() {
             <Outlet />
           </main>
         </div>
+        <Mascots />
       </WindowsProvider>
     </CompanyProvider>
   )
