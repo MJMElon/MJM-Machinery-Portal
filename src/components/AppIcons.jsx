@@ -190,3 +190,17 @@ export function RenewalIcon({ className }) {
     </span>
   )
 }
+
+// User Access: a person with a key.
+export function UserAccessIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-uacc" from="#dc2626" to="#991b1b" label="User Access">
+        <circle cx="26" cy="23" r="7" />
+        <path d="M12 48c0-8 6-13 14-13 3 0 6 .7 8 2" />
+        <circle cx="44" cy="36" r="5" />
+        <path d="M44 41v10M44 47h4" />
+      </Tile>
+    </span>
+  )
+}

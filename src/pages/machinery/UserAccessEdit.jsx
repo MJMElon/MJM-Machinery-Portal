@@ -118,7 +118,7 @@ export default function UserAccessEdit() {
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
       {person && (person.intranet_cmms || person.intranet_fuel) && (
         <p className="text-xs text-slate-500">
-          Access from MJM Intranet: {[person.intranet_cmms && 'CMMS 2', person.intranet_fuel && 'Fuel Manage'].filter(Boolean).join(', ')}
+          From MJM Intranet: {[person.intranet_cmms && 'Machinery icon (view Work Manage, Machinery Profile, Suppliers)', person.intranet_fuel && 'Fuel Claims icon (own fuel claims)'].filter(Boolean).join(' · ')}. Ticks below add to that.
         </p>
       )}
       {person?.is_super_admin && (

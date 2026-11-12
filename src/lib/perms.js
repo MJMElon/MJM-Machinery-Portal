@@ -195,13 +195,16 @@ export function usePerms(companyId) {
     if (!companyId || !user) return setState({ loaded: true, perms: {}, error: '' })
     if (isSuperAdmin) return setState({ loaded: true, perms: {}, error: '' })
     let active = true
+    // Role setup + what the MJM Intranet icons give (machinery_my_perms); before
+    // that migration, just the Role setup row.
     supabase
-      .from(PERMS_TABLE)
-      .select('perms')
-      .eq('company_id', companyId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data, error }) => active && setState({ loaded: true, perms: data?.perms || {}, error: error ? friendly(error).message : '' }))
+      .rpc('machinery_my_perms', { p_company: companyId })
+      .then(({ data, error }) => {
+        if (error && ['PGRST202', '42883'].includes(error.code))
+          return supabase.from(PERMS_TABLE).select('perms').eq('company_id', companyId).eq('user_id', user.id).maybeSingle().then((r) => ({ data: r.data?.perms, error: r.error }))
+        return { data, error }
+      })
+      .then(({ data, error }) => active && setState({ loaded: true, perms: data || {}, error: error ? friendly(error).message : '' }))
     return () => {
       active = false
     }
