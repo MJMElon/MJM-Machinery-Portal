@@ -222,11 +222,12 @@ export default function FleetCardPage({ mode }) {
     mode === "new"
       ? "New fleet card application"
       : form.card_no || "Fleet card application";
-  const sorted = [...vehicles].sort(
-    (a, b) =>
-      Number(Boolean(b.kpdn_subsidy)) - Number(Boolean(a.kpdn_subsidy)) ||
-      a.name.localeCompare(b.name),
-  );
+  // Only road vehicles can hold a fleet card: light vehicles and lorries
+  // (by Type in Machinery Profile); the vehicle already on this card stays.
+  const roadVehicle = (v) => /light|lorry|pickup|pick-up|van|bus|truck/i.test(v.machine_type || '') || v.id === form.vehicle_id;
+  const sorted = vehicles
+    .filter(roadVehicle)
+    .sort((a, b) => Number(Boolean(b.kpdn_subsidy)) - Number(Boolean(a.kpdn_subsidy)) || a.name.localeCompare(b.name));
 
   return (
     <form onSubmit={save} className="space-y-4">
