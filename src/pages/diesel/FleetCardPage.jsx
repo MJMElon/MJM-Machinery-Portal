@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader.jsx";
 import { Badge, Button, Card } from "../../components/ui.jsx";
-import { IconPencil, IconPlus, IconTrash } from "../../components/icons.jsx";
+import { IconPencil, IconTrash } from "../../components/icons.jsx";
 import {
   Empty,
   ErrorBox,
   Loading,
   inputCls,
 } from "../../components/diesel/shared.jsx";
-import { C1, C2, Chart } from "../../components/diesel/FuelDashboard.jsx";
+import { BalanceChart, DRIVER_COLORS, DriverShare } from "../../components/diesel/CardCharts.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
@@ -18,7 +18,6 @@ import {
   cardLedger,
   checklistDone,
   deleteCard,
-  deleteCardRecord,
   getCard,
   listCardData,
   listPeople,
@@ -27,17 +26,17 @@ import {
   saveCard,
   vehicleLabel,
 } from "../../lib/diesel.js";
-import { day, money, monthLabel, num, thisMonth, today } from "../../lib/format.js";
+import { day, money, num, thisMonth, today } from "../../lib/format.js";
 
-// One fleet card: vehicle, the application check list (company items, driver
-// items), card details, the drivers sharing the card and, once the card is in
-// use, the card's RM balance month by month (reloads in, fuel taken out; must
-// tally with the fuel station), then this month's fill-ups and reloads.
-// Ticking "Tested fleet card" makes the card Active; from then on the check
-// list folds into a small button on the Vehicle box. Fleet-card receipts that
-// the card's drivers put on fuel claims count as fuel taken on this card
-// (unless the receipt's vehicle has its own card). Reloads recorded on fuel claims appear here
-// too, marked "from fuel claim"; they are changed on the claim.
+// One fleet card. While applying: vehicle, the application check list
+// (company items, driver items), card details and drivers. Once tested (in
+// use): fleet card details with the vehicle first (check list folded into a
+// button), the drivers sharing the card beside each driver's share of the
+// month's subsidy volume (fleet-card litres only), and the year's reloads vs
+// usage with the balance (must tally with the fuel station). Fleet-card
+// receipts that the card's drivers put on fuel claims count on this card
+// (unless the receipt's vehicle has its own card); reloads come from fuel
+// claims too.
 // /diesel/cards/new applies; /diesel/cards/:id views; /diesel/cards/:id/edit edits.
 const EMPTY = {
   vehicle_id: "",
@@ -73,6 +72,7 @@ export default function FleetCardPage({ mode }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [claimLines, setClaimLines] = useState([]); // null before migration 20261128
+  const [shareMonth, setShareMonth] = useState(thisMonth()); // driver share chart, starts on this month
   const [vehicleQuery, setVehicleQuery] = useState("");
   const [showChecklist, setShowChecklist] = useState(false);
 
@@ -125,19 +125,16 @@ export default function FleetCardPage({ mode }) {
     load();
   }, [load]);
 
-  // Fuel-claim receipts (fleet card and cash) that belong to this card, for the year shown.
+  // Fuel-claim receipts that belong to this card, for the year of the month shown in the driver chart.
+  const shareYear = Number(shareMonth.slice(0, 4));
   useEffect(() => {
     if (!id) return;
     let live = true;
-    const nowYear = new Date().getFullYear();
-    // The chosen year for the chart, plus this year for "this month".
-    Promise.all(
-      [...new Set([ledgerYear, nowYear])].map((y) => cardClaimLines(company.id, id, y)),
-    ).then((rs) => live && setClaimLines(rs.some((r) => r == null) ? null : rs.flat()));
+    cardClaimLines(company.id, id, shareYear).then((r) => live && setClaimLines(r));
     return () => {
       live = false;
     };
-  }, [id, company.id, ledgerYear]);
+  }, [id, company.id, shareYear]);
 
   const vById = useMemo(
     () => new Map(vehicles.map((v) => [v.id, v])),
@@ -264,15 +261,6 @@ export default function FleetCardPage({ mode }) {
       setBusy(false);
     }
   }
-  async function removeRecord(kind, rid) {
-    if (!window.confirm("Delete this record? This cannot be undone.")) return;
-    try {
-      await deleteCardRecord(kind, rid);
-      await load();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
 
   if (loading) return <Loading />;
 
@@ -280,9 +268,6 @@ export default function FleetCardPage({ mode }) {
   const month = thisMonth();
   const yr = String(ledgerYear);
   const typed = data.usage.filter((u) => u.card_id === id); // fill-ups typed on the card (older records)
-  const reloads = data.reloads.filter(
-    (r) => r.card_id === id && r.reload_date.startsWith(month),
-  );
   const quota = form.subsidy_litres === "" ? null : Number(form.subsidy_litres);
   // RM balance: every reload less every fill-up on this card, month by month.
   const mine = (ledger || []).filter((r) => r.card_id === id);
@@ -320,25 +305,29 @@ export default function FleetCardPage({ mode }) {
     (t, r) => ({ inRM: t.inRM + r.inRM, outRM: t.outRM + r.outRM, outL: t.outL + r.outL }),
     { inRM: 0, outRM: 0, outL: 0 },
   );
-  // Litres by month: on the card (claims + typed fill-ups) and cash claims.
-  const chartData = Array.from({ length: 12 }, () => ({ cardL: 0, cashL: 0 }));
-  for (const l of claimLines || []) {
-    if (!l.fill_date.startsWith(yr)) continue;
-    const k = l.payment === "fleet_card" ? "cardL" : "cashL";
-    chartData[Number(l.fill_date.slice(5, 7)) - 1][k] += Number(l.litres || 0);
-  }
-  for (const u of typed) {
-    if (u.fill_date.startsWith(yr))
-      chartData[Number(u.fill_date.slice(5, 7)) - 1].cardL += Number(u.litres || 0);
-  }
-  const monthReceipts = [
-    ...(claimLines || [])
-      .filter((l) => l.fill_date.startsWith(month))
-      .map((l) => ({ ...l, key: l.id, card: l.payment === "fleet_card", who: l.claimant_id })),
-    ...typed
-      .filter((u) => u.fill_date.startsWith(month))
-      .map((u) => ({ ...u, key: `t${u.id}`, card: true, who: u.driver_id, claim_id: null, claim_no: null })),
-  ].sort((a, b) => b.fill_date.localeCompare(a.fill_date));
+  // Driver share of the subsidy volume for the month shown: fleet-card
+  // litres only (claims + fill-ups typed on the card), card drivers first.
+  const byPerson = new Map();
+  const addL = (who, l) => byPerson.set(who || "", (byPerson.get(who || "") || 0) + Number(l || 0));
+  for (const l of claimLines || [])
+    if (l.payment === "fleet_card" && l.fill_date.startsWith(shareMonth)) addL(l.claimant_id, l.litres);
+  for (const u of typed) if (u.fill_date.startsWith(shareMonth)) addL(u.driver_id, u.litres);
+  const shareIds = [
+    ...form.driver_ids,
+    ...[...byPerson.keys()].filter((k) => !form.driver_ids.includes(k)),
+  ];
+  const shareDrivers = shareIds.map((uid, i) => ({
+    id: uid || "none",
+    name: uid ? (person.get(uid) ? personLabel(person.get(uid)) : "Other user") : "No driver recorded",
+    litres: byPerson.get(uid) || 0,
+    color: DRIVER_COLORS[i % DRIVER_COLORS.length],
+  }));
+  const moveMonth = (delta) => {
+    const [y, m] = shareMonth.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (next <= month) setShareMonth(next);
+  };
   const licence = form.licence_expiry
     ? Math.round(
         (new Date(form.licence_expiry) - new Date(new Date().toDateString())) /
@@ -787,26 +776,20 @@ export default function FleetCardPage({ mode }) {
               )}
               </div>
               <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-                    Fuel used
-                  </h3>
-                  {yearSelect}
-                </div>
+                <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+                  Subsidy used by driver
+                </h3>
                 {claimLines == null ? (
                   <p className="py-6 text-center text-sm text-slate-400">
-                    Run the Fuel SQL migration 20261128 (fleet card claim lines) to see the chart.
+                    Run the Fuel SQL migration 20261128 (fleet card claim lines) to see the drivers&apos; share.
                   </p>
                 ) : (
-                  <Chart
-                    bare
-                    title={`${ledgerYear} · litres`}
-                    fmt={(v) => `${num(v, 2)} L`}
-                    series={[
-                      { key: "cardL", label: "Fleet card", color: C1 },
-                      { key: "cashL", label: "Cash claim", color: C2 },
-                    ]}
-                    data={chartData}
+                  <DriverShare
+                    month={shareMonth}
+                    onMonth={moveMonth}
+                    canNext={shareMonth < month}
+                    quota={quota}
+                    drivers={shareDrivers}
                   />
                 )}
               </div>
@@ -1035,7 +1018,7 @@ export default function FleetCardPage({ mode }) {
       {inUse && (
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-3">
-            <h3 className="font-semibold text-slate-800">{ledgerYear} reloads, usage &amp; balance</h3>
+            <h3 className="font-semibold text-slate-800">Reloads, usage &amp; balance</h3>
             {yearSelect}
             <span className="flex-1" />
             <span className="text-sm text-slate-500">Card balance now</span>
@@ -1046,149 +1029,25 @@ export default function FleetCardPage({ mode }) {
           {!ledger ? (
             <Empty>Run the Fuel SQL migration 20261126 (fleet card reloads from claims) to see the balance.</Empty>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="px-5 py-2.5">Month</th>
-                    <th className="px-3 py-2.5 text-right">Reloaded (RM)</th>
-                    <th className="px-3 py-2.5 text-right">Used on card (RM)</th>
-                    <th className="px-3 py-2.5 text-right">Used on card (L)</th>
-                    <th className="px-3 py-2.5 text-right">Subsidy quota used</th>
-                    <th className="px-3 py-2.5 text-right">Balance (RM)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className="text-slate-500">
-                    <td className="px-5 py-2 text-xs" colSpan={5}>
-                      Balance brought forward from {ledgerYear - 1}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{money(openingBalance)}</td>
-                  </tr>
-                  {yearRows.map((r) => (
-                    <tr key={r.month} className={r.month === month ? "bg-brand-light/40" : r.future ? "text-slate-300" : ""}>
-                      <td className="px-5 py-2.5 font-medium">{monthLabel(r.month)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{r.inRM ? `+ ${money(r.inRM)}` : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{r.outRM ? `− ${money(r.outRM)}` : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{r.outL ? `${num(r.outL, 2)} L` : "—"}</td>
-                      <td className={`px-3 py-2.5 text-right tabular-nums ${r.quotaPct > 100 ? "font-semibold text-red-600" : "text-slate-500"}`}>
-                        {r.future || !quota || !r.outL ? "—" : `${Math.round(r.quotaPct)}%`}
-                      </td>
-                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.balance < 0 ? "text-red-600" : ""}`}>
-                        {r.future ? "" : money(r.balance)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-semibold">
-                    <td className="px-5 py-2.5">Total {ledgerYear}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{money(yearTotal.inRM)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{money(yearTotal.outRM)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{num(yearTotal.outL, 2)} L</td>
-                    <td className="px-3 py-2.5" />
-                    <td className="px-3 py-2.5" />
-                  </tr>
-                </tfoot>
-              </table>
-              <p className="px-5 py-2.5 text-xs text-slate-500">
-                Check each month: Balance should equal the fuel station&apos;s card balance; a difference means a missing receipt or reload. Subsidy quota used above 100% means more fuel than the KPDN monthly volume.
+            <div className="px-5 pb-4 pt-3">
+              <BalanceChart rows={yearRows} quota={quota} />
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-slate-100 pt-3 text-sm">
+                <span className="text-slate-500">
+                  Brought forward <b className="font-semibold tabular-nums text-slate-800">{money(openingBalance)}</b>
+                </span>
+                <span className="text-slate-500">
+                  Reloaded <b className="font-semibold tabular-nums text-emerald-700">{money(yearTotal.inRM)}</b>
+                </span>
+                <span className="text-slate-500">
+                  Used <b className="font-semibold tabular-nums text-slate-800">{money(yearTotal.outRM)}</b> · {num(yearTotal.outL, 2)} L
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Each month the balance should equal the fuel station&apos;s card balance; a difference means a missing receipt or reload.
               </p>
             </div>
           )}
         </Card>
-      )}
-
-      {/* This month: receipts on fuel claims that belong to this card, and reloads */}
-      {inUse && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="overflow-hidden">
-            <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">
-              Fuel receipts this month
-            </h3>
-            {monthReceipts.length === 0 ? (
-              <Empty>No fuel receipt this month.</Empty>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {monthReceipts.map((u) => (
-                  <div key={u.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
-                    <span className="text-slate-500">{day(u.fill_date)}</span>
-                    <span className="font-medium text-slate-800">{num(u.litres, 2)} L</span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${u.card ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700"}`}
-                    >
-                      {u.card ? "Fleet card" : "Cash"}
-                    </span>
-                    <span className="text-slate-500">
-                      {[u.who && personLabel(person.get(u.who)), u.claim_no != null && `Claim ${String(u.claim_no).padStart(3, "0")}`]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                    <span className="flex-1" />
-                    <span className="font-medium">{money(u.amount)}</span>
-                    {u.claim_id ? (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/diesel/claims/${u.claim_id}`)}
-                        className="text-xs font-medium text-brand hover:underline"
-                      >
-                        View
-                      </button>
-                    ) : (
-                      access.can("cards", "delete") && (
-                        <button
-                          type="button"
-                          onClick={() => removeRecord("usage", u.id)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                          aria-label="Delete"
-                        >
-                          <IconTrash width={16} height={16} />
-                        </button>
-                      )
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-          <Card className="overflow-hidden">
-            <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">
-              Reloads this month
-            </h3>
-            {reloads.length === 0 ? (
-              <Empty>No reload this month.</Empty>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {reloads.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm"
-                  >
-                    <span className="text-slate-500">{day(r.reload_date)}</span>
-                    <span className="text-slate-500">{r.reference}</span>
-                    {r.claim_line_id && (
-                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">from fuel claim</span>
-                    )}
-                    <span className="flex-1" />
-                    <span className="font-medium text-emerald-600">
-                      + {money(r.amount)}
-                    </span>
-                    {access.can("cards", "delete") && !r.claim_line_id && (
-                      <button
-                        type="button"
-                        onClick={() => removeRecord("reload", r.id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                        aria-label="Delete"
-                      >
-                        <IconTrash width={16} height={16} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
       )}
 
       {editing && (
