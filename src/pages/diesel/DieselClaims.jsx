@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconDownload, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
+import { IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
 import { CLAIM_STATUS, deleteClaim, listClaimLines, listClaims, listPeople, listVehicles, personLabel, removeReceipt } from '../../lib/diesel.js'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
-import { day, downloadCsv, money, num, today } from '../../lib/format.js'
+import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
@@ -97,23 +97,6 @@ export default function DieselClaims() {
   const canEdit = (c) => c.status === 'pending' && c.claimant_id === user.id && access.can('claims', 'edit')
   const canDelete = (c) => (c.status === 'pending' && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin
 
-  const exportCsv = () =>
-    downloadCsv(
-      `fuel-claims-${company.code || company.name}-${today()}.csv`,
-      [
-        { header: 'Claim no.', value: (c) => claimNo(c, 0) },
-        { header: 'Submitted', value: (c) => c.submitted_on || c.fill_date },
-        { header: 'Claimant', value: (c) => personLabel(person.get(c.claimant_id)) },
-        { header: 'Receipts', value: (c) => linesOf(c.id).length },
-        { header: 'Litres', value: (c) => Number(c.total_litres ?? c.litres ?? 0) },
-        { header: 'Total (RM)', value: (c) => Number(c.amount) },
-        { header: 'Payable (RM)', value: (c) => Number(c.payable_amount ?? c.amount) },
-        { header: 'Status', value: (c) => CLAIM_STATUS[c.status]?.label || c.status },
-        { header: 'Review note', value: (c) => c.review_note }
-      ],
-      rows
-    )
-
   return (
     <div className="space-y-5">
       <PageHeader
@@ -124,9 +107,6 @@ export default function DieselClaims() {
                 Review claims
               </Button>
             )}
-            <Button variant="secondary" onClick={exportCsv} disabled={!rows.length}>
-              <IconDownload width={18} height={18} /> Export CSV
-            </Button>
             {access.claim && (
               <Button onClick={() => navigate('/diesel/claims/new')}>
                 <IconPlus width={18} height={18} /> New claim

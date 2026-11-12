@@ -5,7 +5,7 @@ import { Badge, Button, Card, Select } from '../../components/ui.jsx'
 import { IconDownload, IconFuel, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, MonthSelect, Stats, StatusBadge, monthsOf } from '../../components/diesel/shared.jsx'
 import { UsageModal } from '../../components/diesel/CardModals.jsx'
-import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
+import { FUEL_COLORS, MiniBars } from '../../components/diesel/FuelDashboard.jsx'
 import { deleteCardRecord, listCardData, listClaimLines, listClaims, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
 import { day, downloadCsv, money, num, sum, thisMonth } from '../../lib/format.js'
 
@@ -23,6 +23,8 @@ export default function DieselUsage() {
   const [error, setError] = useState('')
   const [month, setMonth] = useState(thisMonth())
   const [vehicle, setVehicle] = useState('')
+  const [tab, setTab] = useState('hq') // hq = road vehicles grouped by fleet card; estate = the other machines
+  const [year, setYear] = useState(new Date().getFullYear())
   const [modal, setModal] = useState(false)
 
   const load = useCallback(async () => {
@@ -119,11 +121,30 @@ export default function DieselUsage() {
   }
   const th = (label, right) => <th className={`p-3 font-medium ${right ? 'text-right' : 'text-left'}`}>{label}</th>
   const td = (v, right, cls = '') => <td className={`p-3 ${right ? 'text-right' : ''} ${cls}`}>{v}</td>
-  // One dashboard per vehicle that has fuel recorded (claims or card fill-ups):
-  // litres and RM per month, subsidised (fleet card) vs cash.
-  const perVehicle = vehicles
-    .map((v) => ({ v, lines: fills.filter((f) => f.vehicle_id === v.id).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' })) }))
-    .filter((x) => x.lines.length > 0)
+  // One row per vehicle (reg no. + driver) with two small month charts.
+  // HQ vehicles = road vehicles (light vehicle, lorry, pickup, van, bus, truck),
+  // grouped under their fleet card; Estate machines = everything else.
+  const isRoad = (v) => /light|lorry|pickup|pick-up|van|bus|truck/i.test(v.machine_type || '')
+  const linesOf = (vid) => fills.filter((f) => f.vehicle_id === vid).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' }))
+  const driverOf = (v) => {
+    const id = v.driver_ids?.[0] || v.driver_id
+    return id ? personLabel(person.get(id)) : '—'
+  }
+  const years = [...new Set([new Date().getFullYear(), ...fills.map((f) => Number(f.fill_date.slice(0, 4)))])].sort((a, b) => b - a)
+  const tabVehicles = vehicles.filter((v) => (tab === 'hq' ? isRoad(v) : !isRoad(v)) && v.is_active !== false)
+  const cardOfVehicle = new Map(cards.filter((c) => c.vehicle_id && c.status !== 'cancelled').map((c) => [c.vehicle_id, c]))
+  // groups: [{ key, title, vehicles }] — by fleet card for HQ, one group for Estate
+  const groups = (() => {
+    if (tab !== 'hq') return [{ key: 'estate', title: 'Estate machines', vehicles: tabVehicles }]
+    const byCard = new Map()
+    for (const v of tabVehicles) {
+      const c = cardOfVehicle.get(v.id)
+      const key = c ? c.id : 'none'
+      if (!byCard.has(key)) byCard.set(key, { key, title: c ? `Fleet card ${c.card_no || '(applying)'}${c.provider ? ' · ' + c.provider : ''}` : 'No fleet card', vehicles: [] })
+      byCard.get(key).vehicles.push(v)
+    }
+    return [...byCard.values()].sort((a, b) => (a.key === 'none') - (b.key === 'none') || a.title.localeCompare(b.title))
+  })()
 
   async function removeUsage(id) {
     if (!window.confirm('Delete this card fill-up? This cannot be undone.')) return
@@ -173,12 +194,61 @@ export default function DieselUsage() {
       />
       <ErrorBox>{error}</ErrorBox>
 
-      {!loading && perVehicle.length > 0 && (
-        <div className="space-y-5">
-          {perVehicle.map(({ v, lines }) => (
-            <FuelDashboard key={v.id} lines={lines} title={vehicleLabel(v)} />
-          ))}
-        </div>
+      {!loading && (
+        <Card className="overflow-hidden">
+          {/* HQ vehicle / Estate machine tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/60 pr-4">
+            <div className="flex">
+              {[
+                ['hq', 'HQ vehicle'],
+                ['estate', 'Estate machine']
+              ].map(([k, label]) => (
+                <button key={k} type="button" onClick={() => setTab(k)} className={`relative px-6 py-3 text-sm font-bold ${tab === k ? 'bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}>
+                  {label}
+                  {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-slate-600">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: FUEL_COLORS.card }} /> Fleet card (KPDN)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: FUEL_COLORS.cash }} /> Cash
+              </span>
+              <div className="w-24">
+                <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="h-8" aria-label="Year">
+                  {years.map((yy) => (
+                    <option key={yy} value={yy}>
+                      {yy}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+          </div>
+          {tabVehicles.length === 0 ? (
+            <Empty>{tab === 'hq' ? 'No HQ vehicles (light vehicles, lorries…) in Machinery Profile yet.' : 'No estate machines in Machinery Profile yet.'}</Empty>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="w-44 px-4 py-2">Vehicle reg no.</th>
+                    <th className="w-40 px-3 py-2">Driver</th>
+                    <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
+                    <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((g) => (
+                    <GroupRows key={g.key} group={g} showTitle={tab === 'hq'} linesOf={linesOf} driverOf={driverOf} year={year} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <MonthSelect months={months} value={month} onChange={setMonth} allLabel="All months" />
@@ -317,5 +387,42 @@ export default function DieselUsage() {
         <UsageModal company={company} cards={cards} vehicles={vehicles} people={people} onClose={() => setModal(false)} onSaved={load} />
       )}
     </div>
+  )
+}
+
+// One fleet card (or "No fleet card"): a heading row, then a row per vehicle
+// with its driver and the two small month charts.
+function GroupRows({ group, showTitle, linesOf, driverOf, year }) {
+  return (
+    <>
+      {showTitle && (
+        <tr className="bg-slate-50">
+          <td colSpan={4} className="px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600">
+            {group.title}
+            <span className="ml-2 font-medium normal-case tracking-normal text-slate-400">
+              {group.vehicles.length} vehicle{group.vehicles.length === 1 ? '' : 's'}
+            </span>
+          </td>
+        </tr>
+      )}
+      {group.vehicles.map((v) => {
+        const rows = linesOf(v.id)
+        return (
+          <tr key={v.id} className="border-b border-slate-100 align-middle">
+            <td className="px-4 py-2 font-semibold text-slate-800">
+              {v.reg_no || v.name}
+              {v.reg_no && v.reg_no !== v.name && <span className="block text-xs font-normal text-slate-400">{v.name}</span>}
+            </td>
+            <td className="px-3 py-2 text-slate-700">{driverOf(v)}</td>
+            <td className="px-3 py-1.5">
+              <MiniBars rows={rows} year={year} metric="litres" fmt={(x) => `${num(x, 1)} L`} />
+            </td>
+            <td className="px-3 py-1.5">
+              <MiniBars rows={rows} year={year} metric="amount" fmt={money} />
+            </td>
+          </tr>
+        )
+      })}
+    </>
   )
 }
