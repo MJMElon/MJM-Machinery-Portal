@@ -38,17 +38,32 @@ async function pdfToTextOrCanvas(file) {
   const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
   const page = await doc.getPage(1)
   const content = await page.getTextContent()
-  // Group text items into lines by their vertical position
+  // Group text items into lines by their vertical position. pdf.js often
+  // hands one word over in several pieces (Setel: "9f66e18f-b104-…" comes
+  // as "9", "f", "66"…), so pieces that touch are joined without a space;
+  // a space goes in only where there is a visible gap.
   const rows = new Map()
   for (const it of content.items) {
-    if (!it.str || !it.str.trim()) continue
+    if (!it.str) continue
     const y = Math.round(it.transform[5] / 3)
     if (!rows.has(y)) rows.set(y, [])
-    rows.get(y).push({ x: it.transform[4], s: it.str })
+    const size = Math.hypot(it.transform[0], it.transform[1]) || it.height || 10
+    rows.get(y).push({ x: it.transform[4], w: it.width || 0, size, s: it.str })
   }
   const text = [...rows.entries()]
     .sort((a, b) => b[0] - a[0])
-    .map(([, items]) => items.sort((a, b) => a.x - b.x).map((i) => i.s).join(' '))
+    .map(([, items]) => {
+      items.sort((a, b) => a.x - b.x)
+      let line = ''
+      let end = null
+      for (const i of items) {
+        if (end != null && i.x - end > i.size * 0.2 && !/\s$/.test(line) && !/^\s/.test(i.s)) line += ' '
+        line += i.s
+        end = i.x + i.w
+      }
+      return line.replace(/\s+/g, ' ').trim()
+    })
+    .filter(Boolean)
     .join('\n')
   if (text.replace(/\s/g, '').length >= 20) return { text }
   const viewport = page.getViewport({ scale: 2 })
@@ -146,13 +161,21 @@ export function parseReceipt(text) {
     if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31 && Number(y) >= 2015 && Number(y) <= 2100)) return null
     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   }
+  // Every candidate is tried in turn: a receipt id such as "…-4cce-…"
+  // looks like "4 cce" but is not a date, and must not hide the real one.
   const findDate = (src) => {
-    const a = fix(src).match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/)
-    if (a) return toIso(a[3], a[2], a[1])
-    const b = fix(src).match(/\b(20\d{2})[/.-](\d{1,2})[/.-](\d{1,2})\b/)
-    if (b) return toIso(b[1], b[2], b[3])
-    const c = src.match(/\b(\d{1,2})[ \t/-]*([A-Za-z]{3})[A-Za-z]*[ \t/,-]*(\d{4}|\d{2})\b/)
-    if (c && MON[c[2].toUpperCase()]) return toIso(c[3], MON[c[2].toUpperCase()], c[1])
+    for (const a of fix(src).matchAll(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/g)) {
+      const d = toIso(a[3], a[2], a[1])
+      if (d) return d
+    }
+    for (const b of fix(src).matchAll(/\b(20\d{2})[/.-](\d{1,2})[/.-](\d{1,2})\b/g)) {
+      const d = toIso(b[1], b[2], b[3])
+      if (d) return d
+    }
+    for (const c of src.matchAll(/\b(\d{1,2})[ \t/-]*([A-Za-z]{3})[A-Za-z]*[ \t/,-]*(\d{4}|\d{2})\b/g)) {
+      const d = MON[c[2].toUpperCase()] && toIso(c[3], MON[c[2].toUpperCase()], c[1])
+      if (d) return d
+    }
     return null
   }
   // The value may be on the label's line or the next one (Setel: "Created on").

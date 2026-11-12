@@ -60,11 +60,13 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   // Vehicle list: the vehicles this person drives (Machinery Profile →
   // drivers) plus the company's general-use vehicles; a vehicle already on
   // the claim stays listed. Own vehicle first, so a new row starts with it.
-  const drives = (v) => (v.driver_ids?.length ? v.driver_ids.includes(user.id) : v.driver_id === user.id)
+  const drives = (v) => Boolean(v.driver_ids?.includes(user.id) || v.driver_id === user.id)
+  // Active and Insurance-only vehicles (HQ cars are often Insurance only); not Inactive ones.
+  const inUse = (v) => (v.status ? v.status !== 'inactive' : v.is_active)
   const usable = useMemo(
     () =>
       vehicles
-        .filter((v) => (v.is_active && (drives(v) || v.general_use)) || initialLines?.some((l) => l.vehicle_id === v.id))
+        .filter((v) => (inUse(v) && (drives(v) || v.general_use)) || initialLines?.some((l) => l.vehicle_id === v.id))
         .sort((a, b) => Number(drives(b)) - Number(drives(a))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [vehicles, initialLines, user.id]
@@ -164,6 +166,8 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
       ...(draft.unit_price ? { unit_price: fixDp('unit_price', draft.unit_price) } : {}),
       ...(draft.amount ? { amount: fixDp('amount', draft.amount) } : {}),
       ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
+      // The person's own vehicle (driver in Machinery Profile) when the row has none yet
+      ...(!row.vehicle_id && !row.card_id && mine ? { vehicle_id: mine.id, ...(draft.product ? {} : { description: fuelWord(mine) }) } : {}),
       ...(draft.station ? { station: draft.station } : {}),
       ...(draft.product ? { description: draft.product } : {}),
       ...(draft.payment ? { payment: draft.payment, subsidised: draft.payment === 'fleet_card' } : {})
