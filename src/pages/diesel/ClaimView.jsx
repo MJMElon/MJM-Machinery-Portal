@@ -9,6 +9,8 @@ import {
   deleteClaim,
   getClaim,
   getClaimLines,
+  isReload,
+  listClaimCards,
   listPeople,
   listVehicles,
   openReceipt,
@@ -35,6 +37,7 @@ export default function ClaimView() {
   const [claim, setClaim] = useState(null)
   const [lines, setLines] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [cards, setCards] = useState([])
   const [people, setPeople] = useState([])
   const [imgs, setImgs] = useState({})
   const [loading, setLoading] = useState(true)
@@ -45,11 +48,12 @@ export default function ClaimView() {
 
   const load = useCallback(async () => {
     try {
-      const [c, ls, v, p] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), access.viewAll ? listPeople(company.id) : []])
+      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), access.viewAll ? listPeople(company.id) : [], listClaimCards(company.id).catch(() => [])])
       if (!c) throw new Error('Claim not found (or you have no access to it).')
       setClaim(c)
       setLines(ls)
       setVehicles(v)
+      setCards(cs)
       setPeople(p)
       const urls = {}
       for (const l of ls) if (l.receipt_path && !/\.pdf$/i.test(l.receipt_path)) urls[l.id] = await receiptUrl(l.receipt_path)
@@ -68,11 +72,12 @@ export default function ClaimView() {
 
   const person = new Map(people.map((p) => [p.user_id, p]))
   const vById = new Map(vehicles.map((v) => [v.id, v]))
+  const cById = new Map(cards.map((c) => [c.id, c]))
   const own = claim?.claimant_id === user.id
   const claimantName = own ? user.fullName || user.email : personLabel(person.get(claim?.claimant_id))
 
   const print = () =>
-    act(() => printClaim({ company, claim, lines, vehicles, claimantName }))
+    act(() => printClaim({ company, claim, lines, vehicles, cards, claimantName }))
 
   useEffect(() => {
     if (!loading && claim && params.get('print') === '1' && !printedOnLoad.current) {
@@ -223,7 +228,18 @@ export default function ClaimView() {
                     <tr key={l.id} className="align-top">
                       <td className="px-3 py-3 text-slate-500">{i + 1}</td>
                       <td className="px-2 py-3">
-                        <div className={tall}>{l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : 'No vehicle'}</div>
+                        <div className={`${tall} ${isReload(l) ? 'font-semibold text-emerald-700' : ''}`}>
+                          {isReload(l) ? (
+                            <span>
+                              Fleet card reload
+                              <span className="block text-xs font-normal text-slate-600">{cById.get(l.card_id)?.card_no || 'Card'}</span>
+                            </span>
+                          ) : l.vehicle_id ? (
+                            vehicleLabel(vById.get(l.vehicle_id))
+                          ) : (
+                            'No vehicle'
+                          )}
+                        </div>
                       </td>
                       <td className="px-2 py-3">
                         <div className="space-y-1.5">
@@ -255,8 +271,8 @@ export default function ClaimView() {
                       <td className="px-2 py-3">
                         <div className="space-y-1.5">
                           <div className={cell}>{l.payment === 'fleet_card' ? 'Fleet card' : 'Cash'}</div>
-                          <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                            {l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
+                          <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${isReload(l) ? 'bg-sky-50 text-sky-700' : l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {isReload(l) ? 'Card top-up · paid back' : l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
                           </p>
                         </div>
                       </td>

@@ -4,25 +4,29 @@ import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card } from '../../components/ui.jsx'
 import { IconEye, IconPlus } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { CARD_CHECKLIST, CARD_STATUS, checklistDone, listCardData, listVehicles, vehicleLabel } from '../../lib/diesel.js'
-import { num, thisMonth } from '../../lib/format.js'
+import { CARD_CHECKLIST, CARD_STATUS, cardBalances, cardLedger, checklistDone, listCardData, listVehicles, vehicleLabel } from '../../lib/diesel.js'
+import { money, num, thisMonth } from '../../lib/format.js'
 
 // Fleet Card Manage: the fleet card list. Each card shows its number, fuel
-// station, entitled vehicle, subsidy volume and the balance volume left this
-// month. "New fleet card application" starts the check list for a new card.
+// station, entitled vehicle, subsidy volume, the balance volume left this
+// month, this month's reloads and the card's RM balance (every reload, by
+// hand or through a fuel claim, less every fill-up on the card: it must tally
+// with the fuel station). "New fleet card application" starts the check list.
 export default function FleetCardManage() {
   const { company, access } = useOutletContext()
   const navigate = useNavigate()
   const [data, setData] = useState({ cards: [], usage: [] })
   const [vehicles, setVehicles] = useState([])
+  const [ledger, setLedger] = useState(null) // null until the database has machinery_card_ledger
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
-      const [d, v] = await Promise.all([listCardData(company.id, thisMonth() + '-01'), listVehicles(company.id)])
+      const [d, v, lg] = await Promise.all([listCardData(company.id, thisMonth() + '-01'), listVehicles(company.id), cardLedger(company.id).catch(() => null)])
       setData(d)
       setVehicles(v)
+      setLedger(lg)
       setError('')
     } catch (e) {
       setError(e.message)
@@ -39,6 +43,8 @@ export default function FleetCardManage() {
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const month = thisMonth()
   const usedLitres = (cid) => data.usage.filter((u) => u.card_id === cid && u.fill_date.startsWith(month)).reduce((s, u) => s + Number(u.litres || 0), 0)
+  const balance = cardBalances(ledger)
+  const reloadsThisMonth = (cid) => (ledger || []).filter((r) => r.card_id === cid && r.kind === 'reload' && r.month === month).reduce((s, r) => s + Number(r.amount || 0), 0)
   const cards = [...data.cards].sort((a, b) => (a.status === 'cancelled') - (b.status === 'cancelled') || String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz')))
 
   return (
@@ -62,7 +68,7 @@ export default function FleetCardManage() {
           <Empty>No fleet cards yet.{access.can('cards', 'add') ? ' Start with New fleet card application.' : ''}</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-2.5">Fleet card number</th>
@@ -70,6 +76,8 @@ export default function FleetCardManage() {
                   <th className="px-3 py-2.5">Entitled vehicle</th>
                   <th className="px-3 py-2.5 text-right">Subsidy volume</th>
                   <th className="px-3 py-2.5 text-right">This month balance volume</th>
+                  <th className="px-3 py-2.5 text-right">Reloads this month</th>
+                  <th className="px-3 py-2.5 text-right">Card balance</th>
                   <th className="w-28 px-3 py-2.5">Status</th>
                   <th className="w-24 px-3 py-2.5 text-center">Action</th>
                 </tr>
@@ -99,6 +107,10 @@ export default function FleetCardManage() {
                       <td className={`px-3 py-3 text-right font-semibold tabular-nums ${left != null && left < 0 ? 'text-red-600' : 'text-slate-900'}`}>
                         {left != null ? `${num(left, 2)} L` : '—'}
                         {used > 0 && <span className="block text-xs font-normal text-slate-400">used {num(used, 2)} L</span>}
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{ledger ? money(reloadsThisMonth(c.id)) : '—'}</td>
+                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${ledger && (balance[c.id] || 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                        {ledger ? money(balance[c.id] || 0) : '—'}
                       </td>
                       <td className="px-3 py-3">
                         <Badge color={st.color}>{st.label}</Badge>

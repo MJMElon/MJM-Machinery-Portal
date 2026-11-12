@@ -5,8 +5,10 @@ import { F, inputCls, opt } from './shared.jsx'
 import {
   PAYMENTS,
   PAYMENT_NOTE,
+  cardLabel,
   compressReceipt,
   createClaimWithLines,
+  isReload,
   removeReceipt,
   updateClaimWithLines,
   uploadReceipt,
@@ -20,10 +22,15 @@ import { money, num, today } from '../../lib/format.js'
 // a row, is read for a draft of the figures, and is attached to that row; rows
 // can also be typed by hand. Payable = cash rows only; fleet-card rows are
 // recorded for litres / cost but are not paid back.
+// A row can also be a FLEET CARD RELOAD (chosen in the vehicle box): the
+// person topped up a fleet card with cash and claims that amount back. It has
+// a card instead of a vehicle, no litres, and is always payable.
 const fuelWord = (v) => (v?.fuel_type === 'petrol' ? 'Petrol' : 'Diesel')
 const blankLine = (mine) => ({
   key: Math.random().toString(36).slice(2),
   fill_date: today(),
+  line_kind: 'fill',
+  card_id: '',
   vehicle_id: mine?.id || '',
   litres: '',
   unit_price: '',
@@ -49,7 +56,7 @@ function Unit({ unit, left, children }) {
   )
 }
 
-export function ClaimForm({ company, user, vehicles, claim, lines: initialLines, onSaved, onCancel }) {
+export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: initialLines, onSaved, onCancel }) {
   // Vehicle list: the vehicles this person drives (Machinery Profile →
   // drivers) plus the company's general-use vehicles; a vehicle already on
   // the claim stays listed. Own vehicle first, so a new row starts with it.
@@ -69,6 +76,9 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
       ? initialLines.map((l) => ({
           ...blankLine(mine),
           ...l,
+          line_kind: l.line_kind || 'fill',
+          card_id: l.card_id || '',
+          vehicle_id: l.vehicle_id || '',
           litres: l.litres ?? '',
           unit_price: l.unit_price ?? '',
           amount: l.amount ?? '',
@@ -116,10 +126,16 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
     else if (field === 'amount' && L > 0 && A > 0 && !l.unit_price) patch.unit_price = (Math.round((A / L) * 1000) / 1000).toFixed(3)
     update(l.key, patch)
   }
-  const setVehicle = (l, vehicleId) => {
-    const v = vById[vehicleId]
-    update(l.key, { vehicle_id: vehicleId, ...(l.description === 'Diesel' || l.description === 'Petrol' || !l.description ? { description: fuelWord(v) } : {}) })
+  // The vehicle box also lists the fleet cards: picking one makes the row a reload.
+  const RELOAD_DESC = 'Fleet card reload'
+  const setVehicle = (l, value) => {
+    if (value.startsWith('card:'))
+      return update(l.key, { line_kind: 'reload', card_id: value.slice(5), vehicle_id: '', litres: '', unit_price: '', payment: 'cash', subsidised: false, description: RELOAD_DESC })
+    const v = vById[value]
+    const generic = l.description === 'Diesel' || l.description === 'Petrol' || l.description === RELOAD_DESC || !l.description
+    update(l.key, { line_kind: 'fill', card_id: '', vehicle_id: value, ...(generic ? { description: fuelWord(v) } : {}) })
   }
+  const vehicleValue = (l) => (isReload(l) ? `card:${l.card_id}` : l.vehicle_id)
   // Fleet card = KPDN subsidised diesel; cash at the pump = non-subsidised.
   const setPayment = (l, payment) => update(l.key, { payment, subsidised: payment === 'fleet_card' })
 
@@ -158,7 +174,9 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
   const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + (Number(l.amount) || 0), 0)
   const litres = lines.reduce((s, l) => s + (Number(l.litres) || 0), 0)
   const reading = lines.some((l) => l.scan === 'scanning')
-  const valid = lines.length > 0 && lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (Number(l.amount) > 0 || Number(l.litres) > 0))
+  const valid =
+    lines.length > 0 &&
+    lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (isReload(l) ? l.card_id && Number(l.amount) > 0 : Number(l.amount) > 0 || Number(l.litres) > 0))
 
   async function save(e) {
     e?.preventDefault?.()
@@ -222,7 +240,7 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
             <F label="Total amount">
               <input value={money(total)} disabled className={`${inputCls} font-semibold`} />
             </F>
-            <F label="Payable amount" hint="Cash receipts only">
+            <F label="Payable amount" hint="Cash receipts and fleet card reloads">
               <input value={money(payable)} disabled className={`${inputCls} font-bold text-brand-dark`} />
             </F>
             <F label="Total litres">
@@ -279,8 +297,17 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                   <tr key={l.key} className={l.scan === 'scanning' ? 'bg-amber-50/40' : ''}>
                     <td className="px-3 py-3 align-top pt-4 font-semibold text-slate-500">{i + 1}</td>
                     <td className="px-2 py-3">
-                      <select value={l.vehicle_id} onChange={(e) => setVehicle(l, e.target.value)} className={`${tall} tracking-wide`} title="Vehicle">
+                      <select value={vehicleValue(l)} onChange={(e) => setVehicle(l, e.target.value)} className={`${tall} tracking-wide ${isReload(l) ? 'font-semibold text-emerald-700' : ''}`} title="Vehicle, or a fleet card to reload">
                         {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
+                        {cards.length > 0 && (
+                          <optgroup label="Fleet card reload">
+                            {cards.map((c) => (
+                              <option key={c.id} value={`card:${c.id}`}>
+                                Reload · {cardLabel(c)}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </td>
                     <td className="px-2 py-3">
@@ -295,10 +322,10 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                     <td className="px-2 py-3">
                       <div className="space-y-1.5">
                         <Unit unit="L">
-                          <input type="number" inputMode="decimal" min="0" step="any" placeholder="Litre" value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} onBlur={() => blurNumber(l, 'litres')} className={`${cell} pr-8 text-right`} title="Litres" />
+                          <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Litre'} disabled={isReload(l)} value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} onBlur={() => blurNumber(l, 'litres')} className={`${cell} pr-8 text-right`} title="Litres" />
                         </Unit>
                         <Unit unit="RM/L">
-                          <input type="number" inputMode="decimal" min="0" step="any" placeholder="Unit price" value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
+                          <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Unit price'} disabled={isReload(l)} value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
                         </Unit>
                       </div>
                     </td>
@@ -309,16 +336,16 @@ export function ClaimForm({ company, user, vehicles, claim, lines: initialLines,
                     </td>
                     <td className="px-2 py-3">
                       <Unit unit="RM" left>
-                        <input value={payableLine.toFixed(2)} disabled className={`${tall} pl-10 text-right font-bold text-brand-dark`} title="Claim payable amount (cash receipts only)" />
+                        <input value={payableLine.toFixed(2)} disabled className={`${tall} pl-10 text-right font-bold text-brand-dark`} title="Claim payable amount (cash receipts and fleet card reloads)" />
                       </Unit>
                     </td>
                     <td className="px-2 py-3">
                       <div className="space-y-1.5">
-                        <select value={l.payment} onChange={(e) => setPayment(l, e.target.value)} className={cell} title="Payment method">
+                        <select value={l.payment} disabled={isReload(l)} onChange={(e) => setPayment(l, e.target.value)} className={cell} title={isReload(l) ? 'A reload is paid in cash and claimed back' : 'Payment method'}>
                           {opt(PAYMENTS)}
                         </select>
-                        <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                          {PAYMENT_NOTE[l.payment]}
+                        <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${isReload(l) ? 'bg-sky-50 text-sky-700' : l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                          {isReload(l) ? 'Card top-up · paid back' : PAYMENT_NOTE[l.payment]}
                         </p>
                       </div>
                     </td>

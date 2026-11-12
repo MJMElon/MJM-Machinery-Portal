@@ -5,7 +5,7 @@ import { Button, Card } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
-import { CLAIM_STATUS, deleteClaim, listClaimLines, listClaims, listPeople, listVehicles, personLabel, removeReceipt } from '../../lib/diesel.js'
+import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPeople, listVehicles, personLabel, removeReceipt } from '../../lib/diesel.js'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
@@ -23,6 +23,7 @@ export default function DieselClaims() {
   const [claims, setClaims] = useState([])
   const [lines, setLines] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [cards, setCards] = useState([])
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -30,11 +31,12 @@ export default function DieselClaims() {
 
   const load = useCallback(async () => {
     try {
-      const [c, p, v] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => [])])
+      const [c, p, v, cs] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
       const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
       setClaims(c)
       setLines(ls)
       setVehicles(v)
+      setCards(cs)
       setPeople(p)
       setError('')
     } catch (e) {
@@ -63,8 +65,8 @@ export default function DieselClaims() {
     const db = b.submitted_on || b.fill_date
     return da < db ? 1 : da > db ? -1 : (a.created_at || '') < (b.created_at || '') ? 1 : -1
   })
-  // Rows not yet rejected count towards the dashboard
-  const liveLines = lines.filter((l) => claims.find((c) => c.id === l.claim_id)?.status !== 'rejected')
+  // Rows not yet rejected count towards the dashboard (a card reload is not fuel: the fuel shows when the card is used)
+  const liveLines = lines.filter((l) => !isReload(l) && claims.find((c) => c.id === l.claim_id)?.status !== 'rejected')
 
   async function remove(c) {
     if (!window.confirm(`Delete claim ${claimNo(c, 0)}? This cannot be undone.`)) return
@@ -86,7 +88,7 @@ export default function DieselClaims() {
     setBusyId(c.id)
     setError('')
     try {
-      await printClaim({ company, claim: c, lines: linesOf(c.id), vehicles, claimantName: user.fullName || user.email })
+      await printClaim({ company, claim: c, lines: linesOf(c.id), vehicles, cards, claimantName: user.fullName || user.email })
     } catch (e) {
       setError(e.message)
     } finally {
@@ -141,8 +143,9 @@ export default function DieselClaims() {
               <tbody className="divide-y divide-slate-100">
                 {rows.map((c, i) => {
                   const ls = linesOf(c.id)
-                  const cash = sumUp(ls.filter((l) => l.payment !== 'fleet_card'))
+                  const cash = sumUp(ls.filter((l) => l.payment !== 'fleet_card' && !isReload(l)))
                   const sub = sumUp(ls.filter((l) => l.payment === 'fleet_card'))
+                  const reload = sumUp(ls.filter(isReload))
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/60">
                       <td className="whitespace-nowrap px-5 py-2.5 align-middle">
@@ -159,11 +162,12 @@ export default function DieselClaims() {
                         <Link to={`/diesel/claims/${c.id}`} className="flex flex-wrap gap-x-5 gap-y-0.5 text-slate-800 hover:text-brand">
                           <span className="whitespace-nowrap text-amber-700">Cash fuel claim: {cash.n}</span>
                           <span className="whitespace-nowrap text-emerald-700">Subsidy fuel claim: {sub.n}</span>
+                          {reload.n > 0 && <span className="whitespace-nowrap text-sky-700">Fleet card reload: {reload.n}</span>}
                         </Link>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums align-middle">{num(cash.litres + sub.litres, 2)} L</td>
                       <td className="px-3 py-2.5 text-right tabular-nums align-middle">{money(cash.amount + sub.amount)}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(cash.amount)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(cash.amount + reload.amount)}</td>
                       <td className="px-3 py-2.5 align-middle">
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />

@@ -75,8 +75,9 @@ table { border-collapse: collapse; font-size: 11px; }
 `
 
 /** The claim form as a complete HTML document (string). */
-export function claimFormHtml({ company, claim, lines, vehicles, claimantName, images = {} }) {
+export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, images = {} }) {
   const vById = new Map((vehicles || []).map((v) => [v.id, v]))
+  const cById = new Map((cards || []).map((c) => [c.id, c]))
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
   const no = padNo(claim)
   const contact = [company.phone && `Tel: ${company.phone}`, company.fax && `Fax: ${company.fax}`, company.email && `Email: ${company.email}`]
@@ -85,6 +86,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
 
   // "Diesel - Petronas Senai, JPB 1234": what was bought and where, then the vehicle.
   const describe = (l) => {
+    if (l.line_kind === 'reload') return `Fleet card reload - ${esc(cById.get(l.card_id)?.card_no || 'fleet card')}${l.station ? esc(' (' + l.station + ')') : ''}`
     const what = [l.description, l.station].filter(Boolean).join(' - ')
     const veh = l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : ''
     return `${esc(what || '—')}${veh ? `<span class="veh">, ${esc(veh)}</span>` : ''}`
@@ -182,7 +184,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
  * been shown (Chrome and Firefox: once it closes). `lines` may include
  * fleet-card lines; only cash lines are printed.
  */
-export async function printClaim({ company, claim, lines, vehicles, claimantName }) {
+export async function printClaim({ company, claim, lines, vehicles, cards, claimantName }) {
   const cash = (lines || []).filter((l) => l.payment !== 'fleet_card')
   const images = {}
   await Promise.all(
@@ -193,7 +195,7 @@ export async function printClaim({ company, claim, lines, vehicles, claimantName
       }
     })
   )
-  const html = claimFormHtml({ company, claim, lines: cash, vehicles, claimantName, images })
+  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, images })
   return printHtml(html)
 }
 

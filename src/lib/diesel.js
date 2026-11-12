@@ -170,6 +170,36 @@ export const PAYMENTS = [
 ]
 export const PAYMENT_NOTE = { cash: 'Non-subsidised', fleet_card: 'KPDN subsidy' }
 
+// A line is a fill-up (receipt for fuel) or a fleet card reload: the person
+// paid cash to top up a fleet card and claims it back (payable, no litres).
+export const isReload = (l) => l?.line_kind === 'reload'
+export const cardLabel = (c) => (c ? [c.card_no, c.provider].filter(Boolean).join(' · ') : '—')
+export const reloadLabel = (c) => `Fleet card reload · ${c?.card_no || '—'}`
+
+/** Fleet cards a claimant may record a reload for (card no. + provider only). */
+export async function listClaimCards(companyId) {
+  const { data, error } = await supabase.rpc('machinery_claim_cards', { p_company: companyId })
+  if (error) throw friendly(error)
+  return data || []
+}
+
+/** Per card and month: reloads in and fuel taken out → [{ card_id, month, kind: 'reload' | 'usage', amount, litres, entries }]. */
+export async function cardLedger(companyId) {
+  const { data, error } = await supabase.rpc('machinery_card_ledger', { p_company: companyId })
+  if (error) throw friendly(error)
+  return data || []
+}
+
+/** Reloads − fuel taken, per card, from the ledger rows (all months, or up to and including `month`). */
+export function cardBalances(ledger, month) {
+  const bal = {}
+  for (const r of ledger || []) {
+    if (month && r.month > month) continue
+    bal[r.card_id] = (bal[r.card_id] || 0) + (r.kind === 'reload' ? 1 : -1) * Number(r.amount || 0)
+  }
+  return bal
+}
+
 export const LINES = 'machinery_diesel_claim_lines'
 
 export async function listClaimLines(companyId, { claimIds } = {}) {
@@ -234,12 +264,15 @@ async function replaceLines(claimId, lines) {
     company_id: l.company_id,
     line_no: i + 1,
     fill_date: l.fill_date,
-    vehicle_id: l.vehicle_id || null,
-    litres: l.litres === '' || l.litres == null ? null : round(l.litres, 2),
-    unit_price: l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
+    // A reload has a card, no vehicle, no litres, and is always paid back (cash).
+    line_kind: isReload(l) ? 'reload' : 'fill',
+    card_id: isReload(l) ? l.card_id || null : null,
+    vehicle_id: isReload(l) ? null : l.vehicle_id || null,
+    litres: isReload(l) || l.litres === '' || l.litres == null ? null : round(l.litres, 2),
+    unit_price: isReload(l) || l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
     amount: round(l.amount || 0, 2),
-    payment: l.payment || 'cash',
-    subsidised: (l.payment || 'cash') === 'fleet_card',
+    payment: isReload(l) ? 'cash' : l.payment || 'cash',
+    subsidised: !isReload(l) && (l.payment || 'cash') === 'fleet_card',
     receipt_no: l.receipt_no || null,
     station: l.station || null,
     odometer_km: l.odometer_km === '' || l.odometer_km == null ? null : Number(l.odometer_km),
