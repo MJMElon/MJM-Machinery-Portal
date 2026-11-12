@@ -71,6 +71,7 @@ export default function FleetCardPage({ mode }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);
+  const [vehicleQuery, setVehicleQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -247,12 +248,22 @@ export default function FleetCardPage({ mode }) {
     mode === "new"
       ? "New fleet card application"
       : form.card_no || "Fleet card application";
-  // Only road vehicles can hold a fleet card: light vehicles and lorries
-  // (by Type in Machinery Profile); the vehicle already on this card stays.
-  const roadVehicle = (v) => /light|lorry|pickup|pick-up|van|bus|truck/i.test(v.machine_type || '') || v.id === form.vehicle_id;
+  // The list shows light vehicles (by Type in Machinery Profile); typing in
+  // the search box looks through every machine of the company instead (name,
+  // plate, type, brand, model). The vehicle already on this card always stays.
+  const q = vehicleQuery.trim().toLowerCase();
+  const matches = (v) =>
+    q
+      ? [v.name, v.reg_no, v.machine_type, v.brand, v.model]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      : /light/i.test(v.machine_type || "");
   const sorted = vehicles
-    .filter(roadVehicle)
+    .filter((v) => matches(v) || v.id === form.vehicle_id)
     .sort((a, b) => Number(Boolean(b.kpdn_subsidy)) - Number(Boolean(a.kpdn_subsidy)) || a.name.localeCompare(b.name));
+  const found = sorted.filter((v) => v.id !== form.vehicle_id || matches(v)).length;
 
   return (
     <form onSubmit={save} className="space-y-4">
@@ -345,13 +356,27 @@ export default function FleetCardPage({ mode }) {
                     : ""
                 }
               >
+                <input
+                  type="search"
+                  value={vehicleQuery}
+                  onChange={(e) => setVehicleQuery(e.target.value)}
+                  placeholder="Search any machine (name, plate, type)…"
+                  className={`${box} mb-2`}
+                  aria-label="Search vehicle or machine"
+                />
                 <select
                   value={form.vehicle_id}
                   onChange={setVehicle}
                   className={box}
                   required
                 >
-                  <option value="">Choose vehicle…</option>
+                  <option value="">
+                    {q
+                      ? found
+                        ? `Choose from ${found} match${found === 1 ? "" : "es"}…`
+                        : "No machine matches the search"
+                      : "Choose light vehicle…"}
+                  </option>
                   {sorted.map((v) => (
                     <option key={v.id} value={v.id}>
                       {(v.kpdn_subsidy ? "★ " : "") + vehicleLabel(v)}
