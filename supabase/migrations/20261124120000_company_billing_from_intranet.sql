@@ -8,7 +8,7 @@
 -- letterhead) now come from the Intranet company profile (Master Manage →
 -- Company → Billing details) through "Sync from MJM Intranet" and the sign-in
 -- sync. Settings → Company profile here shows them read-only for Intranet
--- companies. Needs the Intranet migration 20261130 (company billing) and a
+-- companies. Needs the Intranet migration 20261130110000 (company billing) and a
 -- fresh deploy of its gw-master-data function; until then the sync leaves
 -- the values kept here untouched.
 alter table public.machinery_companies
