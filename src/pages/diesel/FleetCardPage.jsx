@@ -31,15 +31,19 @@ import {
 } from "../../lib/diesel.js";
 import { day, money, monthLabel, num, thisMonth, today } from "../../lib/format.js";
 
-// One fleet card: the application check list (vehicle, company items, driver
-// items) and, once the card is in use, the card's RM balance month by month
-// (reloads in, fuel taken out; must tally with the fuel station), then this
-// month's fill-ups and reloads. Reloads recorded on fuel claims appear here
+// One fleet card: vehicle, the application check list (company items, driver
+// items), card details, the drivers sharing the card and, once the card is in
+// use, the card's RM balance month by month (reloads in, fuel taken out; must
+// tally with the fuel station), then this month's fill-ups and reloads.
+// Ticking "Tested fleet card" makes the card Active; from then on the check
+// list folds into a small button on the Vehicle box. Fleet-card receipts that
+// the card's drivers put on fuel claims count as fuel taken on this card
+// (unless the receipt's vehicle has its own card). Reloads recorded on fuel claims appear here
 // too, marked "from fuel claim"; they are changed on the claim.
 // /diesel/cards/new applies; /diesel/cards/:id views; /diesel/cards/:id/edit edits.
 const EMPTY = {
   vehicle_id: "",
-  driver_id: "",
+  driver_ids: [],
   provider: "",
   subsidy_litres: "",
   card_no: "",
@@ -72,6 +76,7 @@ export default function FleetCardPage({ mode }) {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);
   const [vehicleQuery, setVehicleQuery] = useState("");
+  const [showChecklist, setShowChecklist] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -93,7 +98,11 @@ export default function FleetCardPage({ mode }) {
       if (c) {
         setForm({
           vehicle_id: c.vehicle_id || "",
-          driver_id: c.driver_id || "",
+          driver_ids: c.driver_ids?.length
+            ? c.driver_ids
+            : c.driver_id
+              ? [c.driver_id]
+              : [],
           provider: c.provider || "",
           subsidy_litres: c.subsidy_litres ?? "",
           card_no: c.card_no || "",
@@ -127,15 +136,34 @@ export default function FleetCardPage({ mode }) {
     [people],
   );
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  // Choosing the vehicle brings its driver along.
+  // Choosing the vehicle brings its drivers along (if none chosen yet).
   const setVehicle = (e) => {
     const v = vById.get(e.target.value);
+    const fromVehicle = v?.driver_ids?.length
+      ? v.driver_ids
+      : v?.driver_id
+        ? [v.driver_id]
+        : [];
     setForm((f) => ({
       ...f,
       vehicle_id: e.target.value,
-      driver_id: f.driver_id || v?.driver_ids?.[0] || v?.driver_id || "",
+      driver_ids: f.driver_ids.length ? f.driver_ids : fromVehicle,
     }));
   };
+  const addDriver = (e) => {
+    const uid = e.target.value;
+    if (uid)
+      setForm((f) =>
+        f.driver_ids.includes(uid)
+          ? f
+          : { ...f, driver_ids: [...f.driver_ids, uid] },
+      );
+  };
+  const dropDriver = (uid) =>
+    setForm((f) => ({
+      ...f,
+      driver_ids: f.driver_ids.filter((d) => d !== uid),
+    }));
   const item = (key) => form.checklist[key] || {};
   const setItem = (key, patch) =>
     setForm((f) => ({
@@ -145,11 +173,15 @@ export default function FleetCardPage({ mode }) {
         [key]: { ...(f.checklist[key] || {}), ...patch },
       },
     }));
-  const tick = (key) => (e) =>
+  const tick = (key) => (e) => {
     setItem(key, {
       done: e.target.checked,
       date: e.target.checked ? item(key).date || today() : "",
     });
+    // A tested card is in use: Applying -> Active.
+    if (key === "card_tested" && e.target.checked)
+      setForm((f) => (f.status === "application" ? { ...f, status: "active" } : f));
+  };
 
   const done = CARD_CHECKLIST.filter((i) => item(i.key).done).length;
   const allDone =
@@ -164,12 +196,16 @@ export default function FleetCardPage({ mode }) {
       const savedId = await saveCard(company.id, {
         id: id || undefined,
         vehicle_id: form.vehicle_id,
-        driver_id: form.driver_id || null,
+        driver_id: form.driver_ids[0] || null,
+        driver_ids: form.driver_ids,
         provider: form.provider.trim() || null,
         subsidy_litres:
           form.subsidy_litres === "" ? null : Number(form.subsidy_litres),
         card_no: form.card_no.trim() || null,
-        status: form.status,
+        status:
+          form.status === "application" && form.checklist.card_tested?.done
+            ? "active"
+            : form.status,
         licence_expiry: form.licence_expiry || null,
         kpdn_apply: Boolean(form.kpdn_apply),
         login_id: form.login_id.trim() || null,
@@ -197,6 +233,22 @@ export default function FleetCardPage({ mode }) {
       navigate("/diesel/cards", { replace: true });
     } catch (e) {
       setError(e.message);
+      setBusy(false);
+    }
+  }
+  async function setInUse(next) {
+    const msg =
+      next === "inactive"
+        ? "Make this fleet card inactive? It will no longer be offered on fuel claims or fill-ups. You can make it active again later."
+        : "Make this fleet card active again?";
+    if (!window.confirm(msg)) return;
+    setBusy(true);
+    try {
+      await saveCard(company.id, { id, status: next });
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
       setBusy(false);
     }
   }
@@ -244,6 +296,8 @@ export default function FleetCardPage({ mode }) {
           86400000,
       )
     : null;
+  // Once the card is in use the check list folds into a button.
+  const checklistFolded = Boolean(card) && card.status !== "application";
   const title =
     mode === "new"
       ? "New fleet card application"
@@ -322,6 +376,24 @@ export default function FleetCardPage({ mode }) {
                   <IconPencil width={18} height={18} /> Edit
                 </Button>
               )}
+              {access.can("cards", "edit") && form.status !== "application" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    setInUse(
+                      ["inactive", "cancelled"].includes(form.status)
+                        ? "active"
+                        : "inactive",
+                    )
+                  }
+                >
+                  {["inactive", "cancelled"].includes(form.status)
+                    ? "Make active"
+                    : "Make inactive"}
+                </Button>
+              )}
               {access.can("cards", "delete") && (
                 <Button
                   type="button"
@@ -342,9 +414,25 @@ export default function FleetCardPage({ mode }) {
       <div className="space-y-4">
         {/* 1. Vehicle */}
         <Card className="p-5">
-          <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-            Vehicle
-          </h3>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+              Vehicle
+            </h3>
+            {checklistFolded && (
+              <button
+                type="button"
+                onClick={() => setShowChecklist((v) => !v)}
+                aria-expanded={showChecklist}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Application check list
+                <span className={allDone ? "text-emerald-600" : "text-amber-600"}>
+                  {done}/{CARD_CHECKLIST.length}
+                </span>
+                <span aria-hidden="true">{showChecklist ? "▴" : "▾"}</span>
+              </button>
+            )}
+          </div>
           <div className="grid gap-x-10 lg:grid-cols-2">
             <div>
               <Row
@@ -380,26 +468,6 @@ export default function FleetCardPage({ mode }) {
                   {sorted.map((v) => (
                     <option key={v.id} value={v.id}>
                       {(v.kpdn_subsidy ? "★ " : "") + vehicleLabel(v)}
-                    </option>
-                  ))}
-                </select>
-              </Row>
-              <Row
-                label="Driver"
-                ro={ro}
-                show={
-                  form.driver_id ? personLabel(person.get(form.driver_id)) : ""
-                }
-              >
-                <select
-                  value={form.driver_id}
-                  onChange={set("driver_id")}
-                  className={box}
-                >
-                  <option value="">—</option>
-                  {people.map((p) => (
-                    <option key={p.user_id} value={p.user_id}>
-                      {personLabel(p)}
                     </option>
                   ))}
                 </select>
@@ -442,7 +510,7 @@ export default function FleetCardPage({ mode }) {
                   className={box}
                 />
               </Row>
-              <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-3 border-b border-slate-100 py-2.5">
+              <div className="grid items-start gap-1 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 border-b border-slate-100 py-2.5">
                 <span className="pt-2 text-sm font-semibold text-slate-700">
                   Applying for KPDN subsidy?
                 </span>
@@ -462,8 +530,9 @@ export default function FleetCardPage({ mode }) {
           </div>
         </Card>
 
-        {/* 2. Application check list, only when applying for the subsidy */}
-        {form.kpdn_apply && (
+        {/* 2. Application check list, only when applying for the subsidy;
+            folded into a button on the Vehicle box once the card is in use */}
+        {form.kpdn_apply && (!checklistFolded || showChecklist) && (
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
@@ -639,6 +708,67 @@ export default function FleetCardPage({ mode }) {
             </div>
           )}
         </Card>
+
+        {/* 4. Drivers sharing the card */}
+        <Card className="p-5">
+          <h3 className="mb-1 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+            Fleet card drivers
+          </h3>
+          <p className="mb-3 text-xs text-slate-500">
+            Drivers who share this card. The fleet-card (subsidy) receipts they
+            put on their fuel claims count as fuel taken on this card, so the
+            reload balance stays right. A receipt for a vehicle that has its
+            own fleet card counts on that card instead.
+          </p>
+          {form.driver_ids.length === 0 && ro ? (
+            <p className="text-sm text-slate-400">No driver set.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              {form.driver_ids.map((uid, i) => (
+                <li key={uid} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-slate-800">
+                    {person.get(uid) ? personLabel(person.get(uid)) : "Unknown user"}
+                  </span>
+                  {i === 0 && (
+                    <span className="text-xs text-slate-500">Main driver</span>
+                  )}
+                  {!ro && (
+                    <button
+                      type="button"
+                      onClick={() => dropDriver(uid)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`Remove ${personLabel(person.get(uid))}`}
+                    >
+                      <IconTrash width={16} height={16} />
+                    </button>
+                  )}
+                </li>
+              ))}
+              {!ro && (
+                <li className="px-3 py-2">
+                  <select
+                    value=""
+                    onChange={addDriver}
+                    className={box}
+                    aria-label="Add driver"
+                  >
+                    <option value="">+ Add driver…</option>
+                    {people
+                      .filter((p) => !form.driver_ids.includes(p.user_id))
+                      .map((p) => (
+                        <option key={p.user_id} value={p.user_id}>
+                          {personLabel(p)}
+                        </option>
+                      ))}
+                  </select>
+                </li>
+              )}
+            </ul>
+          )}
+        </Card>
       </div>
 
       {/* Reloads and balance, month by month (reloads by hand or from fuel claims, less fuel taken on the card) */}
@@ -701,7 +831,7 @@ export default function FleetCardPage({ mode }) {
                 </tbody>
               </table>
               <p className="px-5 py-2.5 text-xs text-slate-500">
-                Fuel taken = fill-ups recorded on this card plus fleet-card receipts on fuel claims for its vehicle. Reloads = those typed here plus fleet card reloads on fuel claims.
+                Fuel taken = fill-ups recorded on this card plus fleet-card receipts on fuel claims for its vehicle or by its drivers. Reloads = those typed here plus fleet card reloads on fuel claims.
               </p>
             </div>
           )}
@@ -835,7 +965,7 @@ export default function FleetCardPage({ mode }) {
 
 function Row({ label, ro, show, children }) {
   return (
-    <div className="grid grid-cols-[180px_minmax(0,1fr)] items-start gap-3 border-b border-slate-100 py-2.5">
+    <div className="grid items-start gap-1 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 border-b border-slate-100 py-2.5">
       <span className="pt-2 text-sm font-semibold text-slate-700">{label}</span>
       {ro ? (
         <p className="min-h-10 py-2 text-sm text-slate-800">

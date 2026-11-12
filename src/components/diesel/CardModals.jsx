@@ -104,7 +104,7 @@ export function CardModal({ company, card, vehicles, onClose, onSaved }) {
 }
 
 export function ReloadModal({ company, cards, onClose, onSaved }) {
-  const usable = cards.filter((c) => c.status !== 'cancelled')
+  const usable = cards.filter((c) => !['cancelled', 'inactive'].includes(c.status))
   const [f, setF] = useState({ card_id: usable[0]?.id || '', reload_date: today(), amount: '', reference: '' })
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
   const { busy, error, run } = useRun(onSaved, onClose)

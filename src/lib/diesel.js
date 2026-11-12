@@ -28,6 +28,7 @@ export const CLAIM_STATUS = {
 export const CARD_STATUS = {
   application: { label: 'Applying', color: 'amber' },
   active: { label: 'Active', color: 'green' },
+  inactive: { label: 'Inactive', color: 'slate' },
   blocked: { label: 'Blocked', color: 'amber' },
   cancelled: { label: 'Cancelled', color: 'slate' }
 }
@@ -362,10 +363,18 @@ export async function getCard(id) {
 }
 
 export async function saveCard(companyId, { id, ...fields }) {
-  const q = id
-    ? supabase.from(DIESEL.cards).update(fields).eq('id', id)
-    : supabase.from(DIESEL.cards).insert({ company_id: companyId, ...fields })
-  const { data, error } = await q.select('id').single()
+  const run = (f) =>
+    (id ? supabase.from(DIESEL.cards).update(f).eq('id', id) : supabase.from(DIESEL.cards).insert({ company_id: companyId, ...f }))
+      .select('id')
+      .single()
+  let { data, error } = await run(fields)
+  // Before migration 20261127 (shared drivers, Inactive) the card has one driver only.
+  if (error && 'driver_ids' in fields && /driver_ids/.test(error.message || '')) {
+    const { driver_ids, ...rest } = fields
+    ;({ data, error } = await run(rest))
+  }
+  if (error && fields.status === 'inactive' && /status_check/.test(error.message || ''))
+    throw new Error('Run the Fuel SQL migration 20261127 (fleet card drivers) to use Inactive.')
   if (error) throw friendly(error, { '23505': 'A card with this number already exists.' })
   return data?.id || id
 }

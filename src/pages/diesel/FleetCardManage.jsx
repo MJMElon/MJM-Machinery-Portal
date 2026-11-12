@@ -45,7 +45,7 @@ export default function FleetCardManage() {
   const usedLitres = (cid) => data.usage.filter((u) => u.card_id === cid && u.fill_date.startsWith(month)).reduce((s, u) => s + Number(u.litres || 0), 0)
   const balance = cardBalances(ledger)
   const reloadsThisMonth = (cid) => (ledger || []).filter((r) => r.card_id === cid && r.kind === 'reload' && r.month === month).reduce((s, r) => s + Number(r.amount || 0), 0)
-  const cards = [...data.cards].sort((a, b) => (a.status === 'cancelled') - (b.status === 'cancelled') || String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz')))
+  const cards = [...data.cards].sort((a, b) => ['cancelled', 'inactive'].includes(a.status) - ['cancelled', 'inactive'].includes(b.status) || String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz')))
 
   return (
     <div className="space-y-5">
