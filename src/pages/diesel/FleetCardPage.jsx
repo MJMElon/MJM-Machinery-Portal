@@ -9,14 +9,12 @@ import {
   Loading,
   inputCls,
 } from "../../components/diesel/shared.jsx";
-import {
-  ReloadModal,
-  UsageModal,
-} from "../../components/diesel/CardModals.jsx";
+import { C1, C2, Chart } from "../../components/diesel/FuelDashboard.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
   cardBalances,
+  cardClaimLines,
   cardLedger,
   checklistDone,
   deleteCard,
@@ -74,7 +72,7 @@ export default function FleetCardPage({ mode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [modal, setModal] = useState(null);
+  const [claimLines, setClaimLines] = useState([]); // null before migration 20261128
   const [vehicleQuery, setVehicleQuery] = useState("");
   const [showChecklist, setShowChecklist] = useState(false);
 
@@ -126,6 +124,20 @@ export default function FleetCardPage({ mode }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Fuel-claim receipts (fleet card and cash) that belong to this card, for the year shown.
+  useEffect(() => {
+    if (!id) return;
+    let live = true;
+    const nowYear = new Date().getFullYear();
+    // The chosen year for the chart, plus this year for "this month".
+    Promise.all(
+      [...new Set([ledgerYear, nowYear])].map((y) => cardClaimLines(company.id, id, y)),
+    ).then((rs) => live && setClaimLines(rs.some((r) => r == null) ? null : rs.flat()));
+    return () => {
+      live = false;
+    };
+  }, [id, company.id, ledgerYear]);
 
   const vById = useMemo(
     () => new Map(vehicles.map((v) => [v.id, v])),
@@ -266,38 +278,73 @@ export default function FleetCardPage({ mode }) {
 
   const st = CARD_STATUS[form.status] || CARD_STATUS.application;
   const month = thisMonth();
-  const usage = data.usage.filter(
-    (u) => u.card_id === id && u.fill_date.startsWith(month),
-  );
+  const yr = String(ledgerYear);
+  const typed = data.usage.filter((u) => u.card_id === id); // fill-ups typed on the card (older records)
   const reloads = data.reloads.filter(
     (r) => r.card_id === id && r.reload_date.startsWith(month),
   );
-  const usedL = usage.reduce((s, u) => s + Number(u.litres || 0), 0);
   const quota = form.subsidy_litres === "" ? null : Number(form.subsidy_litres);
   // RM balance: every reload less every fill-up on this card, month by month.
   const mine = (ledger || []).filter((r) => r.card_id === id);
   const balanceNow = cardBalances(mine)[id] || 0;
-  const ledgerYears = [...new Set(mine.map((r) => Number(r.month.slice(0, 4))))].sort((a, b) => b - a);
-  if (ledgerYears.length && !ledgerYears.includes(ledgerYear)) ledgerYears.push(ledgerYear);
-  const months = [...new Set(mine.filter((r) => r.month.startsWith(String(ledgerYear))).map((r) => r.month))].sort();
+  const usedL = mine
+    .filter((r) => r.month === month && r.kind === "usage")
+    .reduce((t, r) => t + Number(r.litres || 0), 0);
+  const yearOptions = [
+    ...new Set([
+      new Date().getFullYear(),
+      ledgerYear,
+      ...mine.map((r) => Number(r.month.slice(0, 4))),
+    ]),
+  ].sort((a, b) => b - a);
   const openingBalance = cardBalances(mine, `${ledgerYear - 1}-12`)[id] || 0;
   let running = openingBalance;
-  const ledgerRows = months.map((m) => {
-    const inRM = mine.filter((r) => r.month === m && r.kind === "reload").reduce((s, r) => s + Number(r.amount), 0);
+  const yearRows = Array.from({ length: 12 }, (_, i) => {
+    const m = `${yr}-${String(i + 1).padStart(2, "0")}`;
+    const inRM = mine.filter((r) => r.month === m && r.kind === "reload").reduce((t, r) => t + Number(r.amount), 0);
     const out = mine.filter((r) => r.month === m && r.kind === "usage");
-    const outRM = out.reduce((s, r) => s + Number(r.amount), 0);
-    const outL = out.reduce((s, r) => s + Number(r.litres || 0), 0);
+    const outRM = out.reduce((t, r) => t + Number(r.amount), 0);
+    const outL = out.reduce((t, r) => t + Number(r.litres || 0), 0);
     running += inRM - outRM;
-    return { month: m, inRM, outRM, outL, balance: running };
+    return {
+      month: m,
+      inRM,
+      outRM,
+      outL,
+      balance: running,
+      future: m > month,
+      quotaPct: quota ? (outL / quota) * 100 : 0,
+    };
   });
+  const yearTotal = yearRows.reduce(
+    (t, r) => ({ inRM: t.inRM + r.inRM, outRM: t.outRM + r.outRM, outL: t.outL + r.outL }),
+    { inRM: 0, outRM: 0, outL: 0 },
+  );
+  // Litres by month: on the card (claims + typed fill-ups) and cash claims.
+  const chartData = Array.from({ length: 12 }, () => ({ cardL: 0, cashL: 0 }));
+  for (const l of claimLines || []) {
+    if (!l.fill_date.startsWith(yr)) continue;
+    const k = l.payment === "fleet_card" ? "cardL" : "cashL";
+    chartData[Number(l.fill_date.slice(5, 7)) - 1][k] += Number(l.litres || 0);
+  }
+  for (const u of typed) {
+    if (u.fill_date.startsWith(yr))
+      chartData[Number(u.fill_date.slice(5, 7)) - 1].cardL += Number(u.litres || 0);
+  }
+  const monthReceipts = [
+    ...(claimLines || [])
+      .filter((l) => l.fill_date.startsWith(month))
+      .map((l) => ({ ...l, key: l.id, card: l.payment === "fleet_card", who: l.claimant_id })),
+    ...typed
+      .filter((u) => u.fill_date.startsWith(month))
+      .map((u) => ({ ...u, key: `t${u.id}`, card: true, who: u.driver_id, claim_id: null, claim_no: null })),
+  ].sort((a, b) => b.fill_date.localeCompare(a.fill_date));
   const licence = form.licence_expiry
     ? Math.round(
         (new Date(form.licence_expiry) - new Date(new Date().toDateString())) /
           86400000,
       )
     : null;
-  // Once the card is in use the check list folds into a button.
-  const checklistFolded = Boolean(card) && card.status !== "application";
   const title =
     mode === "new"
       ? "New fleet card application"
@@ -318,6 +365,140 @@ export default function FleetCardPage({ mode }) {
     .filter((v) => matches(v) || v.id === form.vehicle_id)
     .sort((a, b) => Number(Boolean(b.kpdn_subsidy)) - Number(Boolean(a.kpdn_subsidy)) || a.name.localeCompare(b.name));
   const found = sorted.filter((v) => v.id !== form.vehicle_id || matches(v)).length;
+
+  // Once the card is in use (tested) the page shows the fleet card first,
+  // with the vehicle inside, and the check list folds into a button.
+  const inUse = Boolean(card) && card.status !== "application";
+  const checklistBtn = form.kpdn_apply ? (
+    <button
+      type="button"
+      onClick={() => setShowChecklist((v) => !v)}
+      aria-expanded={showChecklist}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+    >
+      Application check list
+      <span className={allDone ? "text-emerald-600" : "text-amber-600"}>
+        {done}/{CARD_CHECKLIST.length}
+      </span>
+      <span aria-hidden="true">{showChecklist ? "▴" : "▾"}</span>
+    </button>
+  ) : null;
+  const checklistCard = (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+          Application check list
+        </h3>
+        <Badge color={allDone ? "green" : "amber"}>
+          {done} / {CARD_CHECKLIST.length} done
+        </Badge>
+      </div>
+      <div className="grid gap-x-6 lg:grid-cols-2">
+        {["Company", "Driver"].map((group) => (
+          <div key={group} className="mb-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {group}
+            </p>
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              {CARD_CHECKLIST.filter((i) => i.group === group).map(
+                (i) => {
+                  const it = item(i.key);
+                  return (
+                    <label
+                      key={i.key}
+                      className={`flex items-center gap-3 px-3 py-2 text-sm ${ro ? "" : "cursor-pointer hover:bg-slate-50"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(it.done)}
+                        onChange={tick(i.key)}
+                        disabled={ro}
+                        className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
+                      />
+                      <span
+                        className={`flex-1 ${it.done ? "text-slate-500 line-through" : "text-slate-800"}`}
+                      >
+                        {i.label}
+                      </span>
+                      {ro ? (
+                        <span className="text-xs text-slate-500">
+                          {it.done && it.date ? day(it.date) : ""}
+                        </span>
+                      ) : (
+                        <span className="w-36 shrink-0">
+                          <input
+                            type="date"
+                            value={it.date || ""}
+                            onChange={(e) =>
+                              setItem(i.key, { date: e.target.value })
+                            }
+                            className={dateCls}
+                            title="Date done"
+                          />
+                        </span>
+                      )}
+                    </label>
+                  );
+                },
+              )}
+              {group === "Driver" && (
+                <div className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="h-5 w-5" />
+                  <span className="flex-1 text-slate-800">
+                    Licence expiry date
+                  </span>
+                  {ro ? (
+                    <span className="text-xs text-slate-700">
+                      {form.licence_expiry
+                        ? day(form.licence_expiry)
+                        : "—"}
+                      {licence != null && licence < 0 && (
+                        <Badge color="red" className="ml-2">
+                          Expired
+                        </Badge>
+                      )}
+                      {licence != null &&
+                        licence >= 0 &&
+                        licence <= 60 && (
+                          <Badge color="amber" className="ml-2">
+                            Expiring soon
+                          </Badge>
+                        )}
+                    </span>
+                  ) : (
+                    <span className="w-36 shrink-0">
+                      <input
+                        type="date"
+                        value={form.licence_expiry}
+                        onChange={set("licence_expiry")}
+                        className={dateCls}
+                      />
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+  const yearSelect = (
+    <span className="w-28 shrink-0">
+      <select
+        value={ledgerYear}
+        onChange={(e) => setLedgerYear(Number(e.target.value))}
+        className={`${inputCls} h-9 px-2 text-sm`}
+        aria-label="Year"
+      >
+        {yearOptions.map((y) => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
 
   return (
     <form onSubmit={save} className="space-y-4">
@@ -349,24 +530,6 @@ export default function FleetCardPage({ mode }) {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {form.status !== "application" && access.can("cards", "add") && (
-                <>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setModal("usage")}
-                  >
-                    <IconPlus width={18} height={18} /> Fill-up
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setModal("reload")}
-                  >
-                    <IconPlus width={18} height={18} /> Reload
-                  </Button>
-                </>
-              )}
               {access.can("cards", "edit") && (
                 <Button
                   type="button"
@@ -411,383 +574,469 @@ export default function FleetCardPage({ mode }) {
       />
       <ErrorBox>{error}</ErrorBox>
 
-      <div className="space-y-4">
-        {/* 1. Vehicle */}
-        <Card className="p-5">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-              Vehicle
-            </h3>
-            {checklistFolded && (
-              <button
-                type="button"
-                onClick={() => setShowChecklist((v) => !v)}
-                aria-expanded={showChecklist}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-              >
-                Application check list
-                <span className={allDone ? "text-emerald-600" : "text-amber-600"}>
-                  {done}/{CARD_CHECKLIST.length}
-                </span>
-                <span aria-hidden="true">{showChecklist ? "▴" : "▾"}</span>
-              </button>
-            )}
-          </div>
-          <div className="grid gap-x-10 lg:grid-cols-2">
-            <div>
-              <Row
-                label="Vehicle"
-                ro={ro}
-                show={
-                  form.vehicle_id
-                    ? vehicleLabel(vById.get(form.vehicle_id))
-                    : ""
-                }
-              >
-                <input
-                  type="search"
-                  value={vehicleQuery}
-                  onChange={(e) => setVehicleQuery(e.target.value)}
-                  placeholder="Search any machine (name, plate, type)…"
-                  className={`${box} mb-2`}
-                  aria-label="Search vehicle or machine"
-                />
-                <select
-                  value={form.vehicle_id}
-                  onChange={setVehicle}
-                  className={box}
-                  required
-                >
-                  <option value="">
-                    {q
-                      ? found
-                        ? `Choose from ${found} match${found === 1 ? "" : "es"}…`
-                        : "No machine matches the search"
-                      : "Choose light vehicle…"}
-                  </option>
-                  {sorted.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {(v.kpdn_subsidy ? "★ " : "") + vehicleLabel(v)}
-                    </option>
-                  ))}
-                </select>
-              </Row>
-              <Row label="Fuel station" ro={ro} show={form.provider}>
-                <input
-                  value={form.provider}
-                  onChange={set("provider")}
-                  list="fuel-stations"
-                  placeholder="Petronas / Shell / Petron"
-                  className={box}
-                />
-                <datalist id="fuel-stations">
-                  {["Petronas", "Shell", "Petron", "Caltex", "BHP"].map(
-                    (st2) => (
-                      <option key={st2} value={st2} />
-                    ),
-                  )}
-                </datalist>
-              </Row>
-            </div>
-            <div>
-              <Row label="Status" ro={ro} show={st.label}>
-                <select
-                  value={form.status}
-                  onChange={set("status")}
-                  className={box}
-                >
-                  {Object.entries(CARD_STATUS).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
-              </Row>
-              <Row label="Notes" ro={ro} show={form.notes}>
-                <input
-                  value={form.notes}
-                  onChange={set("notes")}
-                  className={box}
-                />
-              </Row>
-              <div className="grid items-start gap-1 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 border-b border-slate-100 py-2.5">
-                <span className="pt-2 text-sm font-semibold text-slate-700">
-                  Applying for KPDN subsidy?
-                </span>
-                <div className="pt-2.5">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(form.kpdn_apply)}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, kpdn_apply: e.target.checked }))
-                    }
-                    disabled={ro}
-                    className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* 2. Application check list, only when applying for the subsidy;
-            folded into a button on the Vehicle box once the card is in use */}
-        {form.kpdn_apply && (!checklistFolded || showChecklist) && (
+      {inUse ? (
+        <div className="space-y-4">
+          {/* 1. Card in use: fleet card details with the vehicle */}
           <Card className="p-5">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-                Application check list
+                Fleet card details
               </h3>
-              <Badge color={allDone ? "green" : "amber"}>
-                {done} / {CARD_CHECKLIST.length} done
-              </Badge>
+              {checklistBtn}
             </div>
-            <div className="grid gap-x-6 lg:grid-cols-2">
-              {["Company", "Driver"].map((group) => (
-                <div key={group} className="mb-3">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    {group}
-                  </p>
-                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-                    {CARD_CHECKLIST.filter((i) => i.group === group).map(
-                      (i) => {
-                        const it = item(i.key);
-                        return (
-                          <label
-                            key={i.key}
-                            className={`flex items-center gap-3 px-3 py-2 text-sm ${ro ? "" : "cursor-pointer hover:bg-slate-50"}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={Boolean(it.done)}
-                              onChange={tick(i.key)}
-                              disabled={ro}
-                              className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
-                            />
-                            <span
-                              className={`flex-1 ${it.done ? "text-slate-500 line-through" : "text-slate-800"}`}
-                            >
-                              {i.label}
-                            </span>
-                            {ro ? (
-                              <span className="text-xs text-slate-500">
-                                {it.done && it.date ? day(it.date) : ""}
-                              </span>
-                            ) : (
-                              <span className="w-36 shrink-0">
-                                <input
-                                  type="date"
-                                  value={it.date || ""}
-                                  onChange={(e) =>
-                                    setItem(i.key, { date: e.target.value })
-                                  }
-                                  className={dateCls}
-                                  title="Date done"
-                                />
-                              </span>
-                            )}
-                          </label>
-                        );
-                      },
-                    )}
-                    {group === "Driver" && (
-                      <div className="flex items-center gap-3 px-3 py-2 text-sm">
-                        <span className="h-5 w-5" />
-                        <span className="flex-1 text-slate-800">
-                          Licence expiry date
-                        </span>
-                        {ro ? (
-                          <span className="text-xs text-slate-700">
-                            {form.licence_expiry
-                              ? day(form.licence_expiry)
-                              : "—"}
-                            {licence != null && licence < 0 && (
-                              <Badge color="red" className="ml-2">
-                                Expired
-                              </Badge>
-                            )}
-                            {licence != null &&
-                              licence >= 0 &&
-                              licence <= 60 && (
-                                <Badge color="amber" className="ml-2">
-                                  Expiring soon
-                                </Badge>
-                              )}
-                          </span>
-                        ) : (
-                          <span className="w-36 shrink-0">
-                            <input
-                              type="date"
-                              value={form.licence_expiry}
-                              onChange={set("licence_expiry")}
-                              className={dateCls}
-                            />
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* 3. Fleet card details */}
-        <Card className="p-5">
-          <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-            Fleet card details
-          </h3>
-          <div className="grid gap-x-10 lg:grid-cols-2">
-            <div>
-              <Row label="Fleet card number" ro={ro} show={form.card_no}>
-                <input
-                  value={form.card_no}
-                  onChange={set("card_no")}
-                  maxLength={40}
-                  placeholder="Once the card is awarded"
-                  className={box}
-                />
-              </Row>
-              <Row
-                label="Subsidy volume (L / month)"
-                ro={ro}
-                show={quota != null ? `${num(quota, 2)} L` : ""}
-              >
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.subsidy_litres}
-                  onChange={set("subsidy_litres")}
-                  className={box}
-                />
-              </Row>
-            </div>
-            <div>
-              <Row label="Login user ID" ro={ro} show={form.login_id}>
-                <input
-                  value={form.login_id}
-                  onChange={set("login_id")}
-                  maxLength={80}
-                  autoComplete="off"
-                  className={box}
-                />
-              </Row>
-              <Row label="Password record" ro={ro} show={form.login_password}>
-                <input
-                  value={form.login_password}
-                  onChange={set("login_password")}
-                  maxLength={80}
-                  autoComplete="off"
-                  className={box}
-                />
-              </Row>
-            </div>
-          </div>
-          {id && form.status !== "application" && (
-            <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center">
+            <div className="grid gap-x-10 lg:grid-cols-2">
               <div>
-                <p className="text-[11px] text-slate-500">Subsidy volume</p>
-                <p className="text-sm font-semibold">
-                  {quota != null ? `${num(quota, 2)} L` : "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-slate-500">Used this month</p>
-                <p className="text-sm font-semibold">{num(usedL, 2)} L</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-slate-500">Balance volume</p>
-                <p
-                  className={`text-sm font-semibold ${quota != null && quota - usedL < 0 ? "text-red-600" : "text-brand-dark"}`}
-                >
-                  {quota != null ? `${num(quota - usedL, 2)} L` : "—"}
-                </p>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* 4. Drivers sharing the card */}
-        <Card className="p-5">
-          <h3 className="mb-1 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-            Fleet card drivers
-          </h3>
-          <p className="mb-3 text-xs text-slate-500">
-            Drivers who share this card. The fleet-card (subsidy) receipts they
-            put on their fuel claims count as fuel taken on this card, so the
-            reload balance stays right. A receipt for a vehicle that has its
-            own fleet card counts on that card instead.
-          </p>
-          {form.driver_ids.length === 0 && ro ? (
-            <p className="text-sm text-slate-400">No driver set.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-              {form.driver_ids.map((uid, i) => (
-                <li key={uid} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 text-slate-800">
-                    {person.get(uid) ? personLabel(person.get(uid)) : "Unknown user"}
-                  </span>
-                  {i === 0 && (
-                    <span className="text-xs text-slate-500">Main driver</span>
-                  )}
-                  {!ro && (
-                    <button
-                      type="button"
-                      onClick={() => dropDriver(uid)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                      aria-label={`Remove ${personLabel(person.get(uid))}`}
+                  <Row label="Fleet card number" ro={ro} show={form.card_no}>
+                    <input
+                      value={form.card_no}
+                      onChange={set("card_no")}
+                      maxLength={40}
+                      placeholder="Once the card is awarded"
+                      className={box}
+                    />
+                  </Row>
+                  <Row label="Status" ro={ro} show={st.label}>
+                    <select
+                      value={form.status}
+                      onChange={set("status")}
+                      className={box}
                     >
-                      <IconTrash width={16} height={16} />
-                    </button>
-                  )}
-                </li>
-              ))}
-              {!ro && (
-                <li className="px-3 py-2">
-                  <select
-                    value=""
-                    onChange={addDriver}
-                    className={box}
-                    aria-label="Add driver"
-                  >
-                    <option value="">+ Add driver…</option>
-                    {people
-                      .filter((p) => !form.driver_ids.includes(p.user_id))
-                      .map((p) => (
-                        <option key={p.user_id} value={p.user_id}>
-                          {personLabel(p)}
+                      {Object.entries(CARD_STATUS).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v.label}
                         </option>
                       ))}
-                  </select>
-                </li>
-              )}
-            </ul>
-          )}
-        </Card>
-      </div>
+                    </select>
+                  </Row>
+                  <Row label="Fuel station" ro={ro} show={form.provider}>
+                    <input
+                      value={form.provider}
+                      onChange={set("provider")}
+                      list="fuel-stations"
+                      placeholder="Petronas / Shell / Petron"
+                      className={box}
+                    />
+                    <datalist id="fuel-stations">
+                      {["Petronas", "Shell", "Petron", "Caltex", "BHP"].map(
+                        (st2) => (
+                          <option key={st2} value={st2} />
+                        ),
+                      )}
+                    </datalist>
+                  </Row>
+                  <Row
+                    label={inUse ? "Vehicle reg no." : "Vehicle"}
+                    ro={ro}
+                    show={
+                      form.vehicle_id
+                        ? vehicleLabel(vById.get(form.vehicle_id))
+                        : ""
+                    }
+                  >
+                    <input
+                      type="search"
+                      value={vehicleQuery}
+                      onChange={(e) => setVehicleQuery(e.target.value)}
+                      placeholder="Search any machine (name, plate, type)…"
+                      className={`${box} mb-2`}
+                      aria-label="Search vehicle or machine"
+                    />
+                    <select
+                      value={form.vehicle_id}
+                      onChange={setVehicle}
+                      className={box}
+                      required
+                    >
+                      <option value="">
+                        {q
+                          ? found
+                            ? `Choose from ${found} match${found === 1 ? "" : "es"}…`
+                            : "No machine matches the search"
+                          : "Choose light vehicle…"}
+                      </option>
+                      {sorted.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {(v.kpdn_subsidy ? "★ " : "") + vehicleLabel(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </Row>
+              </div>
+              <div>
+                  <Row
+                    label="Subsidy volume (L / month)"
+                    ro={ro}
+                    show={quota != null ? `${num(quota, 2)} L` : ""}
+                  >
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.subsidy_litres}
+                      onChange={set("subsidy_litres")}
+                      className={box}
+                    />
+                  </Row>
+                  <Row label="Login user ID" ro={ro} show={form.login_id}>
+                    <input
+                      value={form.login_id}
+                      onChange={set("login_id")}
+                      maxLength={80}
+                      autoComplete="off"
+                      className={box}
+                    />
+                  </Row>
+                  <Row label="Password record" ro={ro} show={form.login_password}>
+                    <input
+                      value={form.login_password}
+                      onChange={set("login_password")}
+                      maxLength={80}
+                      autoComplete="off"
+                      className={box}
+                    />
+                  </Row>
+                  <Row label="Notes" ro={ro} show={form.notes}>
+                    <input
+                      value={form.notes}
+                      onChange={set("notes")}
+                      className={box}
+                    />
+                  </Row>
+              </div>
+            </div>
+            {inUse && (
+              <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center">
+                <div>
+                  <p className="text-[11px] text-slate-500">Subsidy volume</p>
+                  <p className="text-sm font-semibold">
+                    {quota != null ? `${num(quota, 2)} L` : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Used this month</p>
+                  <p className="text-sm font-semibold">{num(usedL, 2)} L</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Balance volume</p>
+                  <p
+                    className={`text-sm font-semibold ${quota != null && quota - usedL < 0 ? "text-red-600" : "text-brand-dark"}`}
+                  >
+                    {quota != null ? `${num(quota - usedL, 2)} L` : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
 
-      {/* Reloads and balance, month by month (reloads by hand or from fuel claims, less fuel taken on the card) */}
-      {id && form.status !== "application" && (
+          {form.kpdn_apply && showChecklist && checklistCard}
+
+          {/* 2. Drivers sharing the card + fuel used this year (litres) */}
+          <Card className="p-5">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+                  Fleet card drivers
+                </h3>
+              {form.driver_ids.length === 0 && ro ? (
+                <p className="text-sm text-slate-400">No driver set.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                  {form.driver_ids.map((uid, i) => (
+                    <li key={uid} className="flex items-center gap-3 px-3 py-2 text-sm">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1 text-slate-800">
+                        {person.get(uid) ? personLabel(person.get(uid)) : "Unknown user"}
+                      </span>
+                      {i === 0 && (
+                        <span className="text-xs text-slate-500">Main driver</span>
+                      )}
+                      {!ro && (
+                        <button
+                          type="button"
+                          onClick={() => dropDriver(uid)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Remove ${personLabel(person.get(uid))}`}
+                        >
+                          <IconTrash width={16} height={16} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                  {!ro && (
+                    <li className="px-3 py-2">
+                      <select
+                        value=""
+                        onChange={addDriver}
+                        className={box}
+                        aria-label="Add driver"
+                      >
+                        <option value="">+ Add driver…</option>
+                        {people
+                          .filter((p) => !form.driver_ids.includes(p.user_id))
+                          .map((p) => (
+                            <option key={p.user_id} value={p.user_id}>
+                              {personLabel(p)}
+                            </option>
+                          ))}
+                      </select>
+                    </li>
+                  )}
+                </ul>
+              )}
+              </div>
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+                    Fuel used
+                  </h3>
+                  {yearSelect}
+                </div>
+                {claimLines == null ? (
+                  <p className="py-6 text-center text-sm text-slate-400">
+                    Run the Fuel SQL migration 20261128 (fleet card claim lines) to see the chart.
+                  </p>
+                ) : (
+                  <Chart
+                    bare
+                    title={`${ledgerYear} · litres`}
+                    fmt={(v) => `${num(v, 2)} L`}
+                    series={[
+                      { key: "cardL", label: "Fleet card", color: C1 },
+                      { key: "cashL", label: "Cash claim", color: C2 },
+                    ]}
+                    data={chartData}
+                  />
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* 1. Applying: vehicle */}
+          <Card className="p-5">
+            <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+              Vehicle
+            </h3>
+            <div className="grid gap-x-10 lg:grid-cols-2">
+              <div>
+                <Row
+                  label={inUse ? "Vehicle reg no." : "Vehicle"}
+                  ro={ro}
+                  show={
+                    form.vehicle_id
+                      ? vehicleLabel(vById.get(form.vehicle_id))
+                      : ""
+                  }
+                >
+                  <input
+                    type="search"
+                    value={vehicleQuery}
+                    onChange={(e) => setVehicleQuery(e.target.value)}
+                    placeholder="Search any machine (name, plate, type)…"
+                    className={`${box} mb-2`}
+                    aria-label="Search vehicle or machine"
+                  />
+                  <select
+                    value={form.vehicle_id}
+                    onChange={setVehicle}
+                    className={box}
+                    required
+                  >
+                    <option value="">
+                      {q
+                        ? found
+                          ? `Choose from ${found} match${found === 1 ? "" : "es"}…`
+                          : "No machine matches the search"
+                        : "Choose light vehicle…"}
+                    </option>
+                    {sorted.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {(v.kpdn_subsidy ? "★ " : "") + vehicleLabel(v)}
+                      </option>
+                    ))}
+                  </select>
+                </Row>
+                <Row label="Fuel station" ro={ro} show={form.provider}>
+                  <input
+                    value={form.provider}
+                    onChange={set("provider")}
+                    list="fuel-stations"
+                    placeholder="Petronas / Shell / Petron"
+                    className={box}
+                  />
+                  <datalist id="fuel-stations">
+                    {["Petronas", "Shell", "Petron", "Caltex", "BHP"].map(
+                      (st2) => (
+                        <option key={st2} value={st2} />
+                      ),
+                    )}
+                  </datalist>
+                </Row>
+              </div>
+              <div>
+                <Row label="Status" ro={ro} show={st.label}>
+                  <select
+                    value={form.status}
+                    onChange={set("status")}
+                    className={box}
+                  >
+                    {Object.entries(CARD_STATUS).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v.label}
+                      </option>
+                    ))}
+                  </select>
+                </Row>
+                <Row label="Notes" ro={ro} show={form.notes}>
+                  <input
+                    value={form.notes}
+                    onChange={set("notes")}
+                    className={box}
+                  />
+                </Row>
+                <div className="grid items-start gap-1 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 border-b border-slate-100 py-2.5">
+                  <span className="pt-2 text-sm font-semibold text-slate-700">
+                    Applying for KPDN subsidy?
+                  </span>
+                  <div className="pt-2.5">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.kpdn_apply)}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, kpdn_apply: e.target.checked }))
+                      }
+                      disabled={ro}
+                      className="h-5 w-5 rounded border-slate-300 text-brand disabled:opacity-100"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* 2. Application check list, only when applying for the subsidy */}
+          {form.kpdn_apply && checklistCard}
+
+          {/* 3. Fleet card details */}
+          <Card className="p-5">
+            <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+              Fleet card details
+            </h3>
+            <div className="grid gap-x-10 lg:grid-cols-2">
+              <div>
+                <Row label="Fleet card number" ro={ro} show={form.card_no}>
+                  <input
+                    value={form.card_no}
+                    onChange={set("card_no")}
+                    maxLength={40}
+                    placeholder="Once the card is awarded"
+                    className={box}
+                  />
+                </Row>
+                <Row
+                  label="Subsidy volume (L / month)"
+                  ro={ro}
+                  show={quota != null ? `${num(quota, 2)} L` : ""}
+                >
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.subsidy_litres}
+                    onChange={set("subsidy_litres")}
+                    className={box}
+                  />
+                </Row>
+              </div>
+              <div>
+                <Row label="Login user ID" ro={ro} show={form.login_id}>
+                  <input
+                    value={form.login_id}
+                    onChange={set("login_id")}
+                    maxLength={80}
+                    autoComplete="off"
+                    className={box}
+                  />
+                </Row>
+                <Row label="Password record" ro={ro} show={form.login_password}>
+                  <input
+                    value={form.login_password}
+                    onChange={set("login_password")}
+                    maxLength={80}
+                    autoComplete="off"
+                    className={box}
+                  />
+                </Row>
+              </div>
+            </div>
+          </Card>
+
+          {/* 4. Drivers sharing the card */}
+          <Card className="p-5">
+            <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+              Fleet card drivers
+            </h3>
+            {form.driver_ids.length === 0 && ro ? (
+              <p className="text-sm text-slate-400">No driver set.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                {form.driver_ids.map((uid, i) => (
+                  <li key={uid} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                      {i + 1}
+                    </span>
+                    <span className="flex-1 text-slate-800">
+                      {person.get(uid) ? personLabel(person.get(uid)) : "Unknown user"}
+                    </span>
+                    {i === 0 && (
+                      <span className="text-xs text-slate-500">Main driver</span>
+                    )}
+                    {!ro && (
+                      <button
+                        type="button"
+                        onClick={() => dropDriver(uid)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Remove ${personLabel(person.get(uid))}`}
+                      >
+                        <IconTrash width={16} height={16} />
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {!ro && (
+                  <li className="px-3 py-2">
+                    <select
+                      value=""
+                      onChange={addDriver}
+                      className={box}
+                      aria-label="Add driver"
+                    >
+                      <option value="">+ Add driver…</option>
+                      {people
+                        .filter((p) => !form.driver_ids.includes(p.user_id))
+                        .map((p) => (
+                          <option key={p.user_id} value={p.user_id}>
+                            {personLabel(p)}
+                          </option>
+                        ))}
+                    </select>
+                  </li>
+                )}
+              </ul>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* The year month by month: reloaded vs used on the card, balance, subsidy quota */}
+      {inUse && (
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-3">
-            <h3 className="font-semibold text-slate-800">Reloads &amp; balance</h3>
-            <select
-              value={ledgerYear}
-              onChange={(e) => setLedgerYear(Number(e.target.value))}
-              className={`${inputCls} h-9 w-28 px-2 text-sm`}
-              aria-label="Year"
-            >
-              {(ledgerYears.length ? ledgerYears : [ledgerYear]).map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+            <h3 className="font-semibold text-slate-800">{ledgerYear} reloads, usage &amp; balance</h3>
+            {yearSelect}
             <span className="flex-1" />
             <span className="text-sm text-slate-500">Card balance now</span>
             <span className={`text-lg font-bold tabular-nums ${balanceNow < 0 ? "text-red-600" : "text-brand-dark"}`}>
@@ -796,87 +1045,106 @@ export default function FleetCardPage({ mode }) {
           </div>
           {!ledger ? (
             <Empty>Run the Fuel SQL migration 20261126 (fleet card reloads from claims) to see the balance.</Empty>
-          ) : ledgerRows.length === 0 ? (
-            <Empty>No reload or fill-up in {ledgerYear}.</Empty>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-5 py-2.5">Month</th>
-                    <th className="px-3 py-2.5 text-right">Reloads (RM)</th>
-                    <th className="px-3 py-2.5 text-right">Fuel taken (RM)</th>
-                    <th className="px-3 py-2.5 text-right">Fuel taken (L)</th>
-                    <th className="px-3 py-2.5 text-right">Balance at month end (RM)</th>
+                    <th className="px-3 py-2.5 text-right">Reloaded (RM)</th>
+                    <th className="px-3 py-2.5 text-right">Used on card (RM)</th>
+                    <th className="px-3 py-2.5 text-right">Used on card (L)</th>
+                    <th className="px-3 py-2.5 text-right">Subsidy quota used</th>
+                    <th className="px-3 py-2.5 text-right">Balance (RM)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {openingBalance !== 0 && (
-                    <tr className="text-slate-500">
-                      <td className="px-5 py-2.5" colSpan={4}>
-                        Balance brought forward
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{money(openingBalance)}</td>
-                    </tr>
-                  )}
-                  {ledgerRows.map((r) => (
-                    <tr key={r.month} className={r.month === month ? "bg-brand-light/40" : ""}>
-                      <td className="px-5 py-2.5 font-medium text-slate-800">{monthLabel(r.month)}</td>
+                  <tr className="text-slate-500">
+                    <td className="px-5 py-2 text-xs" colSpan={5}>
+                      Balance brought forward from {ledgerYear - 1}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{money(openingBalance)}</td>
+                  </tr>
+                  {yearRows.map((r) => (
+                    <tr key={r.month} className={r.month === month ? "bg-brand-light/40" : r.future ? "text-slate-300" : ""}>
+                      <td className="px-5 py-2.5 font-medium">{monthLabel(r.month)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{r.inRM ? `+ ${money(r.inRM)}` : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{r.outRM ? `− ${money(r.outRM)}` : "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{r.outRM ? `− ${money(r.outRM)}` : "—"}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{r.outL ? `${num(r.outL, 2)} L` : "—"}</td>
-                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.balance < 0 ? "text-red-600" : "text-slate-900"}`}>{money(r.balance)}</td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums ${r.quotaPct > 100 ? "font-semibold text-red-600" : "text-slate-500"}`}>
+                        {r.future || !quota || !r.outL ? "—" : `${Math.round(r.quotaPct)}%`}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${r.balance < 0 ? "text-red-600" : ""}`}>
+                        {r.future ? "" : money(r.balance)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-semibold">
+                    <td className="px-5 py-2.5">Total {ledgerYear}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{money(yearTotal.inRM)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{money(yearTotal.outRM)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{num(yearTotal.outL, 2)} L</td>
+                    <td className="px-3 py-2.5" />
+                    <td className="px-3 py-2.5" />
+                  </tr>
+                </tfoot>
               </table>
               <p className="px-5 py-2.5 text-xs text-slate-500">
-                Fuel taken = fill-ups recorded on this card plus fleet-card receipts on fuel claims for its vehicle or by its drivers. Reloads = those typed here plus fleet card reloads on fuel claims.
+                Check each month: Balance should equal the fuel station&apos;s card balance; a difference means a missing receipt or reload. Subsidy quota used above 100% means more fuel than the KPDN monthly volume.
               </p>
             </div>
           )}
         </Card>
       )}
 
-      {/* This month, once the card is in use */}
-      {id && form.status !== "application" && (
+      {/* This month: receipts on fuel claims that belong to this card, and reloads */}
+      {inUse && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="overflow-hidden">
             <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">
-              Fill-ups this month
+              Fuel receipts this month
             </h3>
-            {usage.length === 0 ? (
-              <Empty>No fill-up this month.</Empty>
+            {monthReceipts.length === 0 ? (
+              <Empty>No fuel receipt this month.</Empty>
             ) : (
               <div className="divide-y divide-slate-100">
-                {usage.map((u) => (
-                  <div
-                    key={u.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm"
-                  >
+                {monthReceipts.map((u) => (
+                  <div key={u.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
                     <span className="text-slate-500">{day(u.fill_date)}</span>
-                    <span className="font-medium text-slate-800">
-                      {num(u.litres, 2)} L
+                    <span className="font-medium text-slate-800">{num(u.litres, 2)} L</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${u.card ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700"}`}
+                    >
+                      {u.card ? "Fleet card" : "Cash"}
                     </span>
                     <span className="text-slate-500">
-                      {[
-                        u.station,
-                        u.driver_id && personLabel(person.get(u.driver_id)),
-                      ]
+                      {[u.who && personLabel(person.get(u.who)), u.claim_no != null && `Claim ${String(u.claim_no).padStart(3, "0")}`]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
                     <span className="flex-1" />
                     <span className="font-medium">{money(u.amount)}</span>
-                    {access.can("cards", "delete") && (
+                    {u.claim_id ? (
                       <button
                         type="button"
-                        onClick={() => removeRecord("usage", u.id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                        aria-label="Delete"
+                        onClick={() => navigate(`/diesel/claims/${u.claim_id}`)}
+                        className="text-xs font-medium text-brand hover:underline"
                       >
-                        <IconTrash width={16} height={16} />
+                        View
                       </button>
+                    ) : (
+                      access.can("cards", "delete") && (
+                        <button
+                          type="button"
+                          onClick={() => removeRecord("usage", u.id)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          aria-label="Delete"
+                        >
+                          <IconTrash width={16} height={16} />
+                        </button>
+                      )
                     )}
                   </div>
                 ))}
@@ -941,31 +1209,13 @@ export default function FleetCardPage({ mode }) {
         </div>
       )}
 
-      {modal === "usage" && card && (
-        <UsageModal
-          company={company}
-          cards={[card]}
-          vehicles={vehicles}
-          people={people}
-          onClose={() => setModal(null)}
-          onSaved={load}
-        />
-      )}
-      {modal === "reload" && card && (
-        <ReloadModal
-          company={company}
-          cards={[card]}
-          onClose={() => setModal(null)}
-          onSaved={load}
-        />
-      )}
     </form>
   );
 }
 
 function Row({ label, ro, show, children }) {
   return (
-    <div className="grid items-start gap-1 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 border-b border-slate-100 py-2.5">
+    <div className={`grid items-start border-b border-slate-100 py-2.5 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 ${ro ? "grid-cols-[130px_minmax(0,1fr)] gap-3" : "gap-1"}`}>
       <span className="pt-2 text-sm font-semibold text-slate-700">{label}</span>
       {ro ? (
         <p className="min-h-10 py-2 text-sm text-slate-800">

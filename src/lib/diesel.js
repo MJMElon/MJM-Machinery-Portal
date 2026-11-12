@@ -192,6 +192,18 @@ export async function cardLedger(companyId) {
 }
 
 /** Reloads − fuel taken, per card, from the ledger rows (all months, or up to and including `month`). */
+/** Fill-up receipts on fuel claims (fleet card and cash) that belong to one card, for a year; null before migration 20261128. */
+export async function cardClaimLines(companyId, cardId, year) {
+  const { data, error } = await supabase.rpc('machinery_card_claim_lines', {
+    p_company: companyId,
+    p_card: cardId,
+    p_from: `${year}-01-01`,
+    p_to: `${year}-12-31`
+  })
+  if (error) return null
+  return data || []
+}
+
 export function cardBalances(ledger, month) {
   const bal = {}
   for (const r of ledger || []) {
