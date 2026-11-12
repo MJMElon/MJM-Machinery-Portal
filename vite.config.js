@@ -7,6 +7,9 @@ import react from '@vitejs/plugin-react'
 // photo data must always come fresh from Supabase.
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
+  // Build stamp: module windows load the app with ?v=<stamp>, so a new deploy
+  // is never served from the browser's cached copy of index.html.
+  define: { __BUILD__: JSON.stringify(String(Date.now()).slice(-8)) },
   plugins: [react()],
   server: { host: true }
 })

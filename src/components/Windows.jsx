@@ -153,7 +153,8 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
   const { module } = win
   const [loaded, setLoaded] = useState(false)
   const gesture = useRef(null)
-  const src = `${window.location.origin}${window.location.pathname}#${module.path}`
+  // ?v=<build stamp> keeps a window from loading an old cached copy of the app
+  const src = `${window.location.origin}${window.location.pathname}?v=${typeof __BUILD__ === 'string' ? __BUILD__ : '0'}#${module.path}`
 
   // Drag by the title bar / resize from the corner.
   function start(e, kind) {
