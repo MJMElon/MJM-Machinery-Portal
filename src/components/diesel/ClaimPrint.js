@@ -28,62 +28,56 @@ const esc = (s) =>
 
 const padNo = (claim) => (claim.claim_no != null ? String(claim.claim_no).padStart(3, '0') : '')
 
+const GREEN = '#14532d' // MJM group dark green
+
 const CSS = `
 @page { size: A4 portrait; margin: 0; }
 html, body { margin: 0; padding: 0; background: #fff; color: #111827; }
 body { font: 11px/1.45 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-table { border-collapse: collapse; }
+table { border-collapse: collapse; font-size: 11px; }
 .page { width: 100%; }
 .page > thead td, .page > tfoot td { height: 14mm; padding: 0; }
 .page > tbody > tr > td { padding: 0 15mm; vertical-align: top; }
-.head { text-align: center; padding-bottom: 10px; border-bottom: 2px solid #111827; }
-.head .name { font-size: 21px; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
-.head .reg { font-size: 10px; color: #6b7280; margin-top: 1px; }
-.head .line { font-size: 10.5px; color: #374151; margin-top: 3px; }
-.title { margin: 20px 0 14px; text-align: center; font-size: 16px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.meta { width: 100%; font-size: 11.5px; }
+.head { text-align: center; padding-bottom: 10px; border-bottom: 2px solid ${GREEN}; }
+.head .name { font-size: 18px; font-weight: 700; line-height: 1.25; }
+.head .reg, .head .line { font-size: 11px; color: #374151; margin-top: 2px; }
+.title { margin: 18px 0 12px; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: ${GREEN}; }
+.meta { width: 100%; }
 .meta td { padding: 1.5px 0; vertical-align: top; }
-.meta td.k { width: 118px; color: #6b7280; }
-.meta td.v { font-weight: 600; }
-.lines { width: 100%; margin-top: 14px; font-size: 10.5px; }
-.lines th { background: #111827; color: #fff; font-weight: 600; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; padding: 6px 7px; text-align: left; vertical-align: bottom; }
+.meta td.k { width: 118px; font-weight: 700; }
+.lines { width: 100%; margin-top: 12px; }
+.lines th { background: ${GREEN}; color: #fff; font-weight: 600; font-size: 11px; padding: 6px 7px; text-align: center; vertical-align: middle; }
 .lines td { padding: 6px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-.lines tbody tr:nth-child(even) td { background: #f9fafb; }
+.lines tbody tr:nth-child(even) td { background: #f6f8f7; }
 .lines .c { text-align: center; }
 .lines .r { text-align: right; font-variant-numeric: tabular-nums; }
-.lines th.r { text-align: right; }
 .lines .wrap { word-break: break-all; }
 .lines .veh { color: #374151; }
-.lines .remark { display: block; font-size: 9.5px; color: #6b7280; }
-.lines .amt { font-weight: 600; }
-.sum { width: 100%; margin-top: 10px; }
-.sum td { vertical-align: top; }
-.sum .box { margin-left: auto; width: 240px; border-top: 2px solid #111827; padding-top: 6px; font-size: 11px; }
+.lines .remark { display: block; color: #6b7280; }
+.sum { width: 100%; margin-top: 8px; }
+.sum .box { margin-left: auto; width: 240px; border-top: 2px solid ${GREEN}; padding-top: 6px; }
 .sum .box table { width: 100%; }
-.sum .box td { padding: 2px 0; }
-.sum .box .k { color: #6b7280; }
+.sum .box td { padding: 3px 0; font-weight: 700; }
 .sum .box .r { text-align: right; font-variant-numeric: tabular-nums; }
-.sum .box .total td { padding-top: 5px; font-weight: 800; font-size: 13px; }
-.notes { margin-top: 10px; font-size: 10.5px; color: #374151; }
-.sign { width: 100%; margin-top: 40px; font-size: 11px; break-inside: avoid; }
+.notes { margin-top: 10px; color: #374151; }
+.sign { width: 100%; margin-top: 40px; break-inside: avoid; }
 .sign td { width: 33.33%; padding: 0 14px 0 0; vertical-align: top; }
-.sign .label { color: #6b7280; }
+.sign .label { font-weight: 700; }
 .sign .space { height: 46px; }
-.sign .line { width: 85%; border-bottom: 1px solid #111827; padding: 0 2px 3px; min-height: 14px; font-weight: 600; }
-.sign .role { padding-top: 4px; font-weight: 600; }
+.sign .line { width: 85%; border-bottom: 1px solid #111827; padding: 0 2px 3px; min-height: 14px; }
+.sign .role { padding-top: 4px; }
 .receipts { break-before: page; }
-.receipts h2 { font-size: 12px; font-weight: 700; margin: 0 0 8px; letter-spacing: .04em; text-transform: uppercase; }
+.receipts h2 { font-size: 11px; font-weight: 700; margin: 0 0 8px; letter-spacing: .04em; text-transform: uppercase; color: ${GREEN}; }
 .receipts table { width: 100%; }
 .receipts td { width: 50%; padding: 0 6px 10px 0; vertical-align: top; break-inside: avoid; }
 .receipts img { display: block; max-width: 100%; max-height: 118mm; border: 1px solid #e5e7eb; border-radius: 4px; }
-.receipts .cap { font-size: 10px; color: #6b7280; margin-top: 3px; }
+.receipts .cap { color: #6b7280; margin-top: 3px; }
 `
 
 /** The claim form as a complete HTML document (string). */
 export function claimFormHtml({ company, claim, lines, vehicles, claimantName, images = {} }) {
   const vById = new Map((vehicles || []).map((v) => [v.id, v]))
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
-  const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)
   const no = padNo(claim)
   const contact = [company.phone && `Tel: ${company.phone}`, company.fax && `Fax: ${company.fax}`, company.email && `Email: ${company.email}`]
     .filter(Boolean)
@@ -106,7 +100,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
         <td>${describe(l)}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
         <td class="r">${l.litres != null ? Number(l.litres).toFixed(2) : '—'}</td>
         <td class="r">${l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
-        <td class="r amt">${Number(l.amount || 0).toFixed(2)}</td>
+        <td class="r">${Number(l.amount || 0).toFixed(2)}</td>
       </tr>`
     )
     .join('')
@@ -141,19 +135,19 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
   </div>
   <div class="title">Fuel claim form</div>
   <table class="meta">
-    <tr><td class="k">Name</td><td class="v">${esc(claimantName)}</td></tr>
-    ${no ? `<tr><td class="k">Claim No.</td><td class="v">${esc(no)}</td></tr>` : ''}
-    <tr><td class="k">Submission Date</td><td class="v">${esc(day(claim.submitted_on || claim.fill_date))}</td></tr>
+    <tr><td class="k">Name</td><td>${esc(claimantName)}</td></tr>
+    ${no ? `<tr><td class="k">Claim No.</td><td>${esc(no)}</td></tr>` : ''}
+    <tr><td class="k">Submission Date</td><td>${esc(day(claim.submitted_on || claim.fill_date))}</td></tr>
   </table>
   <table class="lines">
     <colgroup>
-      <col style="width:6%" /><col style="width:12%" /><col style="width:16%" /><col />
-      <col style="width:12%" /><col style="width:12%" /><col style="width:13%" />
+      <col style="width:6%" /><col style="width:13%" /><col style="width:16%" /><col />
+      <col style="width:10%" /><col style="width:13%" /><col style="width:13%" />
     </colgroup>
     <thead>
       <tr>
-        <th class="c">No.</th><th>Receipt Date</th><th>Receipt No.</th><th>Description</th>
-        <th class="r">Litre</th><th class="r">Unit price<br />(RM)</th><th class="r">Amount<br />(RM)</th>
+        <th>No.</th><th>Receipt Date</th><th>Receipt No.</th><th>Description</th>
+        <th>Litre</th><th>Unit Price (RM)</th><th>Amount (RM)</th>
       </tr>
     </thead>
     <tbody>
@@ -162,9 +156,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
   </table>
   <table class="sum"><tr><td>
     <div class="box"><table>
-      <tr><td class="k">Total litres</td><td class="r">${litres.toFixed(2)} L</td></tr>
-      <tr><td class="k">Receipts</td><td class="r">${lines.length}</td></tr>
-      <tr class="total"><td>TOTAL PAYABLE (RM)</td><td class="r">${esc(num(total, 2))}</td></tr>
+      <tr><td>TOTAL PAYABLE (RM)</td><td class="r">${esc(num(total, 2))}</td></tr>
     </table></div>
   </td></tr></table>
   ${claim.notes ? `<div class="notes">Notes: ${esc(claim.notes)}</div>` : ''}

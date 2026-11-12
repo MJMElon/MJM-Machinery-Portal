@@ -1,94 +1,111 @@
 import { useEffect, useState } from 'react'
 
-// Little machines that drive along the bottom of the page now and then: a
-// tractor and an excavator (our own drawings). One run every minute or so,
-// never over the page content (pointer events pass through), and off when
-// the person prefers reduced motion.
-const CHARACTERS = ['tractor', 'excavator']
+// Machines driving along the bottom of the main page, one after another:
+// an excavator, a lorry, a tractor and a bulldozer (plain side views), picked
+// at random each time. Never over the page content (pointer events pass
+// through), and off when the person prefers reduced motion.
+export const MACHINES = { excavator: Excavator, lorry: Lorry, tractor: Tractor, bulldozer: Bulldozer }
+const NAMES = Object.keys(MACHINES)
+
+const pick = (not) => {
+  const pool = NAMES.filter((n) => n !== not)
+  return pool[Math.floor(Math.random() * pool.length)]
+}
 
 export default function Mascots() {
   const [run, setRun] = useState(null) // { id, who, time }
 
   useEffect(() => {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-    let timer
-    let n = 0
-    const next = (delay) => {
-      timer = setTimeout(() => {
-        const who = CHARACTERS[n++ % CHARACTERS.length]
-        const time = 22 + Math.round(Math.random() * 12)
-        setRun({ id: n, who, time })
-        next((time + 35 + Math.random() * 40) * 1000)
-      }, delay)
-    }
-    next(6000)
-    return () => clearTimeout(timer)
+    setRun({ id: 1, who: pick(), time: 26 })
   }, [])
 
   if (!run) return null
+  const Machine = MACHINES[run.who]
+  // The next one sets off as soon as this one has gone.
+  const next = () => setRun((r) => ({ id: r.id + 1, who: pick(r.who), time: 24 + Math.round(Math.random() * 10) }))
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-1 z-10 h-16 overflow-hidden print:hidden" aria-hidden="true">
-      <div key={run.id} className="mascot-drive absolute bottom-0 left-0" style={{ '--mascot-time': `${run.time}s` }} onAnimationEnd={() => setRun(null)}>
-        <div className="mascot-bob">{run.who === 'tractor' ? <Tractor /> : <Excavator />}</div>
+    <div className="pointer-events-none fixed inset-x-0 bottom-1 z-10 h-12 overflow-hidden print:hidden" aria-hidden="true">
+      <div key={run.id} className="mascot-drive absolute bottom-0 left-0" style={{ '--mascot-time': `${run.time}s` }} onAnimationEnd={next}>
+        <Machine />
       </div>
     </div>
   )
 }
 
-function Tractor() {
+const Wheel = ({ cx, cy, r }) => (
+  <g className="mascot-wheel">
+    <circle cx={cx} cy={cy} r={r} fill="#1e293b" />
+    <circle cx={cx} cy={cy} r={r * 0.45} fill="#94a3b8" />
+    <path d={`M${cx} ${cy - r * 0.8}v${r * 1.6}M${cx - r * 0.8} ${cy}h${r * 1.6}`} stroke="#64748b" strokeWidth="1" />
+  </g>
+)
+
+// Tracks: a rounded band with two rollers.
+const Tracks = ({ x, y, w, h = 12 }) => (
+  <g>
+    <rect x={x} y={y} width={w} height={h} rx={h / 2} fill="#1e293b" />
+    <rect x={x + 3} y={y + 3} width={w - 6} height={h - 6} rx={(h - 6) / 2} fill="#475569" />
+    <Wheel cx={x + h / 2 + 2} cy={y + h / 2} r={h / 2 - 2} />
+    <Wheel cx={x + w - h / 2 - 2} cy={y + h / 2} r={h / 2 - 2} />
+  </g>
+)
+
+function Excavator() {
   return (
-    <svg width="110" height="60" viewBox="0 0 110 60" fill="none">
-      {/* cab + bonnet */}
-      <path d="M40 40V14h22l6 12h14v14z" fill="#16a34a" />
-      <path d="M44 18h14l4 8H44z" fill="#bfdbfe" />
-      <rect x="20" y="30" width="24" height="10" rx="2" fill="#15803d" />
-      <rect x="62" y="30" width="22" height="10" rx="2" fill="#15803d" />
-      <rect x="26" y="8" width="3" height="10" rx="1" fill="#475569" />
-      {/* small front wheel */}
-      <g className="mascot-wheel">
-        <circle cx="82" cy="44" r="9" fill="#1e293b" />
-        <circle cx="82" cy="44" r="4" fill="#cbd5e1" />
-        <path d="M82 36v16M74 44h16" stroke="#94a3b8" strokeWidth="1.5" />
-      </g>
-      {/* big rear wheel */}
-      <g className="mascot-wheel">
-        <circle cx="36" cy="40" r="16" fill="#1e293b" />
-        <circle cx="36" cy="40" r="7" fill="#cbd5e1" />
-        <path d="M36 24v32M20 40h32M25 29l22 22M47 29L25 51" stroke="#94a3b8" strokeWidth="1.5" />
-      </g>
-      {/* eyes on the cab window */}
-      <circle cx="50" cy="22" r="1.6" fill="#1e293b" />
-      <circle cx="56" cy="22" r="1.6" fill="#1e293b" />
+    <svg width="96" height="44" viewBox="0 0 96 44" fill="none">
+      <Tracks x={10} y={30} w={50} />
+      <rect x={14} y={19} width={40} height={11} rx={2} fill="#ca8a04" />
+      <path d="M18 19v-9h14v9z" fill="#eab308" />
+      <rect x={21} y={12} width={8} height={5} fill="#cbd5e1" />
+      {/* boom and stick, bucket down */}
+      <path d="M44 22l22-13" stroke="#a16207" strokeWidth="5" strokeLinecap="round" />
+      <path d="M66 9l18 16" stroke="#a16207" strokeWidth="4" strokeLinecap="round" />
+      <path d="M82 23l8 1-4 8-8-4z" fill="#475569" />
     </svg>
   )
 }
 
-function Excavator() {
+function Lorry() {
   return (
-    <svg width="130" height="64" viewBox="0 0 130 64" fill="none">
-      {/* tracks */}
-      <rect x="18" y="42" width="60" height="16" rx="8" fill="#1e293b" />
-      <rect x="22" y="46" width="52" height="8" rx="4" fill="#475569" />
-      <g className="mascot-wheel">
-        <circle cx="28" cy="50" r="5" fill="#cbd5e1" />
-        <path d="M28 45v10M23 50h10" stroke="#64748b" strokeWidth="1.2" />
-      </g>
-      <g className="mascot-wheel">
-        <circle cx="68" cy="50" r="5" fill="#cbd5e1" />
-        <path d="M68 45v10M63 50h10" stroke="#64748b" strokeWidth="1.2" />
-      </g>
-      {/* body + cab */}
-      <rect x="22" y="26" width="48" height="16" rx="4" fill="#f59e0b" />
-      <path d="M26 26v-12h18v12z" fill="#fbbf24" />
-      <path d="M29 17h12v7H29z" fill="#bfdbfe" />
-      <circle cx="33" cy="20" r="1.5" fill="#1e293b" />
-      <circle cx="38" cy="20" r="1.5" fill="#1e293b" />
-      {/* arm + bucket, swinging */}
-      <g className="mascot-arm">
-        <path d="M60 30l26-16" stroke="#d97706" strokeWidth="6" strokeLinecap="round" />
-        <path d="M86 14l24 18" stroke="#d97706" strokeWidth="5" strokeLinecap="round" />
-        <path d="M108 30l10 2-6 10-10-6z" fill="#475569" />
-      </g>
+    <svg width="104" height="44" viewBox="0 0 104 44" fill="none">
+      {/* tipper body and cab */}
+      <path d="M30 12h66l-4 20H30z" fill="#64748b" />
+      <rect x={30} y={30} width={66} height={4} fill="#334155" />
+      <path d="M6 34V18l6-9h18v25z" fill="#dc2626" />
+      <path d="M13 12h10v8H13z" fill="#cbd5e1" />
+      <rect x={4} y={32} width={94} height={3} rx={1} fill="#1e293b" />
+      <Wheel cx={18} cy={37} r={6} />
+      <Wheel cx={60} cy={37} r={6} />
+      <Wheel cx={76} cy={37} r={6} />
+    </svg>
+  )
+}
+
+function Tractor() {
+  return (
+    <svg width="84" height="44" viewBox="0 0 84 44" fill="none">
+      {/* cab over the big rear wheel, bonnet to the front */}
+      <path d="M22 30V10h18l5 10h16v10z" fill="#15803d" />
+      <path d="M26 14h12l3 6H26z" fill="#cbd5e1" />
+      <rect x={52} y={11} width={2.5} height={9} rx={1} fill="#475569" />
+      <Wheel cx={60} cy={35} r={7} />
+      <Wheel cx={30} cy={30} r={12} />
+    </svg>
+  )
+}
+
+function Bulldozer() {
+  return (
+    <svg width="92" height="44" viewBox="0 0 92 44" fill="none">
+      <Tracks x={20} y={30} w={48} h={13} />
+      <rect x={24} y={20} width={40} height={10} rx={2} fill="#ca8a04" />
+      <path d="M38 20v-10h16v10z" fill="#eab308" />
+      <rect x={41} y={12} width={10} height={6} fill="#cbd5e1" />
+      <rect x={26} y={24} width={14} height={4} rx={1} fill="#854d0e" />
+      {/* push arms and blade */}
+      <path d="M26 25H12M26 31H12" stroke="#a16207" strokeWidth="3" strokeLinecap="round" />
+      <path d="M8 14q-7 10-2 28h8q-4-16 0-28z" fill="#475569" />
     </svg>
   )
 }
