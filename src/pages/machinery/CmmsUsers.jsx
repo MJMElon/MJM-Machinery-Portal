@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Badge, Card, Spinner } from '../../components/ui.jsx'
-import { IconEye, IconPencil } from '../../components/icons.jsx'
+import { Badge, Button, Card, Spinner } from '../../components/ui.jsx'
+import { IconEye, IconPencil, IconRefresh } from '../../components/icons.jsx'
 import { listPortalUsers } from '../../lib/cmms.js'
 import { listCompanyPerms } from '../../lib/perms.js'
+import { syncFromIntranet } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -19,6 +20,8 @@ export default function CmmsUsers() {
   const [perms, setPerms] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
 
   const load = useCallback(async () => {
     if (!current) return
@@ -55,12 +58,40 @@ export default function CmmsUsers() {
     )
   }
 
+  // Pull the people given the icons in MJM Intranet (and the companies).
+  async function sync() {
+    setSyncing(true)
+    setSyncMsg('')
+    try {
+      const r = await syncFromIntranet()
+      const warn = r.users_warning || r.fuel_icon_warning
+      setSyncMsg(warn ? `Synced, but: ${warn}` : `Synced ${r.users ?? 0} user${r.users === 1 ? '' : 's'} with an icon in MJM Intranet.`)
+      await load()
+    } catch (e) {
+      setSyncMsg(e.message || 'Sync failed.')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   // Everyone given CMMS 2 / Fuel Claims access in MJM Intranet, or with a role here.
   const rows = users.filter((u) => u.is_super_admin || u.intranet_cmms || u.intranet_fuel || Object.keys(perms[u.user_id] || {}).length)
 
   return (
     <div className="space-y-4">
-      <PageHeader backTo="/" backLabel="Back to CMMS main page" title="CMMS 2 user access" />
+      <PageHeader
+        backTo="/"
+        backLabel="Back to CMMS main page"
+        title="CMMS 2 user access"
+        right={
+          <div className="flex flex-col items-end gap-1">
+            <Button variant="secondary" disabled={syncing} onClick={sync}>
+              <IconRefresh width={18} height={18} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing…' : 'Sync from MJM Intranet'}
+            </Button>
+            {syncMsg && <span className={`text-xs ${/fail|not|error|warning/i.test(syncMsg) ? 'text-red-700' : 'text-green-700'}`}>{syncMsg}</span>}
+          </div>
+        }
+      />
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
       <Card className="overflow-hidden">
