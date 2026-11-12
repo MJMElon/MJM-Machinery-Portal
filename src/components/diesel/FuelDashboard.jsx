@@ -7,7 +7,7 @@ import { money, num } from "../../lib/format.js";
 // bars, a legend, hover tooltip and a table view. Colours: two validated
 // categorical slots (blue, orange) — identity never by colour alone, the
 // legend and table carry it too.
-const MONTHS = [
+export const MONTHS = [
   "Jan",
   "Feb",
   "Mar",
@@ -21,8 +21,8 @@ const MONTHS = [
   "Nov",
   "Dec",
 ];
-const C1 = "#2a78d6";
-const C2 = "#eb6834";
+export const C1 = "#2a78d6";
+export const C2 = "#eb6834";
 
 export function FuelDashboard({ lines, title, compact = true }) {
   const years = useMemo(() => {
@@ -150,7 +150,9 @@ export function FuelDashboard({ lines, title, compact = true }) {
   );
 }
 
-function Chart({ title, series, data, fmt }) {
+/** Stacked monthly bars (12). `bare` leaves out the card frame (for use inside another box). */
+export function Chart({ title, series, data, fmt, bare = false }) {
+  const Frame = bare ? "div" : Card;
   const [hover, setHover] = useState(null);
   const W = 520;
   const H = 150;
@@ -170,7 +172,7 @@ function Chart({ title, series, data, fmt }) {
   for (let v = 0; v <= top; v += step) ticks.push(v);
 
   return (
-    <Card className="p-3">
+    <Frame className={bare ? "" : "p-3"}>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-slate-700">{title}</p>
         <div className="flex gap-3 text-[11px] text-slate-600">
@@ -315,7 +317,7 @@ function Chart({ title, series, data, fmt }) {
           </div>
         )}
       </div>
-    </Card>
+    </Frame>
   );
 }
 
