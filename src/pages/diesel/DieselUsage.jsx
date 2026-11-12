@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Select } from '../../components/ui.jsx'
-import { IconDownload, IconFuel, IconTrash } from '../../components/icons.jsx'
+import { IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, MonthSelect, Stats, StatusBadge, monthsOf } from '../../components/diesel/shared.jsx'
-import { UsageModal } from '../../components/diesel/CardModals.jsx'
+import { printElement } from '../../lib/printFrame.js'
 import { FUEL_COLORS, MiniBars } from '../../components/diesel/FuelDashboard.jsx'
 import { deleteCardRecord, listCardData, listClaimLines, listClaims, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
-import { day, downloadCsv, money, num, sum, thisMonth } from '../../lib/format.js'
+import { day, money, monthLabel, num, sum, thisMonth } from '../../lib/format.js'
 
-// Fuel Usage Report: a dashboard per vehicle, then one month's totals by
-// vehicle (with km/L and over-tank checks) and by driver, and the fill-up log
-// — cash claims (not rejected) and fleet card fill-ups. Card fill-ups are
-// recorded here.
+// Fuel Usage Report: a dashboard per vehicle (HQ vehicles; estate machines
+// later), then one month's totals by vehicle (with km/L and over-tank checks)
+// and by driver, and the fill-up log — cash and fleet-card receipts on fuel
+// claims (not rejected). Print prints the dashboard (not the log).
 export default function DieselUsage() {
   const { company, access } = useOutletContext()
   const [fills, setFills] = useState([])
@@ -23,9 +23,10 @@ export default function DieselUsage() {
   const [error, setError] = useState('')
   const [month, setMonth] = useState(thisMonth())
   const [vehicle, setVehicle] = useState('')
-  const [tab, setTab] = useState('hq') // hq = road vehicles grouped by fleet card; estate = the other machines
+  const [tab, setTab] = useState('hq') // hq = HQ vehicles; estate = the other machines
   const [year, setYear] = useState(new Date().getFullYear())
-  const [modal, setModal] = useState(false)
+  const [printing, setPrinting] = useState(false)
+  const report = useRef(null)
 
   const load = useCallback(async () => {
     try {
@@ -122,30 +123,40 @@ export default function DieselUsage() {
   const th = (label, right) => <th className={`p-3 font-medium ${right ? 'text-right' : 'text-left'}`}>{label}</th>
   const td = (v, right, cls = '') => <td className={`p-3 ${right ? 'text-right' : ''} ${cls}`}>{v}</td>
   // One row per vehicle (reg no. + driver) with two small month charts.
-  // HQ vehicles = machines with the "HQ vehicle" tick in Machinery Profile,
-  // grouped under their fleet card; Estate machines = everything else.
-  const isHq = (v) => Boolean(v.hq_vehicle)
+  // HQ vehicles = ticked "HQ vehicle" in Machinery Profile (before anyone is
+  // ticked: road vehicles by Type); Estate machines = everything else.
+  const isRoad = (v) => /light|lorry|pickup|pick-up|van|bus|truck/i.test(v.machine_type || '')
+  const anyHq = vehicles.some((v) => v.hq_vehicle)
+  const isHq = (v) => (anyHq ? Boolean(v.hq_vehicle) : isRoad(v))
   const linesOf = (vid) => fills.filter((f) => f.vehicle_id === vid).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' }))
   const driverOf = (v) => {
     const id = v.driver_ids?.[0] || v.driver_id
     return id ? personLabel(person.get(id)) : '—'
   }
   const years = [...new Set([new Date().getFullYear(), ...fills.map((f) => Number(f.fill_date.slice(0, 4)))])].sort((a, b) => b - a)
-  // Active and Insurance-only machines (Inactive ones are left out).
-  const tabVehicles = vehicles.filter((v) => (tab === 'hq' ? isHq(v) : !isHq(v)) && (v.status ? v.status !== 'inactive' : v.is_active !== false))
-  const cardOfVehicle = new Map(cards.filter((c) => c.vehicle_id && c.status !== 'cancelled').map((c) => [c.vehicle_id, c]))
-  // groups: [{ key, title, vehicles }] — by fleet card for HQ, one group for Estate
-  const groups = (() => {
-    if (tab !== 'hq') return [{ key: 'estate', title: 'Estate machines', vehicles: tabVehicles }]
-    const byCard = new Map()
-    for (const v of tabVehicles) {
-      const c = cardOfVehicle.get(v.id)
-      const key = c ? c.id : 'none'
-      if (!byCard.has(key)) byCard.set(key, { key, title: c ? `Fleet card ${c.card_no || '(applying)'}${c.provider ? ' · ' + c.provider : ''}` : 'No fleet card', vehicles: [] })
-      byCard.get(key).vehicles.push(v)
+  const tabVehicles = vehicles
+    .filter((v) => (tab === 'hq' ? isHq(v) : !isHq(v)) && v.is_active !== false)
+    .sort((a, b) => String(a.reg_no || a.name).localeCompare(String(b.reg_no || b.name)))
+
+  async function print() {
+    if (!report.current) return
+    setPrinting(true)
+    try {
+      await printElement(report.current, {
+        title: 'Fuel Usage Report',
+        lines: [
+          company.name,
+          `${tab === 'hq' ? 'HQ vehicles' : 'Estate machines'} · ${year}`,
+          `Month totals: ${month ? monthLabel(month) : 'All months'}${vehicle ? ' · ' + vehicleLabel(vById.get(vehicle)) : ''}`,
+          `Printed ${day(new Date().toISOString().slice(0, 10))}`
+        ]
+      })
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setPrinting(false)
     }
-    return [...byCard.values()].sort((a, b) => (a.key === 'none') - (b.key === 'none') || a.title.localeCompare(b.title))
-  })()
+  }
 
   async function removeUsage(id) {
     if (!window.confirm('Delete this card fill-up? This cannot be undone.')) return
@@ -157,44 +168,18 @@ export default function DieselUsage() {
     }
   }
 
-  const exportCsv = () =>
-    downloadCsv(
-      `diesel-usage-${company.code || company.name}-${month || 'all'}.csv`,
-      [
-        { header: 'Date', value: (r) => r.fill_date },
-        { header: 'Type', value: (r) => (r.source === 'cash' ? 'Cash Claim' : 'Fleet Card') },
-        { header: 'Vehicle', value: (r) => vById.get(r.vehicle_id)?.name },
-        { header: 'Reg. no.', value: (r) => vById.get(r.vehicle_id)?.reg_no },
-        { header: 'Driver', value: (r) => (r.driver ? personLabel(person.get(r.driver)) : '') },
-        { header: 'Card', value: (r) => cardById.get(r.card_id)?.card_no },
-        { header: 'Odometer (km)', value: (r) => r.odometer_km },
-        { header: 'Litres', value: (r) => Number(r.litres) },
-        { header: 'Amount (RM)', value: (r) => Number(r.amount) },
-        { header: 'Station', value: (r) => r.station },
-        { header: 'Subsidised', value: (r) => (r.subsidised ? 'yes' : '') },
-        { header: 'Status', value: (r) => (r.fromClaim ? r.status : '') }
-      ],
-      [...rows].reverse()
-    )
-
   return (
     <div className="space-y-4">
       <PageHeader
         right={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={exportCsv} disabled={!rows.length}>
-              <IconDownload width={18} height={18} /> Export CSV
-            </Button>
-            {access.can('usage', 'add') && (
-              <Button disabled={!cards.length} onClick={() => setModal(true)} title={cards.length ? '' : 'Add a fleet card first'}>
-                <IconFuel width={18} height={18} /> Record card fill-up
-              </Button>
-            )}
-          </div>
+          <Button variant="secondary" onClick={print} disabled={loading || printing}>
+            <IconPrint width={18} height={18} /> {printing ? 'Preparing…' : 'Print'}
+          </Button>
         }
       />
       <ErrorBox>{error}</ErrorBox>
 
+      <div ref={report} className="space-y-4">
       {!loading && (
         <Card className="overflow-hidden">
           {/* HQ vehicle / Estate machine tabs */}
@@ -204,7 +189,7 @@ export default function DieselUsage() {
                 ['hq', 'HQ vehicle'],
                 ['estate', 'Estate machine']
               ].map(([k, label]) => (
-                <button key={k} type="button" onClick={() => setTab(k)} className={`relative px-6 py-3 text-sm font-bold ${tab === k ? 'bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}>
+                <button key={k} type="button" onClick={() => setTab(k)} data-noprint={tab === k ? undefined : ''} className={`relative px-6 py-3 text-sm font-bold ${tab === k ? 'bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}>
                   {label}
                   {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
                 </button>
@@ -217,7 +202,7 @@ export default function DieselUsage() {
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: FUEL_COLORS.cash }} /> Cash
               </span>
-              <div className="w-24">
+              <div className="w-24" data-noprint>
                 <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="h-8" aria-label="Year">
                   {years.map((yy) => (
                     <option key={yy} value={yy}>
@@ -242,8 +227,8 @@ export default function DieselUsage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {groups.map((g) => (
-                    <GroupRows key={g.key} group={g} showTitle={tab === 'hq'} linesOf={linesOf} driverOf={driverOf} year={year} />
+                  {tabVehicles.map((v) => (
+                    <VehicleRow key={v.id} v={v} rows={linesOf(v.id)} driver={driverOf(v)} year={year} />
                   ))}
                 </tbody>
               </table>
@@ -251,7 +236,7 @@ export default function DieselUsage() {
           )}
         </Card>
       )}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center" data-noprint>
         <MonthSelect months={months} value={month} onChange={setMonth} allLabel="All months" />
         <div className="sm:w-60">
           <Select value={vehicle} onChange={(e) => setVehicle(e.target.value)} className="h-10" aria-label="Vehicle">
@@ -341,6 +326,8 @@ export default function DieselUsage() {
         </div>
       )}
 
+      </div>
+
       <Card className="overflow-hidden">
         <h3 className="border-b border-slate-200 px-4 py-3 font-semibold text-slate-800">Fill-up log</h3>
         {loading ? (
@@ -384,46 +371,25 @@ export default function DieselUsage() {
           </div>
         )}
       </Card>
-      {modal && (
-        <UsageModal company={company} cards={cards} vehicles={vehicles} people={people} onClose={() => setModal(false)} onSaved={load} />
-      )}
     </div>
   )
 }
 
-// One fleet card (or "No fleet card"): a heading row, then a row per vehicle
-// with its driver and the two small month charts.
-function GroupRows({ group, showTitle, linesOf, driverOf, year }) {
+// One vehicle: reg no. (and name), driver, and the two small month charts.
+function VehicleRow({ v, rows, driver, year }) {
   return (
-    <>
-      {showTitle && (
-        <tr className="bg-slate-50">
-          <td colSpan={4} className="px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600">
-            {group.title}
-            <span className="ml-2 font-medium normal-case tracking-normal text-slate-400">
-              {group.vehicles.length} vehicle{group.vehicles.length === 1 ? '' : 's'}
-            </span>
-          </td>
-        </tr>
-      )}
-      {group.vehicles.map((v) => {
-        const rows = linesOf(v.id)
-        return (
-          <tr key={v.id} className="border-b border-slate-100 align-middle">
-            <td className="px-4 py-2 font-semibold text-slate-800">
-              {v.reg_no || v.name}
-              {v.reg_no && v.reg_no !== v.name && <span className="block text-xs font-normal text-slate-400">{v.name}</span>}
-            </td>
-            <td className="px-3 py-2 text-slate-700">{driverOf(v)}</td>
-            <td className="px-3 py-1.5">
-              <MiniBars rows={rows} year={year} metric="litres" fmt={(x) => `${num(x, 1)} L`} />
-            </td>
-            <td className="px-3 py-1.5">
-              <MiniBars rows={rows} year={year} metric="amount" fmt={money} />
-            </td>
-          </tr>
-        )
-      })}
-    </>
+    <tr className="border-b border-slate-100 align-middle">
+      <td className="px-4 py-2 font-semibold text-slate-800">
+        {v.reg_no || v.name}
+        {v.reg_no && v.reg_no !== v.name && <span className="block text-xs font-normal text-slate-400">{v.name}</span>}
+      </td>
+      <td className="px-3 py-2 text-slate-700">{driver}</td>
+      <td className="px-3 py-1.5">
+        <MiniBars rows={rows} year={year} metric="litres" fmt={(x) => `${num(x, 1)} L`} />
+      </td>
+      <td className="px-3 py-1.5">
+        <MiniBars rows={rows} year={year} metric="amount" fmt={money} />
+      </td>
+    </tr>
   )
 }

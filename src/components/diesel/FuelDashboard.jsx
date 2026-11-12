@@ -338,9 +338,11 @@ function niceStep(max) {
  * Small month-by-month bar chart for a table row (Fuel Usage Report):
  * 12 stacked bars (fleet card vs cash) with the month total above each.
  * `rows` are fill-ups ({ fill_date, litres, amount, payment }); `metric` is
- * 'litres' or 'amount'.
+ * 'litres' or 'amount'. Hover (or tap) a month to see its fleet card, cash
+ * and total.
  */
 export function MiniBars({ rows, year, metric, fmt }) {
+  const [hover, setHover] = useState(null);
   const data = useMemo(() => {
     const m = MONTHS.map(() => ({ card: 0, cash: 0 }));
     for (const r of rows) {
@@ -363,19 +365,32 @@ export function MiniBars({ rows, year, metric, fmt }) {
   const y = (v) => padT + innerH - (v / max) * innerH;
   const sum = totals.reduce((s, v) => s + v, 0);
   return (
-    <div className="min-w-[220px]">
+    <div className="relative min-w-[220px]">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="h-[74px] w-full"
         role="img"
         aria-label={metric}
+        onMouseLeave={() => setHover(null)}
       >
         {data.map((d, i) => {
           const x = i * slot + (slot - barW) / 2;
           const yCard = y(d.card);
           const yTop = y(d.card + d.cash);
           return (
-            <g key={i}>
+            <g
+              key={i}
+              onMouseEnter={() => setHover(i)}
+              onTouchStart={() => setHover(i)}
+            >
+              <rect
+                x={i * slot}
+                y={0}
+                width={slot}
+                height={H}
+                fill={hover === i ? "#f1f5f9" : "transparent"}
+                rx="3"
+              />
               {d.card > 0 && (
                 <rect
                   x={x}
@@ -429,6 +444,33 @@ export function MiniBars({ rows, year, metric, fmt }) {
           strokeWidth="1"
         />
       </svg>
+      {hover != null && (
+        <div
+          data-noprint
+          className="pointer-events-none absolute top-0 z-20 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] leading-4 shadow-lg"
+          // beside the month's bar (inside the row, so a scrolling table does not clip it)
+          style={
+            hover < 6
+              ? { left: `${((hover + 1) / 12) * 100}%` }
+              : { right: `${((12 - hover) / 12) * 100}%` }
+          }
+        >
+          <p className="font-semibold text-slate-800">
+            {MONTHS[hover]} {year}
+          </p>
+          <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
+            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C1 }} />
+            {fmt(data[hover].card)}
+          </p>
+          <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
+            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C2 }} />
+            {fmt(data[hover].cash)}
+          </p>
+          <p className="font-medium tabular-nums text-slate-800">
+            Total: {fmt(totals[hover])}
+          </p>
+        </div>
+      )}
       <p className="text-right text-[11px] font-semibold text-slate-700">
         {fmt(sum)} / year
       </p>
