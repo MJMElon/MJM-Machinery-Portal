@@ -129,3 +129,36 @@ input[type='number'] {
     stroke-dashoffset: 0;
   }
 }
+
+/* Module icons in "move" mode shake like a phone home screen. */
+.tile-wiggle {
+  animation: tile-wiggle 0.5s ease-in-out infinite;
+}
+@keyframes tile-wiggle {
+  0%, 100% { transform: rotate(-1.6deg); }
+  50% { transform: rotate(1.6deg); }
+}
+
+/* Little machines driving along the bottom of the main page. */
+@keyframes mascot-drive {
+  from { transform: translateX(-140px); }
+  to { transform: translateX(calc(100vw + 40px)); }
+}
+@keyframes mascot-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes mascot-wheel {
+  to { transform: rotate(360deg); }
+}
+@keyframes mascot-arm {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-14deg); }
+}
+.mascot-drive { animation: mascot-drive var(--mascot-time, 28s) linear forwards; }
+.mascot-bob { animation: mascot-bob 0.9s ease-in-out infinite; }
+.mascot-wheel { animation: mascot-wheel 1.2s linear infinite; transform-origin: center; transform-box: fill-box; }
+.mascot-arm { animation: mascot-arm 2.4s ease-in-out infinite; transform-origin: 8px 10px; transform-box: fill-box; }
+@media (prefers-reduced-motion: reduce) {
+  .tile-wiggle, .mascot-drive, .mascot-bob, .mascot-wheel, .mascot-arm { animation: none; }
+}

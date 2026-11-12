@@ -1,20 +1,34 @@
-// Module icons for the main page: formal rounded squares, one colour each,
-// with a simple white symbol inside (app-icon style).
+// Module icons: silver, glassy rounded squares with a dark symbol inside.
+// `from` / `to` are kept for the symbol tint (a thin coloured underline), so
+// each module still has its own colour accent on an otherwise uniform set.
 
-function Tile({ from, to, id, label, children }) {
+function Tile({ from, id, label, children }) {
   return (
-    <svg viewBox="0 0 64 64" role="img" aria-label={label} className="h-full w-full">
+    <svg viewBox="0 0 64 64" role="img" aria-label={label} className="h-full w-full drop-shadow-[0_6px_10px_rgba(15,23,42,0.18)]">
       <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={from} />
-          <stop offset="1" stopColor={to} />
+        <linearGradient id={`${id}-body`} x1="0" y1="0" x2="0.6" y2="1">
+          <stop offset="0" stopColor="#f8fafc" />
+          <stop offset="0.45" stopColor="#d9e0ea" />
+          <stop offset="1" stopColor="#9aa8bb" />
+        </linearGradient>
+        <linearGradient id={`${id}-glass`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.95" />
+          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={`${id}-rim`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="1" stopColor="#64748b" />
         </linearGradient>
       </defs>
-      <rect x="2" y="2" width="60" height="60" rx="15" fill={`url(#${id})`} />
-      <rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="#fff" strokeOpacity="0.25" />
-      <g fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="60" height="60" rx="16" fill={`url(#${id}-body)`} />
+      <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="15.5" fill="none" stroke={`url(#${id}-rim)`} strokeWidth="1.5" strokeOpacity="0.9" />
+      {/* glass highlight across the top half */}
+      <path d="M8 4h48a4 4 0 0 1 4 4v18c-12 6-36 8-56 0V8a4 4 0 0 1 4-4z" fill={`url(#${id}-glass)`} opacity="0.75" />
+      <g fill="none" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
         {children}
       </g>
+      {/* colour accent */}
+      <rect x="22" y="56" width="20" height="2.5" rx="1.25" fill={from} opacity="0.9" />
     </svg>
   )
 }

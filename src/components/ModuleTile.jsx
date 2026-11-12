@@ -3,61 +3,39 @@ import { Link } from 'react-router-dom'
 import { IconExternal } from './icons.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
-// Square module button for the portal pages: app-style icon + label, or a
-// full-tile picture (`Art`) that already shows the module name.
-// Pass `to` for an in-app route or `href` for an external app (opens in a new tab).
-// `label` may contain "\n" to break the line. `disabled` shows the tile greyed
-// out with `note` underneath (e.g. a module the company does not have).
-// size: 'md' (main page) or 'sm' (module sub-pages).
+// Module icon for the portal pages: the app-style icon with its name under
+// it (no box around it). Every tile has the same width, icon size and a
+// two-line title area, so a long or short name never shifts the row.
+// Pass `to` for an in-app route, `href` for an external app (new tab) or
+// `onClick`. `disabled` shows it greyed out with `note` under the name.
 const SIZES = {
-  md: {
-    tile: 'sm:w-[150px]',
-    icon: 'h-14 w-14 sm:h-16 sm:w-16',
-    pad: 'gap-2.5 p-3 sm:gap-3',
-    text: 'text-sm',
-    round: 'rounded-[22px]'
-  },
-  sm: {
-    tile: 'sm:w-[120px]',
-    icon: 'h-11 w-11',
-    pad: 'gap-2 p-2.5',
-    text: 'text-[13px]',
-    round: 'rounded-[20px]'
-  }
+  md: { tile: 'w-[112px] sm:w-[132px]', icon: 'h-[72px] w-[72px] sm:h-20 sm:w-20', text: 'text-[13px] sm:text-sm' },
+  sm: { tile: 'w-[104px] sm:w-[120px]', icon: 'h-16 w-16 sm:h-[72px] sm:w-[72px]', text: 'text-[12px] sm:text-[13px]' }
 }
 
-export function ModuleTile({ to, href, onClick, label, Icon, Art, badge, disabled, note, size = 'md' }) {
+export function ModuleTile({ to, href, onClick, label, Icon, badge, disabled, note, size = 'md' }) {
   const z = SIZES[size]
-  const frame = `group relative flex aspect-square w-full flex-col items-center justify-center overflow-hidden ${z.round} border border-slate-200/80 bg-white text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg hover:shadow-slate-300/50 active:translate-y-0`
-  const body = Art ? (
-    <span className="group relative flex w-full flex-col items-center">
-      <Art className="h-auto w-full transition duration-300 group-hover:-translate-y-1" />
-      <span className="sr-only">{label}</span>
-      {note && <span className="-mt-1 text-[11px] font-semibold text-slate-500">{note}</span>}
-    </span>
-  ) : (
-    <span className={`${frame} ${z.pad}`}>
-      <Icon className={`${z.icon} drop-shadow-sm transition group-hover:scale-105`} />
-      <span className={`whitespace-pre-line text-[15px] font-semibold leading-snug tracking-tight text-slate-800 ${z.text}`}>
-        {label}
+  const body = (
+    <span className={`group flex flex-col items-center ${z.tile}`}>
+      <span className={`relative ${z.icon} transition duration-200 group-hover:-translate-y-1 group-hover:scale-[1.04] group-active:scale-95`}>
+        <Icon className="block h-full w-full" />
+        {href && <IconExternal width={12} height={12} className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-slate-400 shadow" />}
+        {badge}
       </span>
+      <span className={`mt-2 line-clamp-2 h-10 w-full whitespace-pre-line text-center font-semibold leading-tight tracking-tight text-slate-800 ${z.text}`}>{label}</span>
       {note && <span className="-mt-1 text-[11px] font-medium text-slate-400">{note}</span>}
-      {href && <IconExternal width={13} height={13} className="absolute right-2.5 top-2.5 text-slate-300" />}
-      {badge}
     </span>
   )
-  const tileW = Art ? 'sm:w-[270px]' : z.tile
-  const cls = `block ${Art ? 'rounded-2xl' : z.round} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${tileW}`
-  if (disabled) {
+  const cls = 'block select-none rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40'
+  if (disabled)
     return (
-      <div className={`select-none opacity-50 grayscale ${tileW}`} aria-disabled="true">
+      <div className="select-none opacity-45 grayscale" aria-disabled="true">
         {body}
       </div>
     )
-  }
   if (onClick)
     return (
-      <button type="button" onClick={onClick} className={`${cls} text-left`} draggable={false}>
+      <button type="button" onClick={onClick} className={cls} draggable={false}>
         {body}
       </button>
     )
@@ -73,22 +51,40 @@ export function ModuleTile({ to, href, onClick, label, Icon, Art, badge, disable
 }
 
 /**
- * Module area: a neat grid of equal tiles. With `orderKey` a tile can be
- * picked up and dragged: it follows the pointer, the other tiles make room
- * where it would land, and on release it drops into that slot. The order is
- * remembered per user in this browser. Tiles never float freely.
+ * Module area: a neat grid of equal tiles. With `orderKey`, press and hold a
+ * tile (about half a second) and the icons start to wiggle: now any of them
+ * can be dragged to a new place; the others make room and it drops into the
+ * nearest slot. Tap anywhere else (or Done) to stop. The order is remembered
+ * per user in this browser.
  */
+const HOLD_MS = 450
+
 export function TileGrid({ children, orderKey }) {
   const items = Children.toArray(children).filter(Boolean)
   const { user } = useAuth()
   const storageKey = orderKey ? `tiles.order.${orderKey}.${user?.id || 'anon'}` : null
   const [order, setOrder] = useState(() => (storageKey ? readJson(storageKey) : []))
-  const [drag, setDrag] = useState(null) // { id, x, y, w, h, dx, dy, live: [ids] }
+  const [editing, setEditing] = useState(false)
+  const [drag, setDrag] = useState(null) // { id, x, y, w, h, live: [ids] }
   const gridRef = useRef(null)
   const gesture = useRef(null)
+  const hold = useRef(null)
   const suppressClick = useRef(false)
 
   useEffect(() => setOrder(storageKey ? readJson(storageKey) : []), [storageKey])
+
+  // Tap outside the grid (or press Escape) ends the wiggle.
+  useEffect(() => {
+    if (!editing) return
+    const down = (e) => gridRef.current && !gridRef.current.contains(e.target) && setEditing(false)
+    const key = (e) => e.key === 'Escape' && setEditing(false)
+    document.addEventListener('pointerdown', down)
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('pointerdown', down)
+      document.removeEventListener('keydown', key)
+    }
+  }, [editing])
 
   const ids = items.map((c) => String(c.key))
   const baseOrder = [...ids].sort((a, b) => rank(order, ids, a) - rank(order, ids, b))
@@ -104,11 +100,26 @@ export function TileGrid({ children, orderKey }) {
     if (!storageKey || e.button !== 0) return
     const r = e.currentTarget.getBoundingClientRect()
     gesture.current = { id, sx: e.clientX, sy: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height, moved: false, target: e.currentTarget, pointerId: e.pointerId }
+    clearTimeout(hold.current)
+    if (!editing) {
+      hold.current = setTimeout(() => {
+        if (gesture.current?.id === id && !gesture.current.moved) {
+          setEditing(true)
+          suppressClick.current = true
+          navigator.vibrate?.(15)
+        }
+      }, HOLD_MS)
+    }
   }
   function move(e) {
     const g = gesture.current
     if (!g) return
     if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < 6) return
+    if (!editing) {
+      // moved before the hold finished: it is a scroll or a slip, not a drag
+      clearTimeout(hold.current)
+      return
+    }
     if (!g.moved) {
       g.moved = true
       g.target.setPointerCapture?.(g.pointerId)
@@ -124,11 +135,12 @@ export function TileGrid({ children, orderKey }) {
     const live = [...(drag?.live || baseOrder)]
     if (best && best.id !== g.id) {
       live.splice(live.indexOf(g.id), 1)
-      live.splice(live.indexOf(best.id) + (live.indexOf(best.id) < 0 ? 0 : 0), 0, g.id)
+      live.splice(live.indexOf(best.id), 0, g.id)
     }
     setDrag({ id: g.id, x: e.clientX - g.dx, y: e.clientY - g.dy, w: g.w, h: g.h, live })
   }
   function end() {
+    clearTimeout(hold.current)
     const g = gesture.current
     gesture.current = null
     if (g?.moved) {
@@ -140,8 +152,8 @@ export function TileGrid({ children, orderKey }) {
 
   return (
     <div>
-      <div ref={gridRef} className="mx-auto grid max-w-4xl grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-5">
-        {shown.map((id) => {
+      <div ref={gridRef} className="mx-auto grid max-w-4xl grid-cols-3 justify-items-center gap-x-2 gap-y-6 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-x-4 sm:gap-y-8">
+        {shown.map((id, i) => {
           const el = byId[id]
           if (!el) return null
           const lifted = drag?.id === id
@@ -149,13 +161,15 @@ export function TileGrid({ children, orderKey }) {
             <div
               key={id}
               data-tile={id}
-              className={`relative touch-none transition-opacity ${storageKey ? 'cursor-grab active:cursor-grabbing' : ''} ${lifted ? 'opacity-30' : ''}`}
+              className={`relative touch-none transition-opacity ${editing ? 'cursor-grab active:cursor-grabbing tile-wiggle' : ''} ${lifted ? 'opacity-30' : ''}`}
+              style={editing ? { animationDelay: `${(i % 4) * -0.12}s` } : undefined}
               onPointerDown={(e) => start(e, id)}
               onPointerMove={move}
               onPointerUp={end}
               onPointerCancel={end}
+              onContextMenu={(e) => storageKey && e.preventDefault()}
               onClickCapture={(e) => {
-                if (suppressClick.current) {
+                if (suppressClick.current || editing) {
                   e.preventDefault()
                   e.stopPropagation()
                   suppressClick.current = false
@@ -163,35 +177,24 @@ export function TileGrid({ children, orderKey }) {
               }}
             >
               {el}
-              {storageKey && <Grip />}
             </div>
           )
         })}
       </div>
+      {editing && (
+        <div className="mt-6 flex justify-center">
+          <button type="button" onClick={() => setEditing(false)} className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-lg">
+            Done
+          </button>
+        </div>
+      )}
       {/* The lifted tile follows the pointer */}
       {drag && (
-        <div
-          className="pointer-events-none fixed z-50 rotate-2 scale-105 drop-shadow-2xl"
-          style={{ left: drag.x, top: drag.y, width: drag.w, height: drag.h }}
-        >
+        <div className="pointer-events-none fixed z-50 scale-110 drop-shadow-2xl" style={{ left: drag.x, top: drag.y, width: drag.w, height: drag.h }}>
           {byId[drag.id]}
         </div>
       )}
     </div>
-  )
-}
-
-// Small drag handle in the corner of a tile: shows it can be moved.
-function Grip() {
-  return (
-    <svg viewBox="0 0 10 16" className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-2.5 text-slate-300" fill="currentColor" aria-hidden="true">
-      <circle cx="2.5" cy="2.5" r="1.5" />
-      <circle cx="7.5" cy="2.5" r="1.5" />
-      <circle cx="2.5" cy="8" r="1.5" />
-      <circle cx="7.5" cy="8" r="1.5" />
-      <circle cx="2.5" cy="13.5" r="1.5" />
-      <circle cx="7.5" cy="13.5" r="1.5" />
-    </svg>
   )
 }
 
