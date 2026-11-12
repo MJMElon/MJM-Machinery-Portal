@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner } from '../../components/ui.jsx'
 import { listPortalPeople, userLabel } from '../../lib/cmms.js'
@@ -17,13 +17,14 @@ export default function UserAccessEdit() {
   const { current } = useCompany()
   const { user: me, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [people, setPeople] = useState([])
   const [perms, setPerms] = useState(null)
   const [saved, setSaved] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const person = people.find((p) => p.user_id === userId) || (userId === me.id ? { user_id: me.id, email: me.email, full_name: me.fullName } : null)
-  const readOnly = !isSuperAdmin || person?.is_super_admin
+  const readOnly = !isSuperAdmin || person?.is_super_admin || params.get('view') === '1'
 
   const load = useCallback(async () => {
     if (!current) return
@@ -98,9 +99,9 @@ export default function UserAccessEdit() {
     <div className="space-y-5">
       <PageHeader
         backTo="/settings/users"
-        backLabel="Back to Role setup"
-        title={person ? userLabel(person) : 'Role setup'}
-        subtitle={[person?.email, `role in ${current.name}`, readOnly ? 'view only' : null].filter(Boolean).join(' · ')}
+        backLabel="Back to CMMS 2 user access"
+        title={person ? userLabel(person) : 'User access'}
+        subtitle={person?.email}
         right={
           !readOnly && (
             <div className="flex items-center gap-3">
@@ -150,7 +151,20 @@ export default function UserAccessEdit() {
                   <Card key={page.section} className={`p-4 ${pageOn ? '' : 'opacity-80'}`}>
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-slate-800">{page.label}</p>
-                      <Badge color={pageOn ? 'green' : 'slate'}>{pageOn ? 'Can see' : 'Hidden'}</Badge>
+                      <div className="flex items-center gap-3">
+                        {!readOnly && (
+                          <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-[#2563eb]"
+                              checked={page.options.every((opt) => optOn(page.section, opt))}
+                              onChange={(e) => page.options.forEach((opt) => setOpt(page.section, opt, e.target.checked))}
+                            />
+                            Tick all
+                          </label>
+                        )}
+                        <Badge color={pageOn ? 'green' : 'slate'}>{pageOn ? 'Can see' : 'Hidden'}</Badge>
+                      </div>
                     </div>
                     <div className="mt-3 space-y-2">
                       {page.options.map((opt) => {

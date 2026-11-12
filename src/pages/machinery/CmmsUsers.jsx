@@ -1,28 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Badge, Button, Card, Spinner, TextInput } from '../../components/ui.jsx'
-import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { addPortalUser, listPortalUsers, removePortalUser, setUserName } from '../../lib/cmms.js'
-import { MODULES, listCompanyPerms, removePerms, summarize } from '../../lib/perms.js'
+import { Badge, Card, Spinner } from '../../components/ui.jsx'
+import { IconEye, IconPencil } from '../../components/icons.jsx'
+import { listPortalUsers } from '../../lib/cmms.js'
+import { listCompanyPerms } from '../../lib/perms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
-// Role setup (CMMS main page → Settings): the people with access to CMMS 2 /
-// Fuel Manage (from MJM Intranet) or with a role in the selected company.
-// Edit opens the role screen (module → pages → options, approver names).
-// Super admins manage it; everyone else sees their own role (View).
+// CMMS 2 user access (main page → User Access): everyone given the CMMS 2 or
+// Fuel Claims icon in MJM Intranet, or a role in the selected company.
+// View / Edit open the per-user screen (module → pages → options, approvers).
+// Super admins manage it; everyone else sees their own access.
 export default function CmmsUsers() {
   const { isSuperAdmin, user } = useAuth()
   const { current } = useCompany()
-  const navigate = useNavigate()
   const [users, setUsers] = useState([])
   const [perms, setPerms] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [email, setEmail] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [showAll, setShowAll] = useState(false)
 
   const load = useCallback(async () => {
     if (!current) return
@@ -43,25 +39,10 @@ export default function CmmsUsers() {
     load()
   }, [load])
 
-  async function run(fn) {
-    setBusy(true)
-    setError('')
-    try {
-      const r = await fn()
-      await load()
-      return r ?? true
-    } catch (e) {
-      setError(e.message || 'Could not save.')
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-
   if (!isSuperAdmin) {
     return (
       <div className="space-y-4">
-        <PageHeader backTo="/settings" backLabel="Back to Settings" title="Role setup" subtitle={`${current?.name || ''} · your role`} />
+        <PageHeader backTo="/" backLabel="Back to CMMS main page" title="CMMS 2 user access" />
         <Card className="max-w-xl p-5">
           <p className="text-sm text-slate-600">
             Your access in <span className="font-semibold">{current?.name}</span> is set by a super admin.
@@ -74,183 +55,63 @@ export default function CmmsUsers() {
     )
   }
 
-  const withAccess = users.filter((u) => u.is_super_admin || u.intranet_cmms || u.intranet_fuel || Object.keys(perms[u.user_id] || {}).length)
-  const rows = showAll ? users : withAccess
+  // Everyone given CMMS 2 / Fuel Claims access in MJM Intranet, or with a role here.
+  const rows = users.filter((u) => u.is_super_admin || u.intranet_cmms || u.intranet_fuel || Object.keys(perms[u.user_id] || {}).length)
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        backTo="/settings"
-        backLabel="Back to Settings"
-        title="Role setup"
-        subtitle={`${current?.name || ''} · ${withAccess.length} user${withAccess.length === 1 ? '' : 's'}`}
-        right={
-          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" className="h-4 w-4 accent-[#2563eb]" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-            Show every portal user
-          </label>
-        }
-      />
+      <PageHeader backTo="/" backLabel="Back to CMMS main page" title="CMMS 2 user access" />
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
       <Card className="overflow-hidden">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            if (!email.trim()) return
-            const ok = await run(() => addPortalUser(email))
-            if (ok) {
-              setEmail('')
-              const u = (await listPortalUsers()).find((x) => (x.email || '').toLowerCase() === email.trim().toLowerCase())
-              if (u) navigate(`/settings/users/${u.user_id}`)
-            }
-          }}
-          className="flex flex-col gap-3 border-b border-slate-200 bg-brand-light/30 px-5 py-4 sm:flex-row sm:items-end"
-        >
-          <label className="flex-1">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Add a user by login e-mail (people given access in MJM Intranet appear here on their own)</span>
-            <TextInput
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.com (an MJM Intranet login)"
-            />
-          </label>
-          <Button type="submit" disabled={busy || !email.trim()}>
-            <IconPlus width={18} height={18} /> Add & set role
-          </Button>
-        </form>
-
         {loading ? (
           <div className="flex justify-center py-12 text-brand">
             <Spinner className="h-7 w-7" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-400">
-            Nobody yet. Give people access to the CMMS 2 / Fuel Manage icon in MJM Intranet (they appear here after the next sync), or add a user above.
-          </p>
+          <p className="px-5 py-10 text-center text-sm text-slate-400">Nobody yet. Give people the CMMS 2 or Fuel Claims icon in MJM Intranet; they appear here after they sign in or after Sync.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-2.5">User</th>
-                  <th className="px-3 py-2.5">Name</th>
-                  <th className="px-3 py-2.5">Intranet access</th>
-                  <th className="px-3 py-2.5">Role in {current?.name}</th>
-                  <th className="w-40 px-3 py-2.5 text-center">Action</th>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-5 py-2.5">User name</th>
+                <th className="px-3 py-2.5">User email</th>
+                <th className="w-32 px-3 py-2.5 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((u) => (
+                <tr key={u.user_id} className="hover:bg-slate-50/60">
+                  <td className="px-5 py-3">
+                    <span className="font-medium text-slate-800">{u.full_name || '—'}</span>
+                    {u.is_super_admin && (
+                      <Badge color="blue" className="ml-2">
+                        Super admin
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">{u.email}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-center gap-0.5">
+                      <Link to={`/settings/users/${u.user_id}?view=1`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand" title="View" aria-label="View">
+                        <IconEye width={18} height={18} />
+                      </Link>
+                      {!u.is_super_admin ? (
+                        <Link to={`/settings/users/${u.user_id}`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand" title="Edit" aria-label="Edit">
+                          <IconPencil width={18} height={18} />
+                        </Link>
+                      ) : (
+                        <span className="h-9 w-9" />
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((u) => {
-                  const p = perms[u.user_id] || {}
-                  const summary = summarize(p)
-                  return (
-                    <tr key={u.user_id} className="hover:bg-slate-50/60">
-                      <td className="px-5 py-3">
-                        <span className="font-medium text-slate-800">{u.email || u.user_id}</span>
-                        {u.is_super_admin && (
-                          <Badge color="blue" className="ml-2">
-                            Super admin
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <NameCell user={u} disabled={busy} onSave={(name) => run(() => setUserName(u.user_id, name))} />
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {u.intranet_cmms && <Badge color="amber">CMMS 2</Badge>}
-                          {u.intranet_fuel && <Badge color="green">Fuel Manage</Badge>}
-                          {!u.intranet_cmms && !u.intranet_fuel && <span className="text-xs text-slate-400">—</span>}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">
-                        {u.is_super_admin ? (
-                          <span className="text-slate-400">Everything</span>
-                        ) : summary ? (
-                          <div className="flex flex-wrap gap-1">
-                            {MODULES.map((m) => {
-                              const n = m.sections.filter((s) => (p[s.key] || []).length > 0)
-                              return n.length ? (
-                                <Badge key={m.key} color={m.key === 'fuel' ? 'green' : 'amber'}>
-                                  {m.label}: {n.map((s) => s.label).join(', ')}
-                                </Badge>
-                              ) : null
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">No role yet — press Edit</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center justify-center gap-0.5">
-                          <Link
-                            to={`/settings/users/${u.user_id}`}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand"
-                            title={u.is_super_admin ? 'View' : 'Edit role'}
-                          >
-                            {u.is_super_admin ? <IconEye width={18} height={18} /> : <IconPencil width={18} height={18} />}
-                          </Link>
-                          {!u.is_super_admin && summary && (
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                window.confirm(`Remove the role of ${u.email} in ${current.name}?`) &&
-                                run(() => removePerms(current.id, u.user_id))
-                              }
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                              title="Remove role in this company"
-                            >
-                              <IconTrash width={18} height={18} />
-                            </button>
-                          )}
-                          {u.user_id !== user.id && !u.is_super_admin && showAll && !summary && (
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                window.confirm(`Remove ${u.email} from the portal entirely?`) && run(() => removePortalUser(u.user_id))
-                              }
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                              title="Remove from the portal"
-                            >
-                              <IconTrash width={18} height={18} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
-      <p className="text-xs text-slate-500">
-        Roles are per company: switch company (top left) to set them for another company. Who may use CMMS 2 / Fuel Manage
-        at all is decided in MJM Intranet (Module access); their names appear here after the next sign-in or sync, and the
-        role is set here.
-      </p>
     </div>
   )
 }
 
-// Display name, saved when you leave the field (Enter also saves).
-function NameCell({ user, disabled, onSave }) {
-  const [value, setValue] = useState(user.full_name || '')
-  useEffect(() => setValue(user.full_name || ''), [user.full_name])
-  const dirty = value.trim() !== (user.full_name || '')
-  return (
-    <TextInput
-      value={value}
-      disabled={disabled}
-      placeholder="Full name"
-      aria-label={`Name of ${user.email}`}
-      className="h-10 min-w-[160px] rounded-lg border-transparent bg-transparent px-2 hover:border-slate-200 focus:bg-white"
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => dirty && onSave(value)}
-      onKeyDown={(e) => e.key === 'Enter' && dirty && e.currentTarget.blur()}
-    />
-  )
-}

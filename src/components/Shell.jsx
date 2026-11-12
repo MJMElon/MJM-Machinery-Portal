@@ -54,6 +54,7 @@ function pageTitle(path) {
   if (path.startsWith('/diesel/report')) return 'Fuel Usage Report'
   if (path.startsWith('/diesel/users')) return 'User setting'
   if (path.startsWith('/diesel')) return 'Fuel Manage'
+  if (path.startsWith('/settings/users')) return 'CMMS 2 user access'
   if (path.startsWith('/settings')) return 'Settings'
   if (path.startsWith('/renewal')) return 'Machinery Renewal'
   return ''
