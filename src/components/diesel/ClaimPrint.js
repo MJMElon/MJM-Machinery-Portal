@@ -1,5 +1,5 @@
 import { receiptUrl, vehicleLabel } from '../../lib/diesel.js'
-import { day, num } from '../../lib/format.js'
+import { day } from '../../lib/format.js'
 
 // The fuel claim form printout.
 //
@@ -156,7 +156,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, claimantName, i
   </table>
   <table class="sum"><tr><td>
     <div class="box"><table>
-      <tr><td>TOTAL PAYABLE (RM)</td><td class="r">${esc(num(total, 2))}</td></tr>
+      <tr><td>TOTAL PAYABLE (RM)</td><td class="r">${total.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
     </table></div>
   </td></tr></table>
   ${claim.notes ? `<div class="notes">Notes: ${esc(claim.notes)}</div>` : ''}

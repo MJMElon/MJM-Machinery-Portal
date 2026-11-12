@@ -54,7 +54,7 @@ export function ModuleTile({ to, href, onClick, label, Icon, badge, disabled, no
  * Module area: a neat grid of equal tiles. With `orderKey`, press and hold a
  * tile (about half a second) and the icons start to wiggle: now any of them
  * can be dragged to a new place; the others make room and it drops into the
- * nearest slot. Tap anywhere else (or Done) to stop. The order is remembered
+ * nearest slot. Tap anywhere to stop. The order is remembered
  * per user in this browser.
  */
 const HOLD_MS = 450
@@ -73,7 +73,7 @@ export function TileGrid({ children, orderKey }) {
 
   useEffect(() => setOrder(storageKey ? readJson(storageKey) : []), [storageKey])
 
-  // Tap outside the grid (or press Escape) ends the wiggle.
+  // Tap anywhere (or press Escape) ends the wiggle; a tap on a tile is handled in end().
   useEffect(() => {
     if (!editing) return
     const down = (e) => gridRef.current && !gridRef.current.contains(e.target) && setEditing(false)
@@ -146,6 +146,10 @@ export function TileGrid({ children, orderKey }) {
     if (g?.moved) {
       suppressClick.current = true
       if (drag?.live) commit(drag.live)
+    } else if (g && editing && !suppressClick.current) {
+      // A plain tap on a tile while they shake: stop the shaking (and do not open it).
+      suppressClick.current = true
+      setEditing(false)
     }
     setDrag(null)
   }
@@ -181,13 +185,6 @@ export function TileGrid({ children, orderKey }) {
           )
         })}
       </div>
-      {editing && (
-        <div className="mt-6 flex justify-center">
-          <button type="button" onClick={() => setEditing(false)} className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-lg">
-            Done
-          </button>
-        </div>
-      )}
       {/* The lifted tile follows the pointer */}
       {drag && (
         <div className="pointer-events-none fixed z-50 scale-110 drop-shadow-2xl" style={{ left: drag.x, top: drag.y, width: drag.w, height: drag.h }}>

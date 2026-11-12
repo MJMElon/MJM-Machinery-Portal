@@ -13,7 +13,7 @@ function Tile({ id, label, children }) {
       </defs>
       <rect x="2" y="2" width="60" height="60" rx="11" fill={`url(#${id}-body)`} stroke="#cbd5e1" strokeWidth="1" />
       {/* the symbol, drawn on a 64 grid and shown a little smaller */}
-      <g transform="translate(32 32) scale(0.74) translate(-32 -32)" fill="none" stroke="#334155" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <g transform="translate(32 32) scale(0.66) translate(-32 -32)" fill="none" stroke="#334155" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
         {children}
       </g>
     </svg>
