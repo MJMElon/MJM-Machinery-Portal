@@ -34,6 +34,7 @@ const EMPTY = {
   model: '',
   reg_no: '',
   is_active: true,
+  insurance_only: false,
   serial_no: '',
   chassis_no: '',
   engine_no: '',
@@ -61,6 +62,9 @@ const EMPTY = {
   general_use: false,
   driver_ids: []
 }
+// Active / Inactive / Insurance only (HQ cars etc.: no SMU or repairs recorded, we only help renew insurance).
+const statusKey = (f) => (f.insurance_only ? 'insurance' : f.is_active === false ? 'inactive' : 'active')
+const statusLabel = (f) => ({ active: 'Active', inactive: 'Inactive', insurance: 'Insurance only' })[statusKey(f)]
 const NUMBER_FIELDS = ['market_value', 'ideal_fuel_consumption', 'possible_working_units', 'year_made', 'purchase_price', 'tank_capacity_l']
 const DATE_FIELDS = ['purchase_date', 'insurance_from', 'insurance_to', 'road_tax_from', 'road_tax_to', 'puspakom_from', 'puspakom_to']
 const TEXT_FIELDS = ['name', 'machine_type', 'brand', 'model', 'reg_no', 'serial_no', 'chassis_no', 'engine_no', 'service_unit', 'acc_code', 'notes', 'reg_card_path', 'resolution_path']
@@ -97,6 +101,7 @@ export default function MachinePage({ mode }) {
         const f = { ...EMPTY }
         for (const k of Object.keys(EMPTY)) if (m[k] != null) f[k] = m[k]
         f.is_active = m.is_active !== false
+        f.insurance_only = Boolean(m.insurance_only)
         f.driver_ids = m.driver_ids?.length ? m.driver_ids : m.driver_id ? [m.driver_id] : []
         f.photos = m.photos || []
         setForm(f)
@@ -163,6 +168,7 @@ export default function MachinePage({ mode }) {
       for (const k of NUMBER_FIELDS) row[k] = form[k] === '' || form[k] == null ? null : Number(form[k])
       for (const k of DATE_FIELDS) row[k] = form[k] || null
       row.is_active = form.is_active !== false && form.is_active !== 'false'
+      row.insurance_only = Boolean(form.insurance_only)
       row.fuel_type = form.fuel_type || 'diesel'
       row.kpdn_subsidy = Boolean(form.kpdn_subsidy)
       row.general_use = Boolean(form.general_use)
@@ -213,7 +219,7 @@ export default function MachinePage({ mode }) {
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
             {title}
-            {ro && <Badge color={form.is_active ? 'green' : 'slate'}>{form.is_active ? 'Active' : 'Inactive'}</Badge>}
+            {ro && <Badge color={form.insurance_only ? 'blue' : form.is_active ? 'green' : 'slate'}>{statusLabel(form)}</Badge>}
             {ro && form.general_use && <Badge color="blue">General-use car</Badge>}
           </span>
         }
@@ -255,7 +261,15 @@ export default function MachinePage({ mode }) {
             <Row ro={ro} label="Brand" value={form.brand} onChange={set('brand')} placeholder="Toyota" />
             <Row ro={ro} label="Model" value={form.model} onChange={set('model')} placeholder="Hilux 2 cabs" />
             <Row ro={ro} label="Registration no." value={form.reg_no} onChange={set('reg_no')} placeholder="VNL 1234" />
-            <Row ro={ro} label="Status" type="select" value={form.is_active ? 'true' : 'false'} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value === 'true' }))} options={[['true', 'Active'], ['false', 'Inactive']]} show={form.is_active ? 'Active' : 'Inactive'} />
+            <Row
+              ro={ro}
+              label="Status"
+              type="select"
+              value={statusKey(form)}
+              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value !== 'inactive', insurance_only: e.target.value === 'insurance' }))}
+              options={[['active', 'Active'], ['inactive', 'Inactive'], ['insurance', 'Insurance only (e.g. HQ car)']]}
+              show={statusLabel(form)}
+            />
             <Row ro={ro} label="Serial no." value={form.serial_no} onChange={set('serial_no')} />
             <Row ro={ro} label="Chassis no." value={form.chassis_no} onChange={set('chassis_no')} />
             <Row ro={ro} label="Engine no." value={form.engine_no} onChange={set('engine_no')} />
