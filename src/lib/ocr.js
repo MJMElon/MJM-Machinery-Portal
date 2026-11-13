@@ -139,51 +139,200 @@ export async function readReceiptText(file) {
 }
 
 // ---- pump / flow meter photo → litres ------------------------------------------
-// A second reader that only knows digits, so a meter face is not read as letters.
+// Mechanical fuel meters (PIUSI K33 / K44 and the like) show the litres on
+// white number wheels in a black window on a light face plate. The window is
+// found first (a wide dark box with light around it), then only that strip is
+// read. Reading the whole photo does not work: the digits are a small part of it.
+
+/** Grey copy of an image, at most `max` px on the long side: { w, h, g: Uint8Array, scale }. */
+function greyOf(source, max) {
+  const sw = source.width
+  const sh = source.height
+  const scale = Math.min(1, max / Math.max(sw, sh))
+  const w = Math.max(1, Math.round(sw * scale))
+  const h = Math.max(1, Math.round(sh * scale))
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(source, 0, 0, w, h)
+  const d = ctx.getImageData(0, 0, w, h).data
+  const g = new Uint8Array(w * h)
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8
+  return { w, h, g, scale }
+}
+
+/** Otsu's threshold of a grey image (splits dark from light). */
+function otsu(g) {
+  const hist = new Array(256).fill(0)
+  for (let i = 0; i < g.length; i++) hist[g[i]]++
+  let sum = 0
+  for (let i = 0; i < 256; i++) sum += i * hist[i]
+  let sumB = 0
+  let wB = 0
+  let best = 0
+  let t = 127
+  for (let i = 0; i < 256; i++) {
+    wB += hist[i]
+    if (!wB) continue
+    const wF = g.length - wB
+    if (!wF) break
+    sumB += i * hist[i]
+    const mB = sumB / wB
+    const mF = (sum - sumB) / wF
+    const v = wB * wF * (mB - mF) * (mB - mF)
+    if (v > best) {
+      best = v
+      t = i
+    }
+  }
+  return t
+}
+
+/**
+ * Candidate display windows in a photo: dark, wide boxes with light around
+ * them, biggest first. Boxes are in the source image's own pixels.
+ */
+export function findMeterWindows(source) {
+  const { w, h, g, scale } = greyOf(source, 480)
+  const out = []
+  const seen = new Set()
+  // Two cuts between dark and light: photos in shade and in sun differ a lot.
+  const t0 = otsu(g)
+  for (const t of [t0, Math.round(t0 * 0.7)]) {
+    const label = new Int32Array(w * h)
+    const stack = []
+    let next = 0
+    for (let start = 0; start < w * h; start++) {
+      if (g[start] >= t || label[start]) continue
+      next++
+      let x0 = w, x1 = 0, y0 = h, y1 = 0, area = 0
+      stack.push(start)
+      label[start] = next
+      while (stack.length) {
+        const p = stack.pop()
+        const x = p % w
+        const y = (p - x) / w
+        area++
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+        if (x > 0 && !label[p - 1] && g[p - 1] < t) { label[p - 1] = next; stack.push(p - 1) }
+        if (x < w - 1 && !label[p + 1] && g[p + 1] < t) { label[p + 1] = next; stack.push(p + 1) }
+        if (y > 0 && !label[p - w] && g[p - w] < t) { label[p - w] = next; stack.push(p - w) }
+        if (y < h - 1 && !label[p + w] && g[p + w] < t) { label[p + w] = next; stack.push(p + w) }
+      }
+      const bw = x1 - x0 + 1
+      const bh = y1 - y0 + 1
+      if (bw < w * 0.1 || bh < 8 || bw / bh < 1.8 || bw / bh > 9) continue
+      if (x0 <= 1 || y0 <= 1 || x1 >= w - 2 || y1 >= h - 2) continue
+      // Mostly dark, but not solid: the white digits are inside it.
+      const fill = area / (bw * bh)
+      if (fill < 0.15 || fill > 0.97) continue
+      // Light all round (the face plate).
+      const m = Math.max(2, Math.round(bh * 0.2))
+      let light = 0
+      let n = 0
+      for (let x = Math.max(0, x0 - m); x <= Math.min(w - 1, x1 + m); x++) {
+        for (const y of [y0 - m, y1 + m]) if (y >= 0 && y < h) { n++; if (g[y * w + x] >= t) light++ }
+      }
+      for (let y = y0; y <= y1; y++) {
+        for (const x of [x0 - m, x1 + m]) if (x >= 0 && x < w) { n++; if (g[y * w + x] >= t) light++ }
+      }
+      if (!n || light / n < 0.7) continue
+      const key = `${Math.round(x0 / 8)}-${Math.round(y0 / 8)}-${Math.round(bw / 8)}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ x: x0 / scale, y: y0 / scale, w: bw / scale, h: bh / scale, area: bw * bh })
+    }
+  }
+  return out.sort((a, b) => b.area - a.area).slice(0, 4)
+}
+
+/**
+ * One window cut out of the photo for reading: dark digits on white, about
+ * `height` px tall. `trim` drops that share of the width at each end (the
+ * stripes and the model name beside the wheels).
+ */
+function windowCanvas(source, box, { trim = 0, height = 110 } = {}) {
+  const x = box.x + box.w * trim
+  const w = box.w * (1 - 2 * trim)
+  const scale = Math.min(6, height / box.h)
+  const c = document.createElement('canvas')
+  c.width = Math.round(w * scale)
+  c.height = Math.round(box.h * scale)
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(source, x, box.y, w, box.h, 0, 0, c.width, c.height)
+  const img = ctx.getImageData(0, 0, c.width, c.height)
+  const d = img.data
+  const g = new Uint8Array(c.width * c.height)
+  let min = 255
+  let max = 0
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    const v = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8
+    g[j] = v
+    if (v < min) min = v
+    if (v > max) max = v
+  }
+  const range = Math.max(1, max - min)
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    const v = 255 - ((g[j] - min) / range) * 255
+    d[i] = d[i + 1] = d[i + 2] = v
+  }
+  ctx.putImageData(img, 0, 0)
+  return c
+}
+
+// The same window is read four ways; a number counts when two readings agree.
+const WINDOW_READS = [{}, { trim: 0.1 }, { trim: 0.05, height: 80 }, { trim: 0.12, height: 150 }]
+
+/** Digits of one reading: 3 to 5 of them (the number wheels), else ''. */
+export function meterDigits(text) {
+  const raw = String(text || '').replace(/\D/g, '')
+  return raw.length >= 3 && raw.length <= 5 ? raw : ''
+}
+
+/** The value most readings agree on (at least two), as whole litres; null when they do not. */
+export function agreeOn(readings) {
+  const count = new Map()
+  for (const r of readings) if (r) count.set(r, (count.get(r) || 0) + 1)
+  let best = null
+  for (const [raw, n] of count) if (n >= 2 && (!best || n > best.n || (n === best.n && raw.length > best.raw.length))) best = { raw, n }
+  return best && Number(best.raw) > 0 ? Number(best.raw) : null
+}
+
+/** Litres on a meter photo, given `recognize(canvas) → text`. Null when not sure. */
+export async function readMeterWith(source, recognize) {
+  for (const box of findMeterWindows(source)) {
+    const readings = []
+    for (const opt of WINDOW_READS) readings.push(meterDigits(await recognize(windowCanvas(source, box, opt))))
+    const litres = agreeOn(readings)
+    if (litres != null) return litres
+  }
+  return null
+}
+
+// A second reader that only knows digits and takes each window as one word.
 let digitWorker = null
 async function getDigitWorker() {
   const T = await loadTesseract()
   if (!digitWorker) {
     digitWorker = await T.createWorker('eng')
-    await digitWorker.setParameters({ tessedit_char_whitelist: '0123456789.,', tessedit_pageseg_mode: '11' })
+    await digitWorker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '8' })
   }
   return digitWorker
 }
 
-/**
- * Picks the meter figure out of what was read: the number drawn biggest on the
- * photo (the display), between 0 and 9999 litres. `words` = [{ text, height, confidence }].
- * Returns a number or null.
- */
-export function pickMeterReading(words) {
-  let best = null
-  for (const w of words || []) {
-    const raw = String(w.text || '').replace(/,/g, '.').replace(/^[.]+|[.]+$/g, '')
-    if (!/^\d{1,5}(\.\d{1,3})?$/.test(raw)) continue
-    const value = Number(raw)
-    if (!(value > 0 && value < 10000)) continue
-    if ((w.confidence ?? 100) < 30) continue
-    const score = (w.height || 1) * (raw.replace('.', '').length >= 2 ? 1 : 0.5)
-    if (!best || score > best.score) best = { value, score }
-  }
-  return best ? best.value : null
-}
-
-/** Reads the litres shown on a meter photo. Returns { litres } (null when unsure) or { error }. */
+/** Reads the litres shown on a meter photo. Returns { litres } (null when unsure) or { litres: null, error }. */
 export async function readMeterPhoto(file) {
   try {
-    let source = file
-    try {
-      source = await prepare(file)
-    } catch {
-      // let the reader try the raw file
-    }
+    const source = await createImageBitmap(file)
     const w = await getDigitWorker()
-    const { data } = await w.recognize(source)
-    const words = (data?.words || []).map((x) => ({ text: x.text, height: x.bbox ? x.bbox.y1 - x.bbox.y0 : 1, confidence: x.confidence }))
-    // No word boxes (other reader versions): fall back to the plain text.
-    const fromText = (data?.text || '').split(/\s+/).map((text) => ({ text, height: 1, confidence: 100 }))
-    return { litres: pickMeterReading(words.length ? words : fromText) }
+    const litres = await readMeterWith(source, async (canvas) => (await w.recognize(canvas)).data?.text || '')
+    console.info('[meter scan]', litres)
+    return { litres }
   } catch (e) {
     console.error('[meter scan] failed', e)
     return { litres: null, error: e?.message || 'Could not read the photo.' }
