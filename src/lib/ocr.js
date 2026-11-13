@@ -226,19 +226,17 @@ export function findMeterWindows(source) {
       const bw = x1 - x0 + 1
       const bh = y1 - y0 + 1
       if (bw < w * 0.1 || bh < 8 || bw / bh < 1.8 || bw / bh > 9) continue
-      if (x0 <= 1 || y0 <= 1 || x1 >= w - 2 || y1 >= h - 2) continue
+      // A close-up may cut the window off at the sides, never at the top or bottom.
+      if (y0 <= 1 || y1 >= h - 2 || bh > h * 0.35) continue
       // Mostly dark, but not solid: the white digits are inside it.
       const fill = area / (bw * bh)
       if (fill < 0.15 || fill > 0.97) continue
-      // Light all round (the face plate).
+      // Light above and below (the face plate).
       const m = Math.max(2, Math.round(bh * 0.2))
       let light = 0
       let n = 0
       for (let x = Math.max(0, x0 - m); x <= Math.min(w - 1, x1 + m); x++) {
         for (const y of [y0 - m, y1 + m]) if (y >= 0 && y < h) { n++; if (g[y * w + x] >= t) light++ }
-      }
-      for (let y = y0; y <= y1; y++) {
-        for (const x of [x0 - m, x1 + m]) if (x >= 0 && x < w) { n++; if (g[y * w + x] >= t) light++ }
       }
       if (!n || light / n < 0.7) continue
       const key = `${Math.round(x0 / 8)}-${Math.round(y0 / 8)}-${Math.round(bw / 8)}`
@@ -252,12 +250,11 @@ export function findMeterWindows(source) {
 
 /**
  * One window cut out of the photo for reading: dark digits on white, about
- * `height` px tall. `trim` drops that share of the width at each end (the
- * stripes and the model name beside the wheels).
+ * `height` px tall.
  */
-function windowCanvas(source, box, { trim = 0, height = 110 } = {}) {
-  const x = box.x + box.w * trim
-  const w = box.w * (1 - 2 * trim)
+function windowCanvas(source, box, { height = 110 } = {}) {
+  const x = box.x
+  const w = box.w
   const scale = Math.min(6, height / box.h)
   const c = document.createElement('canvas')
   c.width = Math.round(w * scale)
@@ -285,31 +282,107 @@ function windowCanvas(source, box, { trim = 0, height = 110 } = {}) {
   return c
 }
 
-// The same window is read four ways; a number counts when two readings agree.
-const WINDOW_READS = [{}, { trim: 0.1 }, { trim: 0.05, height: 80 }, { trim: 0.12, height: 150 }]
-
-/** Digits of one reading: 3 to 5 of them (the number wheels), else ''. */
-export function meterDigits(text) {
-  const raw = String(text || '').replace(/\D/g, '')
-  return raw.length >= 3 && raw.length <= 5 ? raw : ''
+/**
+ * The number wheels of a window (as made by windowCanvas: dark digits on
+ * light), redrawn alone on a clean white line: the frame, the tick marks, the
+ * stripes and the model name are left out. Returns { canvas, count } or null
+ * when there are not 3 to 5 digit shapes in a row.
+ */
+function digitLine(win, deep = false) {
+  const w = win.width
+  const h = win.height
+  const ctx = win.getContext('2d', { willReadFrequently: true })
+  const d = ctx.getImageData(0, 0, w, h).data
+  const g = new Uint8Array(w * h)
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = d[i]
+  // The cut between digit and background. `deep` cuts a second time inside the
+  // dark part, for wheels that are themselves grey (digit < wheel < surround).
+  let t = otsu(g)
+  if (deep) t = otsu(g.filter((v) => v < t))
+  const label = new Int32Array(w * h)
+  const stack = []
+  const blobs = []
+  let next = 0
+  for (let start = 0; start < w * h; start++) {
+    if (g[start] >= t || label[start]) continue
+    next++
+    let x0 = w, x1 = 0, y0 = h, y1 = 0
+    const pix = []
+    stack.push(start)
+    label[start] = next
+    while (stack.length) {
+      const p = stack.pop()
+      const x = p % w
+      const y = (p - x) / w
+      pix.push(p)
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+      if (x > 0 && !label[p - 1] && g[p - 1] < t) { label[p - 1] = next; stack.push(p - 1) }
+      if (x < w - 1 && !label[p + 1] && g[p + 1] < t) { label[p + 1] = next; stack.push(p + 1) }
+      if (y > 0 && !label[p - w] && g[p - w] < t) { label[p - w] = next; stack.push(p - w) }
+      if (y < h - 1 && !label[p + w] && g[p + w] < t) { label[p + w] = next; stack.push(p + w) }
+    }
+    const bw = x1 - x0 + 1
+    const bh = y1 - y0 + 1
+    // A digit: tall, not wider than tall, clear of the window's edge.
+    if (bh < h * 0.35 || bh > h * 0.92 || bw > bh * 1.1 || bw < bh * 0.12) continue
+    if (x0 <= 1 || y0 <= 1 || x1 >= w - 2 || y1 >= h - 2) continue
+    blobs.push({ x0, x1, y0, y1, bw, bh, pix })
+  }
+  if (blobs.length < 3) return null
+  // Keep the shapes that sit on one line and are about as tall as each other.
+  const hs = blobs.map((b) => b.bh).sort((a, b) => a - b)
+  const mh = hs[hs.length >> 1]
+  const cs = blobs.map((b) => (b.y0 + b.y1) / 2).sort((a, b) => a - b)
+  const mc = cs[cs.length >> 1]
+  const row = blobs.filter((b) => b.bh > mh * 0.75 && b.bh < mh * 1.3 && Math.abs((b.y0 + b.y1) / 2 - mc) < mh * 0.3).sort((a, b) => a.x0 - b.x0)
+  if (row.length < 3 || row.length > 5) return null
+  const gap = Math.round(mh * 0.25)
+  const pad = Math.round(mh * 0.5)
+  const c = document.createElement('canvas')
+  c.width = pad * 2 + row.reduce((n, b) => n + b.bw, 0) + gap * (row.length - 1)
+  c.height = pad * 2 + Math.max(...row.map((b) => b.bh))
+  const o = c.getContext('2d')
+  o.fillStyle = '#fff'
+  o.fillRect(0, 0, c.width, c.height)
+  const img = o.getImageData(0, 0, c.width, c.height)
+  let x = pad
+  for (const b of row) {
+    for (const p of b.pix) {
+      const px = (p % w) - b.x0 + x
+      const py = Math.floor(p / w) - b.y0 + pad
+      const k = (py * c.width + px) * 4
+      img.data[k] = img.data[k + 1] = img.data[k + 2] = 0
+    }
+    x += b.bw + gap
+  }
+  o.putImageData(img, 0, 0)
+  return { canvas: c, count: row.length }
 }
 
-/** The value most readings agree on (at least two), as whole litres; null when they do not. */
-export function agreeOn(readings) {
-  const count = new Map()
-  for (const r of readings) if (r) count.set(r, (count.get(r) || 0) + 1)
-  let best = null
-  for (const [raw, n] of count) if (n >= 2 && (!best || n > best.n || (n === best.n && raw.length > best.raw.length))) best = { raw, n }
-  return best && Number(best.raw) > 0 ? Number(best.raw) : null
-}
+/** Only the digits of what was read. */
+const digitsOf = (text) => String(text || '').replace(/\D/g, '')
+
+// A window is cut out at two sizes; each must show the same number of wheels
+// and read to the same digits, one digit per wheel. Anything else: not sure.
+const WINDOW_SIZES = [110, 150]
 
 /** Litres on a meter photo, given `recognize(canvas) → text`. Null when not sure. */
 export async function readMeterWith(source, recognize) {
   for (const box of findMeterWindows(source)) {
-    const readings = []
-    for (const opt of WINDOW_READS) readings.push(meterDigits(await recognize(windowCanvas(source, box, opt))))
-    const litres = agreeOn(readings)
-    if (litres != null) return litres
+    for (const deep of [false, true]) {
+      const reads = []
+      for (const height of WINDOW_SIZES) {
+        const line = digitLine(windowCanvas(source, box, { height }), deep)
+        if (!line) break
+        const raw = digitsOf(await recognize(line.canvas))
+        if (raw.length !== line.count) break
+        reads.push(raw)
+      }
+      if (reads.length === WINDOW_SIZES.length && reads.every((r) => r === reads[0]) && Number(reads[0]) > 0) return Number(reads[0])
+    }
   }
   return null
 }
