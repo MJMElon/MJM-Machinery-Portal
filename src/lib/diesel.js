@@ -368,6 +368,27 @@ export async function deleteFuelRecord(id) {
   if (error) throw friendly(error, RECORDS_SQL)
 }
 
+// Meter photos taken in the mobile view: private bucket, <company>/<user>/<uuid>.jpg
+const RECORD_PHOTOS = 'machinery_fuel_record_photos'
+export async function uploadRecordPhoto(companyId, userId, file) {
+  const upload = await compressReceipt(file)
+  if (!upload.type.startsWith('image/')) throw new Error('Please take a photo.')
+  if (upload.size > 10 * 1024 * 1024) throw new Error('The photo is too big (max 10 MB).')
+  const ext = upload.type === 'image/png' ? 'png' : upload.type === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${companyId}/${userId}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(RECORD_PHOTOS).upload(path, upload, { contentType: upload.type })
+  if (error) throw new Error('Could not upload the photo. Please try again.')
+  return path
+}
+export function removeRecordPhoto(path) {
+  if (path) supabase.storage.from(RECORD_PHOTOS).remove([path]).catch(() => {})
+}
+export async function openRecordPhoto(path) {
+  const { data, error } = await supabase.storage.from(RECORD_PHOTOS).createSignedUrl(path, 60)
+  if (error || !data) throw new Error('Could not open the photo.')
+  window.open(data.signedUrl, '_blank', 'noopener')
+}
+
 /** Meter unit of a machine: hours for machines served per hour, else km. */
 export const meterUnit = (m) => (/hour/i.test(m?.service_unit || '') ? 'h' : 'km')
 

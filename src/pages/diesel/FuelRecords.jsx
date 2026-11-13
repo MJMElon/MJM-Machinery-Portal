@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Navigate, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Modal, Select, TextInput } from '../../components/ui.jsx'
-import { IconDownload, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
+import { IconCamera, IconDownload, IconImage, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, F, Loading, MonthSelect, Stats, inputCls, monthsOf, toNum } from '../../components/diesel/shared.jsx'
-import { deleteFuelRecord, listFuelRecords, listVehicles, meterUnit, saveFuelRecord, vehicleLabel } from '../../lib/diesel.js'
+import { deleteFuelRecord, listFuelRecords, listVehicles, meterUnit, openRecordPhoto, removeRecordPhoto, saveFuelRecord, vehicleLabel } from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
+import { EMBEDDED } from '../../components/Shell.jsx'
 import { day, downloadCsv, num, sum, thisMonth, today } from '../../lib/format.js'
 
 // Fuel Usage Record: fuel issued to each machine from the company's own tank
@@ -15,6 +16,7 @@ import { day, downloadCsv, num, sum, thisMonth, today } from '../../lib/format.j
 // totals by location when the company has locations.
 export default function FuelRecords() {
   const { company, access } = useOutletContext()
+  const navigate = useNavigate()
   const [records, setRecords] = useState([])
   const [machines, setMachines] = useState([])
   const [locations, setLocations] = useState([])
@@ -71,6 +73,10 @@ export default function FuelRecords() {
     .filter((x) => x.count > 0)
 
   const canAdd = access.can('fuel_record', 'add')
+  // Site workers (Add only, no View) get the phone form straight away.
+  if (!access.can('fuel_record', 'view') && canAdd) return <Navigate to="/diesel/records/mobile" replace />
+  // The phone form opens in its own tab from a module window, so it can be bookmarked on a phone.
+  const openMobile = () => (EMBEDDED ? window.open(`${window.location.pathname}${window.location.search}#/diesel/records/mobile`, '_blank') : navigate('/diesel/records/mobile'))
   const canEdit = access.can('fuel_record', 'edit')
   const canDelete = access.can('fuel_record', 'delete')
 
@@ -79,6 +85,7 @@ export default function FuelRecords() {
     setBusyId(r.id)
     try {
       await deleteFuelRecord(r.id)
+      removeRecordPhoto(r.photo_path)
       await load()
     } catch (e) {
       setError(e.message || 'Could not delete.')
@@ -113,6 +120,11 @@ export default function FuelRecords() {
             <Button variant="secondary" onClick={exportCsv} disabled={loading || rows.length === 0}>
               <IconDownload width={18} height={18} /> CSV
             </Button>
+            {canAdd && (
+              <Button variant="secondary" onClick={openMobile} title="Simple phone form for site workers: photo of the meter, machine, litres">
+                <IconCamera width={18} height={18} /> Mobile view
+              </Button>
+            )}
             {canAdd && (
               <Button onClick={() => setEditing({})} disabled={loading}>
                 <IconPlus width={18} height={18} /> New record
@@ -201,7 +213,16 @@ export default function FuelRecords() {
                         {m?.machine_type && <span className="block text-xs text-slate-500">{m.machine_type}</span>}
                       </td>
                       {hasLocations && <td className="px-3 py-3 text-slate-700">{locationName.get(m?.location_id) || '—'}</td>}
-                      <td className="px-3 py-3 text-right font-medium tabular-nums text-slate-800">{num(r.litres, 2)}</td>
+                      <td className="px-3 py-3 text-right font-medium tabular-nums text-slate-800">
+                        <span className="inline-flex items-center justify-end gap-1.5">
+                          {r.photo_path && (
+                            <button onClick={() => openRecordPhoto(r.photo_path).catch((e) => window.alert(e.message))} className="text-slate-400 hover:text-brand" title="Meter photo" aria-label="Open meter photo">
+                              <IconImage width={16} height={16} />
+                            </button>
+                          )}
+                          {num(r.litres, 2)}
+                        </span>
+                      </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">
                         {r.meter_reading == null ? '—' : `${num(r.meter_reading, 1)} ${meterUnit(m)}`}
                       </td>

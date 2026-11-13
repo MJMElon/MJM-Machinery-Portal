@@ -12,7 +12,7 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 export const DIESEL_MODULES = [
   { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
   { to: '/diesel/usage', label: 'Fuel Usage\nReport', Icon: IconFuel, need: (a) => a.can('usage', 'view') || a.can('report', 'view'), hint: 'Dashboards, monthly totals by vehicle and driver, fill-up log' },
-  { to: '/diesel/records', label: 'Fuel Usage\nRecord', Icon: IconFuel, need: (a) => a.can('fuel_record', 'view'), hint: 'Fuel issued to each machine from the company tank, by date and location' },
+  { to: '/diesel/records', label: 'Fuel Usage\nRecord', Icon: IconFuel, need: (a) => a.can('fuel_record', 'view') || a.can('fuel_record', 'add'), hint: 'Fuel issued to each machine from the company tank, by date and location' },
   { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
   { to: '/diesel/users', label: 'Claim approval\nsetting', Icon: IconUsers, need: (a) => a.fuelAdmin, hint: 'Normal user / accountant / admin, and who approves whose fuel claims' }
 ]

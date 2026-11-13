@@ -138,6 +138,58 @@ export async function readReceiptText(file) {
   return data?.text || ''
 }
 
+// ---- pump / flow meter photo → litres ------------------------------------------
+// A second reader that only knows digits, so a meter face is not read as letters.
+let digitWorker = null
+async function getDigitWorker() {
+  const T = await loadTesseract()
+  if (!digitWorker) {
+    digitWorker = await T.createWorker('eng')
+    await digitWorker.setParameters({ tessedit_char_whitelist: '0123456789.,', tessedit_pageseg_mode: '11' })
+  }
+  return digitWorker
+}
+
+/**
+ * Picks the meter figure out of what was read: the number drawn biggest on the
+ * photo (the display), between 0 and 9999 litres. `words` = [{ text, height, confidence }].
+ * Returns a number or null.
+ */
+export function pickMeterReading(words) {
+  let best = null
+  for (const w of words || []) {
+    const raw = String(w.text || '').replace(/,/g, '.').replace(/^[.]+|[.]+$/g, '')
+    if (!/^\d{1,5}(\.\d{1,3})?$/.test(raw)) continue
+    const value = Number(raw)
+    if (!(value > 0 && value < 10000)) continue
+    if ((w.confidence ?? 100) < 30) continue
+    const score = (w.height || 1) * (raw.replace('.', '').length >= 2 ? 1 : 0.5)
+    if (!best || score > best.score) best = { value, score }
+  }
+  return best ? best.value : null
+}
+
+/** Reads the litres shown on a meter photo. Returns { litres } (null when unsure) or { error }. */
+export async function readMeterPhoto(file) {
+  try {
+    let source = file
+    try {
+      source = await prepare(file)
+    } catch {
+      // let the reader try the raw file
+    }
+    const w = await getDigitWorker()
+    const { data } = await w.recognize(source)
+    const words = (data?.words || []).map((x) => ({ text: x.text, height: x.bbox ? x.bbox.y1 - x.bbox.y0 : 1, confidence: x.confidence }))
+    // No word boxes (other reader versions): fall back to the plain text.
+    const fromText = (data?.text || '').split(/\s+/).map((text) => ({ text, height: 1, confidence: 100 }))
+    return { litres: pickMeterReading(words.length ? words : fromText) }
+  } catch (e) {
+    console.error('[meter scan] failed', e)
+    return { litres: null, error: e?.message || 'Could not read the photo.' }
+  }
+}
+
 const num = (s) => Number(String(s).replace(/,/g, ''))
 
 /**
