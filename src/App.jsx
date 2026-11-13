@@ -26,6 +26,7 @@ import ClaimEdit from './pages/diesel/ClaimEdit.jsx'
 import ClaimView from './pages/diesel/ClaimView.jsx'
 import ClaimReview from './pages/diesel/ClaimReview.jsx'
 import DieselUsage from './pages/diesel/DieselUsage.jsx'
+import FuelRecords from './pages/diesel/FuelRecords.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
 import DieselUsers from './pages/diesel/DieselUsers.jsx'
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="claims/:id" element={<ClaimView />} />
             <Route path="claims/:id/edit" element={<ClaimEdit />} />
             <Route path="usage" element={<DieselUsage />} />
+            <Route path="records" element={<FuelRecords />} />
             <Route path="cards" element={<FleetCardManage />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />

@@ -340,6 +340,36 @@ export async function openReceipt(path) {
   window.open(data.signedUrl, '_blank', 'noopener')
 }
 
+// ---- fuel usage records (fuel issued to machines from the company tank) --------
+const FUEL_RECORDS = 'machinery_fuel_records'
+const RECORDS_SQL = { '42P01': 'Database not up to date. Run the SQL migration …fuel_usage_records.sql in Supabase.', PGRST205: 'Database not up to date. Run the SQL migration …fuel_usage_records.sql in Supabase.' }
+
+export async function listFuelRecords(companyId) {
+  const { data, error } = await supabase
+    .from(FUEL_RECORDS)
+    .select('*')
+    .eq('company_id', companyId)
+    .order('record_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(10000)
+  if (error) throw friendly(error, RECORDS_SQL)
+  return data || []
+}
+
+export async function saveFuelRecord(companyId, { id, ...fields }) {
+  const q = id ? supabase.from(FUEL_RECORDS).update(fields).eq('id', id) : supabase.from(FUEL_RECORDS).insert({ company_id: companyId, ...fields })
+  const { error } = await q
+  if (error) throw friendly(error, RECORDS_SQL)
+}
+
+export async function deleteFuelRecord(id) {
+  const { error } = await supabase.from(FUEL_RECORDS).delete().eq('id', id)
+  if (error) throw friendly(error, RECORDS_SQL)
+}
+
+/** Meter unit of a machine: hours for machines served per hour, else km. */
+export const meterUnit = (m) => (/hour/i.test(m?.service_unit || '') ? 'h' : 'km')
+
 // ---- fleet cards ---------------------------------------------------------------
 
 export async function listCardData(companyId, from) {

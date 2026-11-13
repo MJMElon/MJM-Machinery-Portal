@@ -53,6 +53,7 @@ function pageTitle(path) {
   if (path.startsWith('/diesel/claims/review')) return 'Review claims'
   if (path.startsWith('/diesel/claims')) return 'Fuel Claims'
   if (path.startsWith('/diesel/usage')) return 'Fuel Usage Report'
+  if (path.startsWith('/diesel/records')) return 'Fuel Usage Record'
   if (path.startsWith('/diesel/cards')) return 'Fleet Card Manage'
   if (path.startsWith('/diesel/report')) return 'Fuel Usage Report'
   if (path.startsWith('/diesel/users')) return 'Claim approval setting'

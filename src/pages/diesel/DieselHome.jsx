@@ -1,17 +1,18 @@
 import { useOutletContext } from 'react-router-dom'
 import { Desktop } from '../../components/Desktop.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
-import { DieselClaimsIcon, DieselUsageIcon, FleetCardIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
+import { DieselClaimsIcon, DieselUsageIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
 import { DIESEL_MODULES } from './DieselLayout.jsx'
 
 const ART = {
   '/diesel/claims': DieselClaimsIcon,
   '/diesel/usage': DieselUsageIcon,
+  '/diesel/records': FuelRecordIcon,
   '/diesel/cards': FleetCardIcon,
   '/diesel/users': FuelUsersIcon
 }
 
-// Fuel Manage landing page: the four modules as square icons (draggable into
+// Fuel Manage landing page: the modules as square icons (draggable into
 // any order); each opens in its own window. Modules the person has no access
 // to are greyed out.
 export default function DieselHome() {

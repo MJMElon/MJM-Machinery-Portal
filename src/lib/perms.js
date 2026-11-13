@@ -49,6 +49,7 @@ export const MODULES = [
         hint: 'View / add / edit / delete apply to the person’s own claims'
       },
       { key: 'usage', label: 'Fuel Usage Report', actions: ['view', 'add', 'delete'], special: [] },
+      { key: 'fuel_record', label: 'Fuel Usage Record', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
       { key: 'cards', label: 'Fleet Card Manage', actions: ['view', 'add', 'edit', 'delete'], special: [] },
       { key: 'report', label: 'Report', actions: ['view'], special: [] }
     ]
@@ -95,7 +96,7 @@ export const ROLE_MODEL = [
   {
     key: 'fuel',
     label: 'Fuel Manage',
-    sections: ['claims', 'usage', 'cards', 'report'],
+    sections: ['claims', 'usage', 'cards', 'report', 'fuel_record'],
     pages: [
       {
         section: 'claims',
@@ -121,6 +122,16 @@ export const ROLE_MODEL = [
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'manage', label: 'Record / delete card fill-ups', actions: ['add', 'delete'] }
+        ]
+      },
+      {
+        section: 'fuel_record',
+        label: 'Fuel Usage Record',
+        options: [
+          { key: 'view', label: 'View page', actions: ['view'] },
+          { key: 'add', label: 'Add records', actions: ['add'] },
+          { key: 'edit', label: 'Edit records', actions: ['edit'] },
+          { key: 'delete', label: 'Delete records', actions: ['delete'] }
         ]
       },
       { section: 'report', label: 'Report (old)', options: [{ key: 'view', label: 'View Fuel Usage Report', actions: ['view'] }] }
@@ -162,7 +173,7 @@ export function withFuelRole(perms, role) {
   return { ...perms, claims: [...claims] }
 }
 
-export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report']
+export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report', 'fuel_record']
 export const MACHINERY_SECTIONS = ['work', 'machines', 'suppliers']
 
 export const has = (perms, section, action) => Array.isArray(perms?.[section]) && perms[section].includes(action)

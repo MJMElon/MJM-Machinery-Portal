@@ -5,13 +5,14 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
-// Diesel Manage: four modules. The landing page shows them as square icons;
-// inside a module the same four sit in the left sidebar. Which ones a person
+// Fuel Manage: five modules. The landing page shows them as square icons;
+// inside a module the same five sit in the left sidebar. Which ones a person
 // gets depends on their Diesel access for the selected company (set under
 // Settings → User setting).
 export const DIESEL_MODULES = [
   { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
   { to: '/diesel/usage', label: 'Fuel Usage\nReport', Icon: IconFuel, need: (a) => a.can('usage', 'view') || a.can('report', 'view'), hint: 'Dashboards, monthly totals by vehicle and driver, fill-up log' },
+  { to: '/diesel/records', label: 'Fuel Usage\nRecord', Icon: IconFuel, need: (a) => a.can('fuel_record', 'view'), hint: 'Fuel issued to each machine from the company tank, by date and location' },
   { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
   { to: '/diesel/users', label: 'Claim approval\nsetting', Icon: IconUsers, need: (a) => a.admin || a.pay, hint: 'Normal user / accountant, and who approves whose fuel claims' }
 ]
@@ -65,7 +66,7 @@ export default function DieselLayout() {
   return (
     <div>
       <Outlet context={{ company: current, access }} />
-      {landing && !access.claim && !access.report && (
+      {landing && nav.length === 0 && (
         <p className="mx-auto mt-6 max-w-xl rounded-xl bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
           You have Fuel Manage access but no module yet. A super admin gives access under Machinery Manage → CMMS User
           Setting.
