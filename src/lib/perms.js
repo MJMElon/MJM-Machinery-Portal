@@ -29,9 +29,9 @@ export const MODULES = [
       {
         key: 'work',
         label: 'Maintenance Work Manage',
-        actions: ['view', 'edit', 'delete'],
+        actions: ['view', 'add', 'edit', 'delete'],
         special: ['solve', 'send'],
-        hint: 'Cases from WhatsApp: pending / solved, supplier, notes'
+        hint: 'Cases from the mobile app and WhatsApp: pending / solved, supplier, notes. Add = send requests from the mobile app'
       },
       { key: 'machines', label: 'Machinery Profile', actions: ['view', 'add', 'edit', 'delete'], special: [] },
       { key: 'suppliers', label: 'Supplier Workshop List', actions: ['view', 'add', 'edit', 'delete'], special: [] }
@@ -70,7 +70,8 @@ export const ROLE_MODEL = [
         label: 'Maintenance Work Manage',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
-          { key: 'edit', label: 'Edit cases, send to supplier', actions: ['edit', 'send'] },
+          { key: 'add', label: 'Send requests from the mobile app (site workers)', actions: ['add'] },
+          { key: 'edit', label: 'Edit cases, approve and send to supplier', actions: ['edit', 'send'] },
           { key: 'solve', label: 'Solve / close cases', actions: ['solve'] },
           { key: 'delete', label: 'Delete cases', actions: ['delete'] }
         ]

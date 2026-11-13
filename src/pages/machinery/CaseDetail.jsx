@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, EmptyState, SectionTitle, Spinner } from '../../components/ui.jsx'
 import { IconChat, IconExternal, IconPencil, IconTrash } from '../../components/icons.jsx'
-import { caseNo, casePhotos, getCase, setCaseSolved } from '../../lib/cases.js'
-import { deleteCase, listMachines, listSuppliers, useCmmsAccess } from '../../lib/cmms.js'
+import { CASE_TYPES, appCompanyId, caseNo, casePhotos, caseStage, caseType, fromApp, getCase, serviceGap, setCaseSolved, smuUnit } from '../../lib/cases.js'
+import { deleteCase, isVideo, listMachines, listSuppliers, signCaseFiles, useCmmsAccess } from '../../lib/cmms.js'
 import { CaseEditModal } from '../../components/CaseEditModal.jsx'
 import { companyByNumber, listCompanies } from '../../lib/companies.js'
 import { formatSender, formatTime, signPaths } from '../../lib/whatsapp.js'
@@ -16,6 +16,7 @@ export default function CaseDetail() {
   const navigate = useNavigate()
   const [c, setC] = useState(null)
   const [urls, setUrls] = useState({})
+  const [fileUrls, setFileUrls] = useState({}) // photos / videos sent from the mobile app
   const [company, setCompany] = useState(undefined) // undefined = loading, null = not linked
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -33,8 +34,10 @@ export default function CaseDetail() {
       setC(row)
       if (row) {
         setUrls(await signPaths(casePhotos(row).map((m) => m.storage_path)))
+        signCaseFiles((row.attachments || []).map((a) => a.path)).then(setFileUrls)
+        const appCo = appCompanyId(row.wa_from)
         listCompanies()
-          .then((cos) => setCompany(companyByNumber(cos)(row.wa_from)))
+          .then((cos) => setCompany(appCo ? cos.find((x) => x.id === appCo) || null : companyByNumber(cos)(row.wa_from)))
           .catch(() => setCompany(null))
       }
     } catch (e) {
@@ -90,6 +93,12 @@ export default function CaseDetail() {
   const photos = casePhotos(c)
   const supplier = suppliers.find((s) => s.id === c.supplier_id)
   const solved = c.status === 'solved'
+  const machine = machines.find((m) => m.id === c.machine_id)
+  const unit = smuUnit(machine)
+  const gap = serviceGap(c, machine)
+  const files = c.attachments || []
+  const num = (v) => Number(v).toLocaleString('en-MY', { maximumFractionDigits: 1 })
+  const dmy = (d) => d && new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
   return (
     <div>
@@ -149,9 +158,11 @@ export default function CaseDetail() {
               </div>
             </div>
             <dl className="grid gap-4 sm:grid-cols-2">
+              <Info label="Type" value={`${CASE_TYPES[caseType(c)].label} · ${fromApp(c) ? 'Mobile app' : 'WhatsApp'}`} />
+              <Info label="Status" value={caseStage(c, machine).label} />
               <Info label="Machine" value={c.machine_name} />
               <Info label="Supplier / workshop" value={supplier?.name} />
-              <Info label="Problem" value={c.problem} />
+              <Info label={caseType(c) === 'repair_done' ? 'Part · what was done' : 'Problem'} value={[c.category, c.action_done, c.problem].filter(Boolean).join(' · ')} />
               <Info
                 label="Sent out on"
                 value={
@@ -163,8 +174,45 @@ export default function CaseDetail() {
                   })
                 }
               />
+              {c.smu != null && <Info label="Meter (SMU)" value={`${num(c.smu)} ${unit}`} />}
+              {c.service_due != null && (
+                <Info
+                  label="Service due at"
+                  value={`${num(c.service_due)} ${unit}${gap && gap.gap !== 0 ? ` · ${num(Math.abs(gap.gap))} ${unit} ${gap.gap < 0 ? 'early' : 'late'}` : ''}`}
+                />
+              )}
+              {c.preferred_date && <Info label="Preferred date" value={dmy(c.preferred_date)} />}
+              {c.machine_stopped != null && (
+                <Info
+                  label="Machine stopped"
+                  value={c.machine_stopped ? `Yes${c.stopped_from ? `, from ${dmy(c.stopped_from)}` : ''}${c.fixed_on ? ` to ${dmy(c.fixed_on)}` : ' (not fixed yet)'}` : 'No, still working'}
+                />
+              )}
+              {(c.parts || []).some((p) => p?.name) && <Info label="Parts used" value={c.parts.filter((p) => p?.name).map((p) => `${p.name} ×${p.qty || 1}`).join(', ')} />}
+              {c.approved_at && <Info label="Approved" value={formatTime(c.approved_at)} />}
+              {c.cost != null && <Info label="Cost" value={`RM ${Number(c.cost).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`} />}
             </dl>
           </Card>
+
+          {files.length > 0 && (
+            <Card className="p-5">
+              <SectionTitle>From the mobile app ({files.length})</SectionTitle>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                {files.map((f) => (
+                  <div key={f.path} className="overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200">
+                    {isVideo(f.path) ? (
+                      <video src={fileUrls[f.path]} controls preload="metadata" className="aspect-square w-full bg-black object-contain" />
+                    ) : (
+                      <a href={fileUrls[f.path]} target="_blank" rel="noopener noreferrer" className="block aspect-square">
+                        {fileUrls[f.path] && <img src={fileUrls[f.path]} alt={f.kind || 'Photo'} className="h-full w-full object-cover" />}
+                      </a>
+                    )}
+                    {f.kind && f.kind !== 'photo' && <p className="px-2 py-1 text-xs font-medium capitalize text-slate-600">{f.kind === 'meter' ? 'Meter photo' : f.kind}</p>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card className="p-5">
             <SectionTitle>Photos ({photos.length})</SectionTitle>

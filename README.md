@@ -6,7 +6,8 @@ companies are listed under their **business**, with the same names and codes as 
 that company's modules:
 
 - **Machinery Manage** (CMMS 2 access per company):
-  - **Maintenance Work Manage**: WhatsApp texts + photos grouped into numbered cases, Pending / Solved, with supplier, sent-out date and Solve / Edit / Delete (per-user access). The consolidate button shows every company's pending cases at once.
+  - **Maintenance Work Manage**: numbered cases from the worker app and WhatsApp, in three types (repair request, repair done, service request), Pending / Solved. Four figures on top (machines stopped, waiting for office, late service, repair cost this month), a type filter, and each case's next step as a button: Approve & send (service request → WhatsApp to the workshop that handles the machine), Send out, Mark solved, Add cost & solve. CSV export. The consolidate button shows every company's pending cases at once.
+  - **Repair & Maintenance mobile view** (`#/cmms/work/mobile`, for site workers with "Send requests from the mobile app"): *Need a mechanic* (machine, problem, still working / stopped, photos or video, hour meter), *I fixed something* (hour meter, part, what was done, parts used, before / after photos, stopped from / fixed on) and *Request a service* (hour meter checked against the machine's service schedule: 50 hr or 500 km either side of the due reading; too early cannot be sent). The service schedule (Service every, Last service at / date) is on each machine in Machinery Profile and moves on when a service request is solved. App cases carry their company as `wa_from = 'app:<company id>'`.
   - **Supplier Workshop List**: suppliers/workshops and the machines each handles (suppliers that handle a case's machine are proposed first).
   - **Machinery Profile**: the company's machines **and vehicles** (fuel, tank, usual driver, KPDN diesel subsidy tick).
   - **CMMS User Setting**: per company, Machinery Manage rights (Solve, Edit, Delete, Manage lists) and Diesel Manage rights (Access, Cash Claim, Report, Admin). Also where display names are set.
@@ -58,7 +59,7 @@ important actions (`machinery_user_perms`, checked in the database by `machinery
 
 | Module | Section | Actions | Important actions |
 | --- | --- | --- | --- |
-| Machinery Manage | Maintenance Work Manage (`work`) | view edit delete | solve / close case, send to supplier |
+| Machinery Manage | Maintenance Work Manage (`work`) | view add (send requests from the mobile app) edit delete | solve / close case, send to supplier |
 | | Machinery Profile (`machines`) | view add edit delete | |
 | | Supplier Workshop List (`suppliers`) | view add edit delete | |
 | Fuel Manage | Fuel Claims (`claims`) | view add edit delete (own claims) | see all users' claims, approve / reject, mark paid |
@@ -176,6 +177,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261111120000_permissions_matrix.sql` (permission matrix `machinery_user_perms` + `machinery_can()`, finer RLS per section, fuel claims without a vehicle, module access per company from the Intranet's Icon tags).
 - `supabase/migrations/20261112120000_fuel_claim_lines.sql` (a fuel claim is a header + receipt lines `machinery_diesel_claim_lines`; totals and payable amount kept by trigger; existing claims become one-line claims).
 - `supabase/migrations/20261113120000_claim_approvers_intranet_users.sql` (named approvers `machinery_claim_reviewable()`, Intranet Icon access flags on portal users, `machinery_apply_intranet_users()`).
+- `supabase/migrations/20261202120000_repair_maintenance.sql` (case types, cases from the mobile app `machinery_submit_case`, approve / solve with cost, service schedule on machines, bucket `machinery_case_files`).
 - `supabase/migrations/20261201120000_fuel_record_mobile.sql` (meter photo on a fuel record, photo bucket, workers read their own entries).
 - `supabase/migrations/20261129120000_fuel_usage_records.sql` (Fuel Usage Record: `machinery_fuel_records`, permission section `fuel_record`).
 - `supabase/migrations/20261124120000_company_locations.sql` (locations of a company `machinery_company_locations`, and `location_id` on `machinery_machines`).

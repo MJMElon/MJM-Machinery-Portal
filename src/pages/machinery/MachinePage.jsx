@@ -46,6 +46,9 @@ const EMPTY = {
   ideal_fuel_consumption: '',
   possible_working_units: '',
   service_unit: 'Liter/Km',
+  service_interval: '',
+  last_service_smu: '',
+  last_service_date: '',
   acc_code: '',
   year_made: '',
   purchase_date: '',
@@ -67,8 +70,10 @@ const EMPTY = {
   hq_vehicle: false,
   driver_ids: []
 }
-const NUMBER_FIELDS = ['market_value', 'ideal_fuel_consumption', 'possible_working_units', 'year_made', 'purchase_price', 'tank_capacity_l']
-const DATE_FIELDS = ['purchase_date', 'insurance_from', 'insurance_to', 'road_tax_from', 'road_tax_to', 'puspakom_from', 'puspakom_to']
+const NUMBER_FIELDS = ['market_value', 'ideal_fuel_consumption', 'possible_working_units', 'year_made', 'purchase_price', 'tank_capacity_l', 'service_interval', 'last_service_smu']
+// Service schedule (used by the worker app's "Request a service"); only sent once the database has these columns.
+const SERVICE_FIELDS = ['service_interval', 'last_service_smu', 'last_service_date']
+const DATE_FIELDS = ['last_service_date', 'purchase_date', 'insurance_from', 'insurance_to', 'road_tax_from', 'road_tax_to', 'puspakom_from', 'puspakom_to']
 const TEXT_FIELDS = ['name', 'machine_type', 'brand', 'model', 'reg_no', 'serial_no', 'chassis_no', 'engine_no', 'service_unit', 'acc_code', 'notes', 'reg_card_path', 'resolution_path']
 
 export default function MachinePage({ mode }) {
@@ -180,6 +185,7 @@ export default function MachinePage({ mode }) {
       row.hq_vehicle = Boolean(form.hq_vehicle)
       row.driver_ids = form.driver_ids
       row.photos = form.photos
+      for (const k of SERVICE_FIELDS) if (machine ? !(k in machine) : row[k] == null) delete row[k]
       // Only sent when the company has locations (so saving still works before the locations migration).
       if (locations.length) row.location_id = locations.some((l) => l.id === form.location_id) ? form.location_id : null
       const savedId = await saveMachine(current.id, row)
@@ -217,6 +223,8 @@ export default function MachinePage({ mode }) {
     )
 
   const ro = !editing
+  const hourly = /hour/i.test(form.service_unit || '')
+  const smu = hourly ? 'hr' : 'km'
   const title = mode === 'new' ? 'New machine / vehicle' : `${machineNo(machine)} · ${form.name || 'Machine'}`
 
   return (
@@ -289,6 +297,9 @@ export default function MachinePage({ mode }) {
             <Row ro={ro} label="Ideal fuel consumption" type="number" step="0.001" value={form.ideal_fuel_consumption} onChange={set('ideal_fuel_consumption')} />
             <Row ro={ro} label="Possible working units" type="number" step="0.01" value={form.possible_working_units} onChange={set('possible_working_units')} />
             <Row ro={ro} label="Service unit" type="select" value={form.service_unit} onChange={set('service_unit')} options={SERVICE_UNITS} show={SERVICE_UNITS.find((o) => o[0] === form.service_unit)?.[1] || form.service_unit} />
+            <Row ro={ro} label="Service every" type="number" step="1" min="1" value={form.service_interval} onChange={set('service_interval')} placeholder={`e.g. ${hourly ? '500' : '10000'}`} show={form.service_interval !== '' ? `${Number(form.service_interval).toLocaleString('en-MY')} ${smu}` : ''} hint={`In ${smu} (from the service unit above). Workers can request a service ${hourly ? '50 hr' : '500 km'} before it is due.`} />
+            <Row ro={ro} label="Last service at" type="number" step="0.1" min="0" value={form.last_service_smu} onChange={set('last_service_smu')} placeholder={`Meter reading (${smu})`} show={form.last_service_smu !== '' ? `${Number(form.last_service_smu).toLocaleString('en-MY')} ${smu}` : ''} hint="Moves on by itself when a service request is solved." />
+            <Row ro={ro} label="Last service date" type="date" value={form.last_service_date} onChange={set('last_service_date')} show={form.last_service_date ? day(form.last_service_date) : ''} />
             <FileRow label="Reg card" path={form.reg_card_path} url={urls[form.reg_card_path]} ro={ro} busy={busy} onPick={setDoc('reg_card_path')} onClear={() => setForm((f) => ({ ...f, reg_card_path: '' }))} />
             <FileRow label="Director circular resolution" path={form.resolution_path} url={urls[form.resolution_path]} ro={ro} busy={busy} onPick={setDoc('resolution_path')} onClear={() => setForm((f) => ({ ...f, resolution_path: '' }))} />
           </div>

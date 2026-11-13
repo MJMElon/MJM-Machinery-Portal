@@ -157,6 +157,84 @@ export async function deleteCase(id) {
   if (error) throw friendly(error)
 }
 
+// ---- cases from the mobile app; office approval and cost --------------------------
+const CASE_FILES = 'machinery_case_files'
+const REPAIR_SQL = 'Database not up to date. Run the SQL migration …repair_maintenance.sql in Supabase.'
+
+/** A worker's request from the mobile app. type: repair_request | repair_done | service_request. Returns the new case. */
+export async function submitCase(companyId, type, data) {
+  const { data: row, error } = await supabase.rpc('machinery_submit_case', { p_company: companyId, p_type: type, p_data: data })
+  if (error) throw ['PGRST202', '42883', '42703'].includes(error.code) ? new Error(REPAIR_SQL) : friendly(error)
+  return row
+}
+
+/** Office approves a service request. */
+export async function approveCase(id) {
+  const { error } = await supabase.rpc('machinery_approve_case', { p_id: id })
+  if (error) throw ['PGRST202', '42883'].includes(error.code) ? new Error(REPAIR_SQL) : friendly(error)
+}
+
+/** Solve a case with its cost (RM, may be empty) and an optional remark. */
+export async function solveCase(id, cost, remark) {
+  const { error } = await supabase.rpc('machinery_solve_case', { p_id: id, p_cost: cost ?? null, p_remark: remark || null })
+  if (error) throw ['PGRST202', '42883'].includes(error.code) ? new Error(REPAIR_SQL) : friendly(error)
+}
+
+/** Photo (shrunk to 1600 px) or video (as it is, max 50 MB) for a case; returns the storage path. */
+export async function uploadCaseFile(companyId, userId, file) {
+  const video = file.type.startsWith('video/')
+  if (!video && !file.type.startsWith('image/')) throw new Error('Please choose a photo or a video.')
+  const upload = video ? file : await shrinkImage(file)
+  if (upload.size > 50 * 1024 * 1024) throw new Error('The file is too big (max 50 MB). Take a shorter video.')
+  const ext = video
+    ? (file.name.match(/\.(mp4|mov|webm|3gp)$/i)?.[1] || 'mp4').toLowerCase()
+    : upload.type === 'image/png' ? 'png' : upload.type === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${companyId}/${userId}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(CASE_FILES).upload(path, upload, { contentType: upload.type || (video ? 'video/mp4' : 'image/jpeg') })
+  if (error) throw new Error(/mime|type/i.test(error.message || '') ? 'This kind of file cannot be sent. Use a photo or an MP4 video.' : 'Could not upload the file. Please try again.')
+  return path
+}
+export function removeCaseFile(path) {
+  if (path) supabase.storage.from(CASE_FILES).remove([path]).catch(() => {})
+}
+/** Map of path → short-lived link for a case's app attachments. */
+export async function signCaseFiles(paths, seconds = 600) {
+  const unique = [...new Set((paths || []).filter(Boolean))]
+  if (!unique.length) return {}
+  const { data, error } = await supabase.storage.from(CASE_FILES).createSignedUrls(unique, seconds)
+  if (error) return {}
+  const map = {}
+  for (const row of data || []) if (row.signedUrl) map[row.path] = row.signedUrl
+  return map
+}
+export const isVideo = (path) => /\.(mp4|mov|webm|3gp)$/i.test(path || '')
+
+/** The newest meter reading recorded on a machine's cases: { smu, date } or null. */
+export async function lastSmu(machineId) {
+  const { data, error } = await supabase
+    .from('machinery_cases')
+    .select('smu, opened_at')
+    .eq('machine_id', machineId)
+    .not('smu', 'is', null)
+    .order('opened_at', { ascending: false })
+    .limit(1)
+  if (error || !data?.length) return null
+  return { smu: Number(data[0].smu), date: data[0].opened_at.slice(0, 10) }
+}
+
+/** The signed-in person's own app requests in a company, newest first. */
+export async function listMyCases(companyId, userId, limit = 20) {
+  const { data, error } = await supabase
+    .from('machinery_cases')
+    .select('*')
+    .eq('wa_from', `app:${companyId}`)
+    .eq('created_by', userId)
+    .order('opened_at', { ascending: false })
+    .limit(limit)
+  if (error) throw ['42703', 'PGRST204'].includes(error.code) ? new Error(REPAIR_SQL) : friendly(error)
+  return data || []
+}
+
 // ---- case workflow: pins, timeline, notes, send to supplier, close ------------
 
 export async function setCasePinned(id, pinned) {
@@ -262,6 +340,8 @@ export function useCmmsAccess(companyId) {
   return {
     loaded: p.loaded,
     can: p.can,
+    can_view: p.can('work', 'view'),
+    can_add: p.can('work', 'add'),
     can_solve: p.can('work', 'solve'),
     can_edit: p.can('work', 'edit'),
     can_send: p.can('work', 'send'),

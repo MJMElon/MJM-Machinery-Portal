@@ -8,6 +8,7 @@ import { Button, Card, Spinner } from './components/ui.jsx'
 import PortalHome from './pages/PortalHome.jsx'
 import CmmsLayout from './pages/machinery/CmmsLayout.jsx'
 import WorkManage from './pages/machinery/WorkManage.jsx'
+import RepairMobile from './pages/machinery/RepairMobile.jsx'
 import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
 import CaseDetail from './pages/machinery/CaseDetail.jsx'
 import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
@@ -52,6 +53,7 @@ export default function App() {
             <Route index element={<CmmsHome />} />
             <Route path="work" element={<WorkManage />} />
             <Route path="work/all" element={<WorkConsolidated />} />
+            <Route path="work/mobile" element={<RepairMobile />} />
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="machines/new" element={<MachinePage key="new" mode="new" />} />

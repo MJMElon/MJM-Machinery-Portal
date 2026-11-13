@@ -49,6 +49,7 @@ export function Shell() {
 // Centre title of the top bar for each page ('' = main page).
 function pageTitle(path) {
   if (path === '/') return ''
+  if (path.startsWith('/cmms/work/mobile')) return 'Repair & Maintenance'
   if (path.startsWith('/cmms')) return 'Machinery Manage'
   if (path.startsWith('/diesel/claims/review')) return 'Review claims'
   if (path.startsWith('/diesel/claims')) return 'Fuel Claims'

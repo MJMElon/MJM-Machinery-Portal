@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { companyByNumber, listCompanies } from './companies.js'
-import { casePhotos, listCases } from './cases.js'
+import { appCompanyId, casePhotos, listCases } from './cases.js'
 import { signPaths } from './whatsapp.js'
 
 const POLL_MS = 15000
@@ -55,7 +55,8 @@ export function useCases() {
   const keyOf = useMemo(() => {
     const find = companyByNumber(companies)
     return (row) => {
-      const c = find(row.wa_from)
+      // A case made in the mobile app carries its company: wa_from = 'app:<company id>'.
+      const c = appCompanyId(row.wa_from) ? companies.find((x) => x.id === appCompanyId(row.wa_from)) : find(row.wa_from)
       if (!c) return UNASSIGNED
       return c.cmms_enabled ? c.id : null
     }
