@@ -167,11 +167,10 @@ export default function WorkManage() {
             <Button variant="secondary" onClick={() => reload()} aria-label="Refresh" className="w-12 px-0">
               <IconRefresh width={18} height={18} />
             </Button>
-            {access.can_add && (
-              <Button variant="secondary" onClick={openMobile} title="The worker app: need a mechanic, I fixed something, request a service">
-                <IconCamera width={18} height={18} /> Mobile view
-              </Button>
-            )}
+            {/* Always shown; the app itself says which permission is needed when someone may not send requests. */}
+            <Button variant="secondary" onClick={openMobile} title="The worker app: need a mechanic, I fixed something, request a service">
+              <IconCamera width={18} height={18} /> Mobile view
+            </Button>
             <Button variant="secondary" onClick={exportCsv} disabled={loading || !key} title="All cases of this company as a CSV file">
               <IconDownload width={18} height={18} /> Export for OPISPRO
             </Button>
