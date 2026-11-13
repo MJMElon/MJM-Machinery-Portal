@@ -208,14 +208,30 @@ export async function getUserPerms(companyId, userId) {
   return data?.perms || {}
 }
 
-export async function savePerms(companyId, userId, perms) {
+/**
+ * Save a person's access. Super admins write the whole row; a module admin
+ * passes { modules: ['fuel'] } and only those modules' parts change
+ * (database function machinery_save_module_perms).
+ */
+export async function savePerms(companyId, userId, perms, { modules } = {}) {
   const clean = Object.fromEntries(Object.entries(perms).filter(([k, v]) => Array.isArray(v) && (v.length || k === 'approve_for')))
   if (!has(clean, 'claims', 'approve')) delete clean.approve_for
+  if (modules) {
+    for (const m of modules) {
+      const { error } = await supabase.rpc('machinery_save_module_perms', { p_company: companyId, p_user: userId, p_module: m, p_perms: clean })
+      if (error) throw friendly(error)
+    }
+    return
+  }
   const { error } = await supabase
     .from(PERMS_TABLE)
     .upsert({ company_id: companyId, user_id: userId, perms: clean }, { onConflict: 'company_id,user_id' })
   if (error) throw friendly(error)
 }
+
+// Module admins: perms.admin = ['machinery', 'fuel']
+export const MODULE_ADMIN_LABEL = { machinery: 'Machinery Manage admin', fuel: 'Fuel Manage admin' }
+export const adminModules = (perms) => (Array.isArray(perms?.admin) ? perms.admin.filter((m) => MODULE_ADMIN_LABEL[m]) : [])
 
 export async function removePerms(companyId, userId) {
   const { error } = await supabase.from(PERMS_TABLE).delete().eq('company_id', companyId).eq('user_id', userId)
@@ -252,6 +268,9 @@ export function usePerms(companyId) {
       any: (sections) => isSuperAdmin || hasAny(state.perms, sections),
       reviewable: (claimantId) => canReviewClaimant(state.perms, isSuperAdmin, claimantId),
       approves: (claimantId) => canApproveClaimant(state.perms, isSuperAdmin, claimantId),
+      // Admin of a module ('machinery' / 'fuel'): sets that module's user access
+      adminOf: (module) => isSuperAdmin || adminModules(state.perms).includes(module),
+      adminModules: isSuperAdmin ? Object.keys(MODULE_ADMIN_LABEL) : adminModules(state.perms),
       approveFor: approveFor(state.perms)
     }),
     [state, isSuperAdmin]
@@ -259,6 +278,8 @@ export function usePerms(companyId) {
 }
 
 function friendly(error) {
+  if (['PGRST202', '42883'].includes(error?.code) && /save_module_perms/.test(error?.message || ''))
+    return new Error('Database not up to date. Run the module admins SQL (…module_admins.sql) in Supabase.')
   if (error?.code === '42501') return new Error(error.message || 'You do not have access to do this.')
   if (['42P01', 'PGRST205', '42703', 'PGRST204', 'PGRST202', '42883'].includes(error?.code)) {
     return new Error('Database not up to date. Run the permissions SQL migration (…permissions_matrix.sql) in Supabase.')

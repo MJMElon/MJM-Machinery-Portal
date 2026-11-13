@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner } from '../../components/ui.jsx'
 import { listPortalPeople, userLabel } from '../../lib/cmms.js'
-import { ROLE_MODEL, approveFor, getUserPerms, savePerms } from '../../lib/perms.js'
+import { MODULE_ADMIN_LABEL, ROLE_MODEL, adminModules, approveFor, getUserPerms, savePerms, usePerms } from '../../lib/perms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -24,7 +24,18 @@ export default function UserAccessEdit() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const person = people.find((p) => p.user_id === userId) || (userId === me.id ? { user_id: me.id, email: me.email, full_name: me.fullName } : null)
-  const readOnly = !isSuperAdmin || person?.is_super_admin || params.get('view') === '1'
+  // Super admins edit everything; a module admin edits only their module(s).
+  const mine = usePerms(current?.id)
+  const editable = isSuperAdmin ? ROLE_MODEL.map((m) => m.key) : mine.adminModules
+  const readOnly = editable.length === 0 || person?.is_super_admin || params.get('view') === '1'
+  const moduleRO = (m) => readOnly || !editable.includes(m.key)
+  const isAdminOf = (m) => adminModules(perms).includes(m.key)
+  const setAdminOf = (m, on) =>
+    setPerms((p) => {
+      const list = new Set(adminModules(p))
+      on ? list.add(m.key) : list.delete(m.key)
+      return { ...p, admin: [...list] }
+    })
 
   const load = useCallback(async () => {
     if (!current) return
@@ -77,7 +88,7 @@ export default function UserAccessEdit() {
     setBusy(true)
     setError('')
     try {
-      await savePerms(current.id, userId, perms)
+      await savePerms(current.id, userId, perms, isSuperAdmin ? {} : { modules: editable })
       setSaved(JSON.stringify(perms))
     } catch (e) {
       setError(e.message)
@@ -119,20 +130,35 @@ export default function UserAccessEdit() {
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
       {person && (person.intranet_cmms || person.intranet_fuel) && (
         <p className="text-xs text-slate-500">
-          From MJM Intranet: {[person.intranet_cmms && 'Machinery icon (view Work Manage, Machinery Profile, Suppliers)', person.intranet_fuel && 'Fuel Claims icon (own fuel claims)'].filter(Boolean).join(' · ')}. Ticks below add to that.
+          From MJM Intranet:{' '}
+          {[
+            person.intranet_cmms && 'Machinery icon (view Work Manage, Machinery Profile, Suppliers)',
+            person.intranet_fuel && 'Fuel Claims icon (own fuel claims)',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          . Ticks below add to that.
         </p>
       )}
-      {person?.is_super_admin && (
-        <p className="rounded-xl bg-brand-light/60 p-3 text-sm text-brand-dark">Super admins have every right in every company.</p>
-      )}
+      {person?.is_super_admin && <p className="rounded-xl bg-brand-light/60 p-3 text-sm text-brand-dark">Super admins have every right in every company.</p>}
 
       {ROLE_MODEL.map((m) => {
         const on = person?.is_super_admin || moduleOn(m)
+        const readOnly = moduleRO(m)
         return (
           <section key={m.key} className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
               <h3 className="font-display text-xl font-extrabold tracking-tight text-slate-900">{m.label}</h3>
               <Badge color={on ? 'green' : 'slate'}>{on ? 'Access' : 'No access'}</Badge>
+              {!person?.is_super_admin &&
+                (readOnly ? (
+                  isAdminOf(m) && <Badge color="violet">{MODULE_ADMIN_LABEL[m.key]}</Badge>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-800">
+                    <input type="checkbox" className="h-4 w-4 accent-[#7c3aed]" checked={isAdminOf(m)} onChange={(e) => setAdminOf(m, e.target.checked)} />
+                    Admin of this module (can set user access)
+                  </label>
+                ))}
               {!readOnly && (
                 <span className="flex gap-2 text-xs">
                   <button onClick={() => setModule(m, true)} className="font-medium text-brand hover:underline">

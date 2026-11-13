@@ -4,7 +4,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconRefresh } from '../../components/icons.jsx'
 import { listPortalUsers } from '../../lib/cmms.js'
-import { listCompanyPerms } from '../../lib/perms.js'
+import { MODULE_ADMIN_LABEL, adminModules, listCompanyPerms, usePerms } from '../../lib/perms.js'
 import { syncFromIntranet } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
@@ -12,10 +12,13 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 // CMMS 2 user access (main page → User Access): everyone given the CMMS 2 or
 // Fuel Claims icon in MJM Intranet, or a role in the selected company.
 // View / Edit open the per-user screen (module → pages → options, approvers).
-// Super admins manage it; everyone else sees their own access.
+// Super admins manage it; module admins manage their module's part;
+// everyone else sees their own access.
 export default function CmmsUsers() {
   const { isSuperAdmin, user } = useAuth()
   const { current } = useCompany()
+  const mine = usePerms(current?.id)
+  const manager = isSuperAdmin || mine.adminModules.length > 0
   const [users, setUsers] = useState([])
   const [perms, setPerms] = useState({})
   const [loading, setLoading] = useState(true)
@@ -24,9 +27,9 @@ export default function CmmsUsers() {
   const [syncMsg, setSyncMsg] = useState('')
 
   const load = useCallback(async () => {
-    if (!current) return
+    if (!current || !mine.loaded) return
     try {
-      const [u, p] = await Promise.all([isSuperAdmin ? listPortalUsers() : [], listCompanyPerms(current.id)])
+      const [u, p] = await Promise.all([manager ? listPortalUsers() : [], listCompanyPerms(current.id)])
       setUsers(u)
       setPerms(Object.fromEntries(p.map((x) => [x.user_id, x.perms])))
       setError('')
@@ -35,14 +38,21 @@ export default function CmmsUsers() {
     } finally {
       setLoading(false)
     }
-  }, [current, isSuperAdmin])
+  }, [current, manager, mine.loaded])
 
   useEffect(() => {
     setLoading(true)
     load()
   }, [load])
 
-  if (!isSuperAdmin) {
+  if (!mine.loaded)
+    return (
+      <div className="flex justify-center py-12 text-brand">
+        <Spinner className="h-7 w-7" />
+      </div>
+    )
+
+  if (!manager) {
     return (
       <div className="space-y-4">
         <PageHeader backTo="/" backLabel="Back to CMMS main page" title="CMMS 2 user access" />
@@ -84,12 +94,14 @@ export default function CmmsUsers() {
         backLabel="Back to CMMS main page"
         title="CMMS 2 user access"
         right={
-          <div className="flex flex-col items-end gap-1">
-            <Button variant="secondary" disabled={syncing} onClick={sync}>
-              <IconRefresh width={18} height={18} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing…' : 'Sync from MJM Intranet'}
-            </Button>
-            {syncMsg && <span className={`text-xs ${/fail|not|error|warning/i.test(syncMsg) ? 'text-red-700' : 'text-green-700'}`}>{syncMsg}</span>}
-          </div>
+          isSuperAdmin && (
+            <div className="flex flex-col items-end gap-1">
+              <Button variant="secondary" disabled={syncing} onClick={sync}>
+                <IconRefresh width={18} height={18} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing…' : 'Sync from MJM Intranet'}
+              </Button>
+              {syncMsg && <span className={`text-xs ${/fail|not|error|warning/i.test(syncMsg) ? 'text-red-700' : 'text-green-700'}`}>{syncMsg}</span>}
+            </div>
+          )
         }
       />
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
@@ -100,7 +112,9 @@ export default function CmmsUsers() {
             <Spinner className="h-7 w-7" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-400">Nobody yet. Give people the CMMS 2 or Fuel Claims icon in MJM Intranet; they appear here after they sign in or after Sync.</p>
+          <p className="px-5 py-10 text-center text-sm text-slate-400">
+            Nobody yet. Give people the CMMS 2 or Fuel Claims icon in MJM Intranet; they appear here after they sign in or after Sync.
+          </p>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -120,15 +134,31 @@ export default function CmmsUsers() {
                         Super admin
                       </Badge>
                     )}
+                    {!u.is_super_admin &&
+                      adminModules(perms[u.user_id]).map((m) => (
+                        <Badge key={m} color="violet" className="ml-2">
+                          {MODULE_ADMIN_LABEL[m]}
+                        </Badge>
+                      ))}
                   </td>
                   <td className="px-3 py-3 text-slate-600">{u.email}</td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-center gap-0.5">
-                      <Link to={`/settings/users/${u.user_id}?view=1`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand" title="View" aria-label="View">
+                      <Link
+                        to={`/settings/users/${u.user_id}?view=1`}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand"
+                        title="View"
+                        aria-label="View"
+                      >
                         <IconEye width={18} height={18} />
                       </Link>
                       {!u.is_super_admin ? (
-                        <Link to={`/settings/users/${u.user_id}`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand" title="Edit" aria-label="Edit">
+                        <Link
+                          to={`/settings/users/${u.user_id}`}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand"
+                          title="Edit"
+                          aria-label="Edit"
+                        >
                           <IconPencil width={18} height={18} />
                         </Link>
                       ) : (
@@ -145,4 +175,3 @@ export default function CmmsUsers() {
     </div>
   )
 }
-

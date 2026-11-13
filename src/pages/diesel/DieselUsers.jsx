@@ -4,7 +4,7 @@ import { Badge, Card } from '../../components/ui.jsx'
 import { IconX } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { listPortalPeople, userLabel } from '../../lib/cmms.js'
-import { FUEL_ROLES, approveFor, fuelRole, has, listCompanyPerms, savePerms, withFuelRole } from '../../lib/perms.js'
+import { FUEL_ROLES, adminModules, approveFor, fuelRole, has, listCompanyPerms, savePerms, withFuelRole } from '../../lib/perms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // Fuel Manage → Claim approval setting. For every person of the company:
@@ -48,13 +48,15 @@ export default function DieselUsers() {
   const approversOf = (uid) =>
     people.filter((a) => a.user_id !== uid && has(perms[a.user_id], 'claims', 'approve') && approveFor(perms[a.user_id]).includes(uid))
   const approvesCount = (uid) => (has(perms[uid], 'claims', 'approve') ? approveFor(perms[uid]).length : 0)
-  const canEdit = isSuperAdmin || access.pay
+  // Super admins and Fuel Manage admins change this; a module admin's save only touches Fuel Manage rights.
+  const canEdit = isSuperAdmin || access.fuelAdmin
+  const saveOpts = isSuperAdmin ? {} : { modules: ['fuel'] }
 
   async function save(uid, next, key) {
     setBusy(key)
     setError('')
     try {
-      await savePerms(company.id, uid, next)
+      await savePerms(company.id, uid, next, saveOpts)
       setPerms((p) => ({ ...p, [uid]: next }))
     } catch (e) {
       setError(e.message)
@@ -79,6 +81,13 @@ export default function DieselUsers() {
   }
 
   const changeRole = (uid, role) => save(uid, withFuelRole(perms[uid] || {}, role), `role:${uid}`)
+  const isFuelAdmin = (uid) => adminModules(perms[uid]).includes('fuel')
+  const setFuelAdmin = (uid, on) => {
+    const cur = perms[uid] || {}
+    const list = new Set(adminModules(cur))
+    on ? list.add('fuel') : list.delete('fuel')
+    save(uid, { ...cur, admin: [...list] }, `admin:${uid}`)
+  }
 
   const t = q.trim().toLowerCase()
   const shown = people.filter(
@@ -105,11 +114,12 @@ export default function DieselUsers() {
           <Empty>No users yet. Users come from the MJM Intranet (User Access → Sync from MJM Intranet).</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-72 px-5 py-2.5">User</th>
                   <th className="w-48 px-3 py-2.5">Role</th>
+                  <th className="w-24 px-3 py-2.5 text-center">Admin</th>
                   <th className="px-3 py-2.5">Claims approved by</th>
                 </tr>
               </thead>
@@ -150,6 +160,21 @@ export default function DieselUsers() {
                           </span>
                         ) : (
                           <Badge color={role === 'accountant' ? 'blue' : 'slate'}>{FUEL_ROLES.find(([k]) => k === role)[1]}</Badge>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {p.is_super_admin ? (
+                          <span className="text-xs text-slate-400">—</span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={isFuelAdmin(p.user_id)}
+                            disabled={!canEdit || busy === `admin:${p.user_id}`}
+                            onChange={(e) => setFuelAdmin(p.user_id, e.target.checked)}
+                            className="mt-2 h-5 w-5 rounded border-slate-300 accent-[#2563eb] disabled:opacity-60"
+                            title="Fuel Manage admin: can change this page and the Fuel Manage part of User Access"
+                            aria-label={`Fuel Manage admin: ${userLabel(p)}`}
+                          />
                         )}
                       </td>
                       <td className="px-3 py-3">
@@ -201,7 +226,7 @@ export default function DieselUsers() {
           </div>
         )}
       </Card>
-      {!canEdit && <p className="text-xs text-slate-500">Only super admins and accountants can change this.</p>}
+      {!canEdit && <p className="text-xs text-slate-500">Only super admins and Fuel Manage admins can change this.</p>}
     </div>
   )
 }

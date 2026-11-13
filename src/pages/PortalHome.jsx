@@ -6,12 +6,16 @@ import { useAuth } from '../auth/AuthContext.jsx'
 import { useCompany } from '../lib/CompanyContext.jsx'
 import { useWindows } from '../components/Windows.jsx'
 import { EMBEDDED } from '../components/Shell.jsx'
+import { usePerms } from '../lib/perms.js'
 
 // Portal main page: the selected company (top-right switcher) and its modules.
 export default function PortalHome() {
   const { isSuperAdmin } = useAuth()
   const { current, loaded, error } = useCompany()
   const { open } = useWindows()
+  const perms = usePerms(current?.id)
+  // User Access: super admins, and module admins (for their module)
+  const userAccess = isSuperAdmin || perms.adminModules.length > 0
   if (EMBEDDED) return <p className="p-6 text-center text-sm text-slate-500">This is the CMMS 2 main page. Close this window to go back to it.</p>
 
   if (!loaded)
@@ -69,7 +73,7 @@ export default function PortalHome() {
           disabled={!current.cmms_enabled}
           note={current.cmms_enabled ? null : 'Not enabled'}
         />
-        {isSuperAdmin && (
+        {userAccess && (
           <ModuleTile
             key="users"
             onClick={() => open({ key: 'users', label: 'User Access', Icon: UserAccessIcon, path: '/settings/users' })}
