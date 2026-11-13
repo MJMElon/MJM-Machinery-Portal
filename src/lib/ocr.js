@@ -398,6 +398,9 @@ async function getDigitWorker() {
   return digitWorker
 }
 
+/** Version of the meter reader, shown small on the phone form so a stale copy of the app can be told apart. */
+export const METER_READER_VERSION = 3
+
 /** Reads the litres shown on a meter photo. Returns { litres } (null when unsure) or { litres: null, error }. */
 export async function readMeterPhoto(file) {
   try {

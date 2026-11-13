@@ -4,7 +4,7 @@ import { Spinner } from '../../components/ui.jsx'
 import { IconCamera, IconCheck } from '../../components/icons.jsx'
 import { listFuelRecords, listVehicles, removeRecordPhoto, saveFuelRecord, uploadRecordPhoto, vehicleLabel } from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
-import { readMeterPhoto } from '../../lib/ocr.js'
+import { METER_READER_VERSION, readMeterPhoto } from '../../lib/ocr.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, num, sum, today } from '../../lib/format.js'
 
@@ -253,6 +253,7 @@ export default function FuelRecordMobile() {
       </button>
 
       <Today mine={mine} machineById={machineById} />
+      <p className="text-center text-xs text-slate-400">Meter reader v{METER_READER_VERSION}</p>
       {canView && (
         <p className="text-center">
           <Link to="/diesel/records" className="text-sm font-medium text-brand underline">

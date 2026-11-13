@@ -76,7 +76,8 @@ export default function FuelRecords() {
   // Site workers (Add only, no View) get the phone form straight away.
   if (!access.can('fuel_record', 'view') && canAdd) return <Navigate to="/diesel/records/mobile" replace />
   // The phone form opens in its own tab from a module window, so it can be bookmarked on a phone.
-  const openMobile = () => (EMBEDDED ? window.open(`${window.location.pathname}${window.location.search}#/diesel/records/mobile`, '_blank') : navigate('/diesel/records/mobile'))
+  // A fresh ?v= makes the tab load the newest version of the app, never a cached one.
+  const openMobile = () => (EMBEDDED ? window.open(`${window.location.pathname}?v=${Date.now()}#/diesel/records/mobile`, '_blank') : navigate('/diesel/records/mobile'))
   const canEdit = access.can('fuel_record', 'edit')
   const canDelete = access.can('fuel_record', 'delete')
 
