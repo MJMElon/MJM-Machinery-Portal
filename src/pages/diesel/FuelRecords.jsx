@@ -3,15 +3,15 @@ import { Navigate, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Modal, Select, TextInput } from '../../components/ui.jsx'
 import { IconCamera, IconDownload, IconImage, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { Empty, ErrorBox, F, Loading, MonthSelect, Stats, inputCls, monthsOf, toNum } from '../../components/diesel/shared.jsx'
-import { deleteFuelRecord, listFuelRecords, listVehicles, meterUnit, openRecordPhoto, removeRecordPhoto, saveFuelRecord, vehicleLabel } from '../../lib/diesel.js'
+import { Empty, ErrorBox, F, Loading, MonthSelect, Stats, inputCls, monthsOf } from '../../components/diesel/shared.jsx'
+import { deleteFuelRecord, listFuelRecords, listVehicles, openRecordPhoto, removeRecordPhoto, saveFuelRecord, vehicleLabel } from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
 import { day, downloadCsv, num, sum, thisMonth, today } from '../../lib/format.js'
 
 // Fuel Usage Record: fuel issued to each machine from the company's own tank
-// (date, machine, litres, hour meter / km, who issued it). A record's location
+// (date, machine, litres, who issued it). A record's location
 // is the machine's location in Machinery Profile, so the list filters and
 // totals by location when the company has locations.
 export default function FuelRecords() {
@@ -104,8 +104,6 @@ export default function FuelRecords() {
         { header: 'Type', value: (r) => machineById.get(r.machine_id)?.machine_type || '' },
         ...(hasLocations ? [{ header: 'Location', value: (r) => locationName.get(machineById.get(r.machine_id)?.location_id) || '' }] : []),
         { header: 'Litres', value: (r) => r.litres },
-        { header: 'Meter', value: (r) => r.meter_reading ?? '' },
-        { header: 'Meter unit', value: (r) => (r.meter_reading == null ? '' : meterUnit(machineById.get(r.machine_id))) },
         { header: 'Issued by', value: (r) => r.issued_by || '' },
         { header: 'Remark', value: (r) => r.remark || '' }
       ],
@@ -197,7 +195,6 @@ export default function FuelRecords() {
                   <th className="px-3 py-2.5">Machine</th>
                   {hasLocations && <th className="px-3 py-2.5">Location</th>}
                   <th className="px-3 py-2.5 text-right">Litres</th>
-                  <th className="px-3 py-2.5 text-right">Meter</th>
                   <th className="px-3 py-2.5">Issued by</th>
                   <th className="px-3 py-2.5">Remark</th>
                   {(canEdit || canDelete) && <th className="w-24 px-3 py-2.5 text-center">Action</th>}
@@ -223,9 +220,6 @@ export default function FuelRecords() {
                           )}
                           {num(r.litres, 2)}
                         </span>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">
-                        {r.meter_reading == null ? '—' : `${num(r.meter_reading, 1)} ${meterUnit(m)}`}
                       </td>
                       <td className="px-3 py-3 text-slate-700">{r.issued_by || '—'}</td>
                       <td className="max-w-xs px-3 py-3 text-slate-500">{r.remark || ''}</td>
@@ -255,7 +249,7 @@ export default function FuelRecords() {
                     Total
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{num(sum(rows, 'litres'), 2)}</td>
-                  <td colSpan={canEdit || canDelete ? 4 : 3} />
+                  <td colSpan={canEdit || canDelete ? 3 : 2} />
                 </tr>
               </tfoot>
             </table>
@@ -269,7 +263,6 @@ export default function FuelRecords() {
           record={editing}
           machines={machines}
           locations={locations}
-          records={records}
           startLocation={loc && loc !== 'none' ? loc : ''}
           onClose={() => setEditing(null)}
           onSaved={load}
@@ -280,14 +273,13 @@ export default function FuelRecords() {
 }
 
 // Add / edit one record. With locations, a Location box narrows the machine list.
-function RecordModal({ company, record, machines, locations, records, startLocation, onClose, onSaved }) {
+function RecordModal({ company, record, machines, locations, startLocation, onClose, onSaved }) {
   const { user } = useAuth()
   const isNew = !record.id
   const [f, setF] = useState({
     record_date: record.record_date || today(),
     machine_id: record.machine_id || '',
     litres: record.litres ?? '',
-    meter_reading: record.meter_reading ?? '',
     issued_by: record.issued_by ?? (isNew ? user?.fullName || '' : ''),
     remark: record.remark || ''
   })
@@ -301,13 +293,6 @@ function RecordModal({ company, record, machines, locations, records, startLocat
     (m) => m.id === f.machine_id || (m.is_active !== false && m.fuel_type !== 'none' && (!loc || (loc === 'none' ? !m.location_id : m.location_id === loc)))
   )
   const machine = machines.find((m) => m.id === f.machine_id)
-  const unit = meterUnit(machine)
-  // Last meter reading of this machine before this record: a lower new reading is probably a typo.
-  const last = records
-    .filter((r) => r.machine_id === f.machine_id && r.id !== record.id && r.meter_reading != null && r.record_date <= f.record_date)
-    .sort((a, b) => (a.record_date < b.record_date ? 1 : -1))[0]
-  const overTank = machine?.tank_capacity_l && Number(f.litres) > Number(machine.tank_capacity_l)
-  const belowLast = last && f.meter_reading !== '' && Number(f.meter_reading) < Number(last.meter_reading)
 
   async function save(e) {
     e.preventDefault()
@@ -321,7 +306,6 @@ function RecordModal({ company, record, machines, locations, records, startLocat
         record_date: f.record_date,
         machine_id: f.machine_id,
         litres: Number(f.litres),
-        meter_reading: toNum(f.meter_reading),
         issued_by: f.issued_by.trim() || null,
         remark: f.remark.trim() || null
       })
@@ -367,14 +351,8 @@ function RecordModal({ company, record, machines, locations, records, startLocat
               ))}
             </select>
           </F>
-          <F label="Litres" hint={overTank ? `More than the tank (${num(machine.tank_capacity_l, 0)} L). Check the figure.` : null}>
+          <F label="Litres" span hint={overTank ? `More than the tank (${num(machine.tank_capacity_l, 0)} L). Check the figure.` : null}>
             <input type="number" inputMode="decimal" required min="0.01" step="0.01" value={f.litres} onChange={set('litres')} className={inputCls} />
-          </F>
-          <F
-            label={`Meter (${unit === 'h' ? 'hours' : 'km'})`}
-            hint={belowLast ? `Lower than the last reading (${num(last.meter_reading, 1)} ${unit}). Check the figure.` : last ? `Last: ${num(last.meter_reading, 1)} ${unit}` : null}
-          >
-            <input type="number" inputMode="decimal" min="0" step="0.1" value={f.meter_reading} onChange={set('meter_reading')} className={inputCls} placeholder="Optional" />
           </F>
           <F label="Issued by" span>
             <input value={f.issued_by} onChange={set('issued_by')} maxLength={120} className={inputCls} placeholder="Who pumped the fuel" />
