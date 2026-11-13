@@ -140,9 +140,10 @@ export async function readReceiptText(file) {
 
 // ---- pump / flow meter photo → litres ------------------------------------------
 // Mechanical fuel meters (PIUSI K33 / K44 and the like) show the litres on
-// white number wheels in a black window on a light face plate. The window is
-// found first (a wide dark box with light around it), then only that strip is
-// read. Reading the whole photo does not work: the digits are a small part of it.
+// white number wheels behind black windows on a face plate: either one wide
+// window for all wheels, or one small window per wheel. The display is found
+// first, then only its digits are read. Reading the whole photo does not
+// work: the digits are a small part of it.
 
 /** Grey copy of an image, at most `max` px on the long side: { w, h, g: Uint8Array, scale }. */
 function greyOf(source, max) {
@@ -196,12 +197,14 @@ function otsu(g) {
 export function findMeterWindows(source) {
   const { w, h, g, scale } = greyOf(source, 480)
   const out = []
+  const rows = []
   const seen = new Set()
   // Two cuts between dark and light: photos in shade and in sun differ a lot.
   const t0 = otsu(g)
   for (const t of [t0, Math.round(t0 * 0.7)]) {
     const label = new Int32Array(w * h)
     const stack = []
+    const tiles = []
     let next = 0
     for (let start = 0; start < w * h; start++) {
       if (g[start] >= t || label[start]) continue
@@ -225,12 +228,14 @@ export function findMeterWindows(source) {
       }
       const bw = x1 - x0 + 1
       const bh = y1 - y0 + 1
-      if (bw < w * 0.1 || bh < 8 || bw / bh < 1.8 || bw / bh > 9) continue
       // A close-up may cut the window off at the sides, never at the top or bottom.
-      if (y0 <= 1 || y1 >= h - 2 || bh > h * 0.35) continue
+      if (bh < 8 || y0 <= 1 || y1 >= h - 2 || bh > h * 0.35) continue
       // Mostly dark, but not solid: the white digits are inside it.
       const fill = area / (bw * bh)
       if (fill < 0.15 || fill > 0.97) continue
+      // One small window per wheel (or two that run together): kept for the row search below.
+      if (bw >= w * 0.04 && bw / bh >= 0.5 && bw / bh <= 4) tiles.push({ x0, x1, y0, y1, bw, bh })
+      if (bw < w * 0.1 || bw / bh < 1.8 || bw / bh > 9) continue
       // Light above and below (the face plate).
       const m = Math.max(2, Math.round(bh * 0.2))
       let light = 0
@@ -244,8 +249,42 @@ export function findMeterWindows(source) {
       seen.add(key)
       out.push({ x: x0 / scale, y: y0 / scale, w: bw / scale, h: bh / scale, area: bw * bh })
     }
+    // Meters with one window per wheel: windows of one height, side by side, make one display.
+    tiles.sort((a, b) => a.x0 - b.x0)
+    for (let i = 0; i < tiles.length; i++) {
+      const row = [tiles[i]]
+      for (let j = i + 1; j < tiles.length; j++) {
+        const a = row[row.length - 1]
+        const b = tiles[j]
+        const gap = b.x0 - a.x1
+        if (b.bh > a.bh * 0.75 && b.bh < a.bh * 1.33 && Math.abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) < a.bh * 0.25 && gap > -3 && gap < a.bh * 0.6) row.push(b)
+      }
+      if (row.length < 2) continue
+      const x0 = row[0].x0
+      const x1 = row[row.length - 1].x1
+      const y0 = Math.min(...row.map((r) => r.y0))
+      const y1 = Math.max(...row.map((r) => r.y1))
+      const bw = x1 - x0 + 1
+      const bh = y1 - y0 + 1
+      if (bw < w * 0.15 || bw / bh < 2.2 || bw / bh > 7) continue
+      const key = `r${Math.round(x0 / 8)}-${Math.round(y0 / 8)}-${Math.round(bw / 8)}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      // Each wheel's own window; two that ran together are split by the usual width.
+      const widths = row.map((r) => r.bw).sort((a, b) => a - b)
+      const one = widths[0]
+      const wheels = []
+      for (const r of row) {
+        const n = Math.max(1, Math.round(r.bw / one))
+        for (let k = 0; k < n; k++) wheels.push({ x: (r.x0 + (r.bw * k) / n) / scale, y: r.y0 / scale, w: r.bw / n / scale, h: r.bh / scale })
+      }
+      if (wheels.length < 3 || wheels.length > 5) continue
+      rows.push({ x: x0 / scale, y: y0 / scale, w: bw / scale, h: bh / scale, area: bw * bh, wheels })
+    }
   }
-  return out.sort((a, b) => b.area - a.area).slice(0, 4)
+  // Rows of wheel windows first (the surest sign of a display), then single wide windows.
+  const big = (a, b) => b.area - a.area
+  return [...rows.sort(big).slice(0, 3), ...out.sort(big).slice(0, 4)]
 }
 
 /**
@@ -339,6 +378,12 @@ function digitLine(win, deep = false) {
   const mc = cs[cs.length >> 1]
   const row = blobs.filter((b) => b.bh > mh * 0.75 && b.bh < mh * 1.3 && Math.abs((b.y0 + b.y1) / 2 - mc) < mh * 0.3).sort((a, b) => a.x0 - b.x0)
   if (row.length < 3 || row.length > 5) return null
+  // One digit per wheel: evenly spaced, and no room for a missing wheel at either end.
+  const mids = row.map((b) => (b.x0 + b.x1) / 2)
+  const steps = mids.slice(1).map((m, i) => m - mids[i]).sort((a, b) => a - b)
+  const pitch = steps[steps.length >> 1]
+  if (steps[0] < pitch * 0.7 || steps[steps.length - 1] > pitch * 1.4) return null
+  if (row[0].x0 > pitch * 1.3 || w - row[row.length - 1].x1 > pitch * 1.3) return null
   const gap = Math.round(mh * 0.25)
   const pad = Math.round(mh * 0.5)
   const c = document.createElement('canvas')
@@ -362,6 +407,168 @@ function digitLine(win, deep = false) {
   return { canvas: c, count: row.length }
 }
 
+// ---- a digit cut off by the window's edge (wheel caught turning) ----------------
+// The text reader cannot read half a digit. Its visible part is compared with
+// the same part of the ten digits drawn in a plain bold font instead.
+const glyphs = new Map()
+function glyphOf(digit) {
+  if (glyphs.has(digit)) return glyphs.get(digit)
+  const H = 80
+  const c = document.createElement('canvas')
+  c.width = H * 2
+  c.height = H * 2
+  const x = c.getContext('2d', { willReadFrequently: true })
+  x.fillStyle = '#fff'
+  x.fillRect(0, 0, c.width, c.height)
+  x.fillStyle = '#000'
+  x.font = `bold ${H * 1.3}px Arial, Helvetica, sans-serif`
+  x.fillText(String(digit), H * 0.4, H * 1.5)
+  const im = x.getImageData(0, 0, c.width, c.height).data
+  let x0 = c.width, x1 = 0, y0 = c.height, y1 = 0
+  for (let y = 0; y < c.height; y++) {
+    for (let xx = 0; xx < c.width; xx++) {
+      if (im[(y * c.width + xx) * 4] >= 128) continue
+      if (xx < x0) x0 = xx
+      if (xx > x1) x1 = xx
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+  }
+  const w = x1 - x0 + 1
+  const h = y1 - y0 + 1
+  const m = new Uint8Array(w * h)
+  for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) m[y * w + xx] = im[((y + y0) * c.width + xx + x0) * 4] < 128 ? 1 : 0
+  const g = { w, h, m }
+  glyphs.set(digit, g)
+  return g
+}
+
+/** Part of a 0/1 mask sampled onto an N × M grid. */
+function sampleMask(m, w, h, y0, sh, N, M) {
+  const o = new Uint8Array(N * M)
+  for (let j = 0; j < M; j++) {
+    for (let i = 0; i < N; i++) {
+      const x = Math.min(w - 1, Math.floor(((i + 0.5) / N) * w))
+      const y = Math.min(h - 1, Math.floor(y0 + ((j + 0.5) / M) * sh))
+      o[j * N + i] = m[y * w + x]
+    }
+  }
+  return o
+}
+
+/**
+ * The digit a cut-off shape is part of, or '' when two digits fit about equally.
+ * `shape` = { bw, bh, mask, high } (high: cut at the top, else at the bottom);
+ * `tall` = the height of a whole digit on this meter.
+ */
+function cutDigit(shape, tall) {
+  const f = Math.min(1, shape.bh / tall)
+  if (f < 0.5) return ''
+  const N = 16
+  const M = Math.max(6, Math.round(24 * f))
+  const a = sampleMask(shape.mask, shape.bw, shape.bh, 0, shape.bh, N, M)
+  const scores = []
+  for (let d = 0; d <= 9; d++) {
+    const g = glyphOf(d)
+    const t = sampleMask(g.m, g.w, g.h, shape.high ? g.h * (1 - f) : 0, g.h * f, N, M)
+    let both = 0
+    let any = 0
+    for (let k = 0; k < a.length; k++) {
+      if (a[k] && t[k]) both++
+      if (a[k] || t[k]) any++
+    }
+    scores.push([d, any ? both / any : 0])
+  }
+  scores.sort((p, q) => q[1] - p[1])
+  return scores[0][1] >= 0.55 && scores[0][1] - scores[1][1] >= 0.06 ? String(scores[0][0]) : ''
+}
+
+/**
+ * The same clean line for a meter with one window per wheel: each window is
+ * cut out on its own and its biggest shape is the digit. A wheel caught
+ * turning shows parts of two digits; the bigger part is taken.
+ */
+function wheelLine(source, wheels, height) {
+  const shapes = []
+  for (const wh of wheels) {
+    // Inside the window's frame.
+    const box = { x: wh.x + wh.w * 0.08, y: wh.y + wh.h * 0.06, w: wh.w * 0.84, h: wh.h * 0.88 }
+    const win = windowCanvas(source, box, { height })
+    const w = win.width
+    const h = win.height
+    const d = win.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data
+    const g = new Uint8Array(w * h)
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = d[i]
+    const t = otsu(g)
+    const label = new Uint8Array(w * h)
+    const stack = []
+    let best = null
+    for (let start = 0; start < w * h; start++) {
+      if (g[start] >= t || label[start]) continue
+      let x0 = w, x1 = 0, y0 = h, y1 = 0
+      const pix = []
+      stack.push(start)
+      label[start] = 1
+      while (stack.length) {
+        const p = stack.pop()
+        const x = p % w
+        const y = (p - x) / w
+        pix.push(p)
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+        if (x > 0 && !label[p - 1] && g[p - 1] < t) { label[p - 1] = 1; stack.push(p - 1) }
+        if (x < w - 1 && !label[p + 1] && g[p + 1] < t) { label[p + 1] = 1; stack.push(p + 1) }
+        if (y > 0 && !label[p - w] && g[p - w] < t) { label[p - w] = 1; stack.push(p - w) }
+        if (y < h - 1 && !label[p + w] && g[p + w] < t) { label[p + w] = 1; stack.push(p + w) }
+      }
+      const bh = y1 - y0 + 1
+      if (bh < h * 0.4) continue
+      // Frame left in the cut-out runs from edge to edge; a digit does not.
+      if ((y0 <= 0 && y1 >= h - 1) || (x0 <= 0 && x1 >= w - 1)) continue
+      if (!best || pix.length > best.pix.length) best = { x0, y0, bw: x1 - x0 + 1, bh, pix, w, nearBottom: h - 1 - y1 < y0 }
+    }
+    if (!best) return null
+    shapes.push(best)
+  }
+  // Whole digits go on the line for the text reader; a cut-off one is matched by shape.
+  // A shape clearly shorter than the tallest is a digit partly out of its window.
+  const tall = Math.max(...shapes.map((b) => b.bh))
+  const isCut = (b) => b.bh < tall * 0.85
+  const whole = shapes.filter((b) => !isCut(b))
+  if (whole.length < 2) return null
+  const cuts = shapes.map((b) => {
+    if (!isCut(b)) return null
+    const mask = new Uint8Array(b.bw * b.bh)
+    for (const p of b.pix) mask[(Math.floor(p / b.w) - b.y0) * b.bw + (p % b.w) - b.x0] = 1
+    // Nearer the bottom edge: its lower part is hidden; else its upper part.
+    return cutDigit({ bw: b.bw, bh: b.bh, mask, high: !b.nearBottom }, tall)
+  })
+  if (cuts.some((c) => c === '')) return null
+  const gap = Math.round(height * 0.2)
+  const pad = Math.round(height * 0.4)
+  const c = document.createElement('canvas')
+  c.width = pad * 2 + whole.reduce((n, b) => n + b.bw, 0) + gap * (whole.length - 1)
+  c.height = pad * 2 + tall
+  const o = c.getContext('2d')
+  o.fillStyle = '#fff'
+  o.fillRect(0, 0, c.width, c.height)
+  const img = o.getImageData(0, 0, c.width, c.height)
+  let x = pad
+  for (const b of whole) {
+    for (const p of b.pix) {
+      const px = (p % b.w) - b.x0 + x
+      const py = Math.floor(p / b.w) - b.y0 + pad + Math.round((tall - b.bh) / 2)
+      const q = (py * c.width + px) * 4
+      img.data[q] = img.data[q + 1] = img.data[q + 2] = 0
+    }
+    x += b.bw + gap
+  }
+  o.putImageData(img, 0, 0)
+  return { canvas: c, count: whole.length, cuts }
+}
+
 /** Only the digits of what was read. */
 const digitsOf = (text) => String(text || '').replace(/\D/g, '')
 
@@ -372,13 +579,18 @@ const WINDOW_SIZES = [110, 150]
 /** Litres on a meter photo, given `recognize(canvas) → text`. Null when not sure. */
 export async function readMeterWith(source, recognize) {
   for (const box of findMeterWindows(source)) {
-    for (const deep of [false, true]) {
+    for (const deep of box.wheels ? [false] : [false, true]) {
       const reads = []
       for (const height of WINDOW_SIZES) {
-        const line = digitLine(windowCanvas(source, box, { height }), deep)
+        const line = box.wheels ? wheelLine(source, box.wheels, height) : digitLine(windowCanvas(source, box, { height }), deep)
         if (!line) break
-        const raw = digitsOf(await recognize(line.canvas))
+        let raw = digitsOf(await recognize(line.canvas))
         if (raw.length !== line.count) break
+        // Put the shape-matched digits of turning wheels back in their places.
+        if (line.cuts) {
+          const whole = raw.split('')
+          raw = line.cuts.map((c) => (c == null ? whole.shift() : c)).join('')
+        }
         reads.push(raw)
       }
       if (reads.length === WINDOW_SIZES.length && reads.every((r) => r === reads[0]) && Number(reads[0]) > 0) return Number(reads[0])
@@ -386,6 +598,8 @@ export async function readMeterWith(source, recognize) {
   }
   return null
 }
+
+
 
 // A second reader that only knows digits and takes each window as one word.
 let digitWorker = null
@@ -399,7 +613,7 @@ async function getDigitWorker() {
 }
 
 /** Version of the meter reader, shown small on the phone form so a stale copy of the app can be told apart. */
-export const METER_READER_VERSION = 3
+export const METER_READER_VERSION = 4
 
 /** Reads the litres shown on a meter photo. Returns { litres } (null when unsure) or { litres: null, error }. */
 export async function readMeterPhoto(file) {
