@@ -7,6 +7,7 @@ import { listLocations } from '../../lib/companies.js'
 import { METER_READER_VERSION, readMeterPhoto } from '../../lib/ocr.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, num, sum, today } from '../../lib/format.js'
+import { useT } from '../worker/prefs.jsx'
 
 // Diesel Usage Record in Worker CMMS (/app/fuel), for site workers: photograph the pump meter,
 // pick the machine, check the litres, send. The date is today, the litres are
@@ -16,6 +17,7 @@ const big = 'h-14 w-full rounded-2xl border border-slate-300 bg-white px-4 text-
 const LAST_LOCATION = 'mjm-fuel-record-location'
 
 export default function FuelRecordMobile() {
+  const t = useT()
   const { company, access } = useOutletContext()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -53,7 +55,7 @@ export default function FuelRecordMobile() {
       setLoc((v) => (v && !l.some((x) => x.id === v) ? '' : v))
       setError('')
     } catch (e) {
-      setError(e.message || 'Could not load.')
+      setError(e.message || t('Could not load.'))
     } finally {
       setLoading(false)
     }
@@ -82,7 +84,7 @@ export default function FuelRecordMobile() {
 
   async function takePhoto(file) {
     if (!file) return
-    if (!file.type.startsWith('image/')) return setError('Please take a photo.')
+    if (!file.type.startsWith('image/')) return setError(t('Please take a photo.'))
     setError('')
     setPhoto({ file, url: URL.createObjectURL(file) })
     const n = ++scan.current
@@ -93,17 +95,17 @@ export default function FuelRecordMobile() {
     setReading(false)
     if (r.litres != null) {
       setLitres(String(r.litres))
-      setReadNote('Read from the photo. Check the number.')
+      setReadNote('read')
     } else {
-      setReadNote('Could not read the meter. Type the litres.')
+      setReadNote('unread')
     }
   }
 
   async function submit(e) {
     e.preventDefault()
-    if (!photo) return setError('Take a photo of the meter first.')
-    if (!machineId) return setError('Choose the machine or vehicle.')
-    if (!(Number(litres) > 0)) return setError('Enter the litres taken.')
+    if (!photo) return setError(t('Take a photo of the meter first.'))
+    if (!machineId) return setError(t('Choose the machine or vehicle.'))
+    if (!(Number(litres) > 0)) return setError(t('Enter the litres taken.'))
     setBusy(true)
     setError('')
     let path = null
@@ -125,7 +127,7 @@ export default function FuelRecordMobile() {
       load()
     } catch (e2) {
       removeRecordPhoto(path)
-      setError(e2.message || 'Could not send. Please try again.')
+      setError(e2.message || t('Could not send. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -141,8 +143,8 @@ export default function FuelRecordMobile() {
   if (!canAdd)
     return (
       <div className="mx-auto max-w-md rounded-2xl bg-amber-50 p-5 text-center text-amber-900">
-        <p className="text-lg font-bold">No access</p>
-        <p className="mt-1 text-sm">You cannot add fuel records for {company.name}. Ask your admin to tick “Add records” for you (Fuel Usage Record).</p>
+        <p className="text-lg font-bold">{t('No access')}</p>
+        <p className="mt-1 text-sm">{t('You cannot add fuel records for {company}. Ask your admin to tick “Add records” for you (Fuel Usage Record).', { company: company.name })}</p>
       </div>
     )
 
@@ -153,17 +155,17 @@ export default function FuelRecordMobile() {
           <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-600 text-white">
             <IconCheck width={44} height={44} />
           </span>
-          <p className="mt-4 text-2xl font-bold text-green-900">Sent</p>
+          <p className="mt-4 text-2xl font-bold text-green-900">{t('Sent')}</p>
           <p className="mt-1 text-lg text-green-900">
             {num(saved.litres, 2)} L · {saved.machine}
           </p>
           <p className="text-sm text-green-800">{day(saved.date)}</p>
         </div>
         <button onClick={() => setSaved(null)} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark">
-          Add another
+          {t('Add another')}
         </button>
         <button onClick={() => navigate('/app')} className="h-14 w-full rounded-2xl border border-slate-300 bg-white text-lg font-semibold text-slate-700">
-          Back to Worker CMMS
+          {t('Back to Worker CMMS')}
         </button>
         <Today mine={mine} machineById={machineById} />
       </div>
@@ -177,28 +179,28 @@ export default function FuelRecordMobile() {
       {error && <p className="rounded-2xl bg-red-100 p-4 text-base font-medium text-red-800">{error}</p>}
 
       {/* 1. Photo of the meter */}
-      <Step n="1" title="Photo of the meter">
+      <Step n="1" title={t('Photo of the meter')}>
         <input ref={fileInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { takePhoto(e.target.files?.[0]); e.target.value = '' }} />
         {photo ? (
           <div className="space-y-2">
             <img src={photo.url} alt="Meter" className="max-h-64 w-full rounded-2xl border border-slate-200 object-contain" />
             <button type="button" onClick={() => fileInput.current?.click()} className="h-12 w-full rounded-2xl border border-slate-300 bg-white text-base font-semibold text-slate-700">
-              Take again
+              {t('Take again')}
             </button>
           </div>
         ) : (
           <button type="button" onClick={() => fileInput.current?.click()} className="flex h-36 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand bg-brand-light/40 text-brand active:bg-brand-light">
             <IconCamera width={44} height={44} />
-            <span className="text-xl font-bold">Take photo</span>
+            <span className="text-xl font-bold">{t('Take photo')}</span>
           </button>
         )}
       </Step>
 
       {/* 2. Machine */}
-      <Step n="2" title="Machine / vehicle">
+      <Step n="2" title={t('Machine / vehicle')}>
         {locations.length > 0 && (
-          <select value={loc} onChange={(e) => pickLocation(e.target.value)} className={`${big} mb-2`} aria-label="Location">
-            <option value="">All locations</option>
+          <select value={loc} onChange={(e) => pickLocation(e.target.value)} className={`${big} mb-2`} aria-label={t('Location')}>
+            <option value="">{t('All locations')}</option>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
@@ -206,8 +208,8 @@ export default function FuelRecordMobile() {
             ))}
           </select>
         )}
-        <select value={machineId} onChange={(e) => setMachineId(e.target.value)} className={`${big} font-semibold`} aria-label="Machine or vehicle">
-          <option value="">Choose…</option>
+        <select value={machineId} onChange={(e) => setMachineId(e.target.value)} className={`${big} font-semibold`} aria-label={t('Machine or vehicle')}>
+          <option value="">{t('Choose…')}</option>
           {choices.map((m) => (
             <option key={m.id} value={m.id}>
               {vehicleLabel(m)}
@@ -215,11 +217,11 @@ export default function FuelRecordMobile() {
             </option>
           ))}
         </select>
-        {choices.length === 0 && <p className="mt-1 text-sm text-slate-500">No machine in this location.</p>}
+        {choices.length === 0 && <p className="mt-1 text-sm text-slate-500">{t('No machine in this location.')}</p>}
       </Step>
 
       {/* 3. Litres */}
-      <Step n="3" title="Diesel taken (litres)">
+      <Step n="3" title={t('Diesel taken (litres)')}>
         <div className="relative">
           <input
             type="number"
@@ -231,32 +233,34 @@ export default function FuelRecordMobile() {
               setLitres(e.target.value)
               setReadNote('')
             }}
-            placeholder={reading ? 'Reading the photo…' : '0'}
+            placeholder={reading ? t('Reading the photo…') : '0'}
             className="h-20 w-full rounded-2xl border border-slate-300 bg-white px-4 pr-14 text-center text-4xl font-bold tabular-nums text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-            aria-label="Litres"
+            aria-label={t('Litres')}
           />
           <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-2xl font-semibold text-slate-400">L</span>
         </div>
         {reading && (
           <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-            <Spinner className="h-4 w-4" /> Reading the meter from the photo…
+            <Spinner className="h-4 w-4" /> {t('Reading the meter from the photo…')}
           </p>
         )}
-        {!reading && readNote && <p className="mt-2 text-sm font-medium text-amber-700">{readNote}</p>}
-        {overTank && <p className="mt-2 text-sm font-medium text-red-700">More than the tank ({num(machine.tank_capacity_l, 0)} L). Check the number.</p>}
+        {!reading && readNote && (
+          <p className="mt-2 text-sm font-medium text-amber-700">{t(readNote === 'read' ? 'Read from the photo. Check the number.' : 'Could not read the meter. Type the litres.')}</p>
+        )}
+        {overTank && <p className="mt-2 text-sm font-medium text-red-700">{t('More than the tank ({tank} L). Check the number.', { tank: num(machine.tank_capacity_l, 0) })}</p>}
       </Step>
 
       <label className="flex items-center justify-between gap-3 rounded-2xl bg-slate-100 px-4 py-3 text-base text-slate-700">
-        <span className="font-semibold">Date</span>
+        <span className="font-semibold">{t('Date')}</span>
         <input type="date" required max={today()} value={date} onChange={(e) => setDate(e.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-2 text-base" />
       </label>
 
       <button type="submit" disabled={busy || reading} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark disabled:opacity-50">
-        {busy ? 'Sending…' : 'Send'}
+        {busy ? t('Sending…') : t('Send')}
       </button>
 
       <Today mine={mine} machineById={machineById} />
-      <p className="text-center text-xs text-slate-400">Meter reader v{METER_READER_VERSION}</p>
+      <p className="text-center text-xs text-slate-400">{t('Meter reader')} v{METER_READER_VERSION}</p>
     </form>
   )
 }
@@ -275,11 +279,12 @@ function Step({ n, title, children }) {
 
 // What this person sent today, so nothing is sent twice.
 function Today({ mine, machineById }) {
+  const t = useT()
   if (!mine.length) return null
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-left">
       <p className="mb-2 text-sm font-semibold text-slate-500">
-        Sent by you today · {num(sum(mine, 'litres'), 2)} L
+        {t('Sent by you today')} · {num(sum(mine, 'litres'), 2)} L
       </p>
       <ul className="divide-y divide-slate-100">
         {mine.map((r) => (

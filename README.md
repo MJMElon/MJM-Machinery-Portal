@@ -28,7 +28,9 @@ settings; it shares the login, database and code with CMMS 2.
 | **Diesel Usage Record** | `#/app/fuel` | The diesel-taken form: photo of the pump meter, machine, litres | Fuel Usage Record → Add records |
 | **Machine Service & Maintenance** | `#/app/service` | Need a mechanic, I fixed something, Request a service (`#/app/repair/<kind>`), and "Your requests" | Maintenance Work Manage → Send requests from the mobile app |
 
-A module the person has no rights for is greyed out on the start screen. The **Mobile view** buttons of the office
+The header has a language button (English / Bahasa Melayu) and a bright / dark mode button; both are remembered on
+the phone (`src/pages/worker/prefs.jsx` holds the Malay texts; dark colours are in `src/index.css` under `.wk-dark`).
+What is saved to the database (problem, part, what was done) stays in English. A module the person has no rights for is greyed out on the start screen. The **Mobile view** buttons of the office
 pages open their own module directly in a new tab: Fuel Usage Record → Diesel Usage Record, Maintenance Work Manage →
 Machine Service & Maintenance. The old links (`#/cmms/work/mobile`, `#/diesel/records/mobile`) lead there too.
 

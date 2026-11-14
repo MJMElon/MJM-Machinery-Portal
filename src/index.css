@@ -152,3 +152,66 @@ input[type='number'] {
 @media (prefers-reduced-motion: reduce) {
   .tile-wiggle, .mascot-drive, .mascot-wheel { animation: none; }
 }
+
+/* ---- Worker CMMS (/app): dark mode -------------------------------------
+   The app's pages are written with the normal light classes; under .wk-dark
+   those classes get dark colours. Only inside the Worker CMMS frame. */
+body.wk-dark-body {
+  background: #0b1220;
+}
+.wk-dark {
+  color-scheme: dark;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+/* surfaces */
+.wk-dark .bg-white { background-color: #1a2436; }
+.wk-dark .bg-white\/95 { background-color: rgb(15 23 42 / 0.95); }
+.wk-dark .bg-slate-100,
+.wk-dark .disabled\:bg-slate-100:disabled { background-color: #131c2c; }
+.wk-dark .bg-slate-200 { background-color: #334155; }
+.wk-dark .disabled\:bg-slate-300:disabled { background-color: #334155; }
+.wk-dark .active\:bg-slate-100:active { background-color: #243047; }
+/* text */
+.wk-dark .text-slate-900,
+.wk-dark .text-slate-800 { color: #f1f5f9; }
+.wk-dark .text-slate-700 { color: #e2e8f0; }
+.wk-dark .text-slate-600 { color: #cbd5e1; }
+.wk-dark .text-slate-500 { color: #94a3b8; }
+.wk-dark .text-slate-400,
+.wk-dark .disabled\:text-slate-400:disabled,
+.wk-dark .disabled\:text-slate-500:disabled { color: #7c8aa0; }
+.wk-dark ::placeholder { color: #64748b; }
+/* lines */
+.wk-dark .border-slate-200,
+.wk-dark .border-slate-300 { border-color: #334155; }
+.wk-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #263247; }
+.wk-dark .ring-slate-200 { --tw-ring-color: #2b3950; }
+/* brand tints */
+.wk-dark .bg-brand-light,
+.wk-dark .bg-brand-light\/40,
+.wk-dark .bg-brand-light\/30,
+.wk-dark .active\:bg-brand-light\/30:active { background-color: rgb(37 99 235 / 0.2); }
+.wk-dark .text-brand { color: #93c5fd; }
+.wk-dark .text-brand-dark { color: #bfdbfe; }
+.wk-dark .border-brand\/60 { border-color: rgb(96 165 250 / 0.6); }
+/* coloured notes and badges */
+.wk-dark .bg-green-50,
+.wk-dark .bg-green-100 { background-color: #0c3323; }
+.wk-dark .bg-green-300 { background-color: #15803d; }
+.wk-dark .bg-green-800 { background-color: #bbf7d0; }
+.wk-dark .text-green-900,
+.wk-dark .text-green-800,
+.wk-dark .text-green-700 { color: #86efac; }
+.wk-dark .bg-amber-50,
+.wk-dark .bg-amber-100 { background-color: #3a2a08; }
+.wk-dark .text-amber-900,
+.wk-dark .text-amber-800,
+.wk-dark .text-amber-700 { color: #fcd34d; }
+.wk-dark .bg-orange-100 { background-color: #43220a; }
+.wk-dark .text-orange-800,
+.wk-dark .text-orange-700 { color: #fdba74; }
+.wk-dark .bg-red-50,
+.wk-dark .bg-red-100 { background-color: #451616; }
+.wk-dark .text-red-800,
+.wk-dark .text-red-700 { color: #fca5a5; }

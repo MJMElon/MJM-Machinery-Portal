@@ -7,7 +7,8 @@ import { lastSmu, listMachines, listSuppliers, removeCaseFile, submitCase, uploa
 import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
-import { day, today } from '../../lib/format.js'
+import { today } from '../../lib/format.js'
+import { useT } from '../worker/prefs.jsx'
 
 // Machine Service & Maintenance in Worker CMMS (/app/repair/:kind), for site workers.
 // Three forms, opened from the module's screen (/app/service):
@@ -23,6 +24,7 @@ const n = (v) => Number(v).toLocaleString('en-MY', { maximumFractionDigits: 1 })
 const shortDay = (d) => new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
 export default function RepairMobile() {
+  const t = useT()
   const { current, loaded } = useCompany()
   const { user } = useAuth()
   const company = current?.cmms_enabled ? current : null
@@ -54,7 +56,7 @@ export default function RepairMobile() {
       setLoc((v) => (v && !l.some((x) => x.id === v) ? '' : v))
       setError('')
     } catch (e) {
-      setError(e.message || 'Could not load.')
+      setError(e.message || t('Could not load.'))
     } finally {
       setLoading(false)
     }
@@ -83,12 +85,12 @@ export default function RepairMobile() {
         <Spinner className="h-8 w-8" />
       </div>
     )
-  if (!company) return <Notice title="Not available" body="Machinery Manage is not enabled for this company. Choose another company (top left)." />
+  if (!company) return <Notice title={t('Not available')} body={t('Machinery Manage is not enabled for this company.')} />
   if (!access.can_add)
     return (
       <Notice
-        title="No access"
-        body={`You cannot send requests for ${company.name}. Ask your admin to tick “Send requests from the mobile app” for you (Maintenance Work Manage).`}
+        title={t('No access')}
+        body={t('You cannot send requests for {company} yet. Ask your admin to tick “Send requests from the mobile app” (Maintenance Work Manage) for you.', { company: company.name })}
       />
     )
 
@@ -99,14 +101,14 @@ export default function RepairMobile() {
           <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-600 text-white">
             <IconCheck width={44} height={44} />
           </span>
-          <p className="mt-4 text-2xl font-bold text-green-900">Sent · Case {caseNo(sent)}</p>
+          <p className="mt-4 text-2xl font-bold text-green-900">{t('Sent · Case {no}', { no: caseNo(sent) })}</p>
           <p className="mt-1 text-lg text-green-900">{sent.machine_name}</p>
           <p className="mt-2 text-sm text-green-800">
-            The office has it now. You can still add photos by WhatsApp with “{caseNo(sent)}” in the caption.
+            {t('The office has it now. You can still add photos by WhatsApp with “{no}” in the caption.', { no: caseNo(sent) })}
           </p>
         </div>
-        <button onClick={home} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark">
-          Back to Machine Service &amp; Maintenance
+        <button onClick={home} className="min-h-16 w-full rounded-2xl bg-brand px-4 py-3 text-lg font-bold leading-tight text-white active:bg-brand-dark">
+          {t('Back to Machine Service & Maintenance')}
         </button>
       </div>
     )
@@ -151,10 +153,11 @@ function Notice({ title, body }) {
 // ---- shared pieces of the three forms ---------------------------------------------
 
 function FormShell({ kicker, title, onBack, error, children, onSubmit }) {
+  const t = useT()
   return (
     <form onSubmit={onSubmit} className="mx-auto max-w-md space-y-5 pb-10">
       <div className="flex items-center gap-3">
-        <button type="button" onClick={onBack} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700" aria-label="Back">
+        <button type="button" onClick={onBack} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700" aria-label={t('Back')}>
           <IconBack width={20} height={20} />
         </button>
         <div>
@@ -181,11 +184,12 @@ function Step({ n: no, title, children, dim }) {
 }
 
 function MachinePick({ machines, locations, loc, pickLocation, value, onChange }) {
+  const t = useT()
   return (
     <>
       {locations.length > 0 && (
-        <select value={loc} onChange={(e) => pickLocation(e.target.value)} className={`${big} mb-2`} aria-label="Location">
-          <option value="">All locations</option>
+        <select value={loc} onChange={(e) => pickLocation(e.target.value)} className={`${big} mb-2`} aria-label={t('Location')}>
+          <option value="">{t('All locations')}</option>
           {locations.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
@@ -193,20 +197,21 @@ function MachinePick({ machines, locations, loc, pickLocation, value, onChange }
           ))}
         </select>
       )}
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${big} font-semibold`} aria-label="Machine">
-        <option value="">Choose…</option>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${big} font-semibold`} aria-label={t('Machine')}>
+        <option value="">{t('Choose…')}</option>
         {machines.map((m) => (
           <option key={m.id} value={m.id}>
             {[m.name, m.reg_no && m.reg_no.trim().toUpperCase() !== m.name.trim().toUpperCase() ? m.reg_no : null, m.machine_type || [m.brand, m.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
           </option>
         ))}
       </select>
-      {machines.length === 0 && <p className="mt-1 text-sm text-slate-500">No machine in this location.</p>}
+      {machines.length === 0 && <p className="mt-1 text-sm text-slate-500">{t('No machine in this location.')}</p>}
     </>
   )
 }
 
 function Chips({ options, value, onChange, square }) {
+  const t = useT()
   return (
     <div className={square ? 'grid grid-cols-3 gap-2' : 'flex flex-wrap gap-2'}>
       {options.map((o) => (
@@ -219,7 +224,7 @@ function Chips({ options, value, onChange, square }) {
             value === o ? 'border-2 border-brand bg-brand text-white' : 'border border-slate-300 bg-white text-slate-800'
           }`}
         >
-          {o}
+          {t(o)}
         </button>
       ))}
     </div>
@@ -228,6 +233,7 @@ function Chips({ options, value, onChange, square }) {
 
 // Photo / video tiles. `files` = [{ file, url, kind }]; nothing is uploaded until Send.
 function FileTiles({ files, onAdd, onRemove, video, slots }) {
+  const t = useT()
   const inputs = useRef({})
   const pick = (kind) => (e) => {
     for (const file of e.target.files || []) onAdd({ file, kind, url: URL.createObjectURL(file) })
@@ -238,9 +244,9 @@ function FileTiles({ files, onAdd, onRemove, video, slots }) {
     <div className="grid grid-cols-3 gap-2">
       {files.map((f, i) => (
         <div key={f.url} className={`${tile} bg-slate-800`}>
-          {f.file.type.startsWith('video/') ? <span className="text-sm font-semibold text-white">Video</span> : <img src={f.url} alt="" className="h-full w-full object-cover" />}
-          {f.kind !== 'photo' && <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 text-xs capitalize text-white">{f.kind}</span>}
-          <button type="button" onClick={() => onRemove(i)} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Remove">
+          {f.file.type.startsWith('video/') ? <span className="text-sm font-semibold text-white">{t('Video')}</span> : <img src={f.url} alt="" className="h-full w-full object-cover" />}
+          {f.kind !== 'photo' && <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 text-xs capitalize text-white">{t(f.kind)}</span>}
+          <button type="button" onClick={() => onRemove(i)} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white" aria-label={t('Remove')}>
             ✕
           </button>
         </div>
@@ -257,6 +263,7 @@ function FileTiles({ files, onAdd, onRemove, video, slots }) {
 
 // Hour meter / km with a camera button for a photo of the meter.
 function SmuInput({ value, onChange, photo, onPhoto, unit, hint }) {
+  const t = useT()
   const input = useRef(null)
   return (
     <>
@@ -265,7 +272,7 @@ function SmuInput({ value, onChange, photo, onPhoto, unit, hint }) {
           type="button"
           onClick={() => input.current?.click()}
           className={`flex h-14 w-16 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold ${photo ? 'bg-slate-800 text-white' : 'border-2 border-dashed border-brand/60 bg-brand-light/40 text-brand'}`}
-          aria-label="Photo of the meter"
+          aria-label={t('Photo of the meter')}
         >
           {photo ? 'photo ✓' : <IconCamera width={24} height={24} />}
         </button>
@@ -282,7 +289,7 @@ function SmuInput({ value, onChange, photo, onPhoto, unit, hint }) {
           }}
         />
         <div className="relative flex-1">
-          <input type="number" inputMode="decimal" min="0" step="0.1" value={value} onChange={(e) => onChange(e.target.value)} className={`${big} pr-12 text-xl font-bold tabular-nums`} aria-label="Meter reading" />
+          <input type="number" inputMode="decimal" min="0" step="0.1" value={value} onChange={(e) => onChange(e.target.value)} className={`${big} pr-12 text-xl font-bold tabular-nums`} aria-label={t('Meter reading')} />
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-base font-semibold text-slate-400">{unit}</span>
         </div>
       </div>
@@ -308,6 +315,7 @@ function useLastSmu(machineId) {
 
 /** Uploads the picked files, sends the case; on failure removes what was uploaded. */
 function useSend(company, user, onSent) {
+  const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   async function send(type, data, files) {
@@ -324,22 +332,23 @@ function useSend(company, user, onSent) {
       onSent(await submitCase(company.id, type, { ...data, attachments }))
     } catch (e) {
       paths.forEach(removeCaseFile)
-      setError(e.message || 'Could not send. Please try again.')
+      setError(e.message || t('Could not send. Please try again.'))
       setBusy(false)
     }
   }
   return { busy, error, setError, send }
 }
 
-const SendButton = ({ busy, disabled, children }) => (
+const SendButton = ({ busy, disabled, children, sending }) => (
   <button type="submit" disabled={busy || disabled} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark disabled:bg-slate-300 disabled:text-slate-500">
-    {busy ? 'Sending…' : children}
+    {busy ? sending : children}
   </button>
 )
 
 // ---- 1. Need a mechanic --------------------------------------------------------------
 
 function RepairForm({ company, user, machines, allMachines, locations, loc, pickLocation, onBack, onSent }) {
+  const t = useT()
   const [machineId, setMachineId] = useState('')
   const [category, setCategory] = useState('')
   const [detail, setDetail] = useState('')
@@ -351,44 +360,46 @@ function RepairForm({ company, user, machines, allMachines, locations, loc, pick
 
   function submit(e) {
     e.preventDefault()
-    if (!machineId) return setError('Choose the machine.')
-    if (!category && !detail.trim()) return setError('Say what the problem is.')
-    if (stopped == null) return setError('Can the machine still work? Choose Yes or No.')
+    if (!machineId) return setError(t('Choose the machine.'))
+    if (!category && !detail.trim()) return setError(t('Say what the problem is.'))
+    if (stopped == null) return setError(t('Can the machine still work? Choose Yes or No.'))
     send('repair_request', { machine_id: machineId, category, problem: detail.trim(), machine_stopped: stopped, smu }, files)
   }
 
   return (
-    <FormShell kicker="Repair request" title="Need a mechanic" onBack={onBack} error={error} onSubmit={submit}>
-      <Step n="1" title="Machine">
+    <FormShell kicker={t('Repair request')} title={t('Need a mechanic')} onBack={onBack} error={error} onSubmit={submit}>
+      <Step n="1" title={t('Machine')}>
         <MachinePick machines={machines} locations={locations} loc={loc} pickLocation={pickLocation} value={machineId} onChange={setMachineId} />
       </Step>
-      <Step n="2" title="What is the problem?">
+      <Step n="2" title={t('What is the problem?')}>
         <Chips options={PROBLEMS} value={category} onChange={setCategory} />
-        <p className="mb-1 mt-3 text-sm text-slate-500">Tell us more (optional)</p>
-        <input value={detail} onChange={(e) => setDetail(e.target.value)} maxLength={300} className={big} placeholder="e.g. Hydraulic leak at boom cylinder" />
+        <p className="mb-1 mt-3 text-sm text-slate-500">{t('Tell us more (optional)')}</p>
+        <input value={detail} onChange={(e) => setDetail(e.target.value)} maxLength={300} className={big} placeholder={t('e.g. Hydraulic leak at boom cylinder')} />
       </Step>
-      <Step n="3" title="Can the machine still work?">
+      <Step n="3" title={t('Can the machine still work?')}>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => setStopped(false)} aria-pressed={stopped === false} className={`h-14 rounded-2xl text-base font-semibold ${stopped === false ? 'border-2 border-brand bg-brand-light text-brand-dark' : 'border border-slate-300 bg-white text-slate-800'}`}>
-            Yes, still working
+            {t('Yes, still working')}
           </button>
           <button type="button" onClick={() => setStopped(true)} aria-pressed={stopped === true} className={`h-14 rounded-2xl text-base font-bold ${stopped === true ? 'border-2 border-red-600 bg-red-50 text-red-700' : 'border border-slate-300 bg-white text-slate-800'}`}>
-            No, stopped
+            {t('No, stopped')}
           </button>
         </div>
-        <p className="mt-1.5 text-sm text-slate-500">“Stopped” counts as a breakdown from today until the case is solved.</p>
+        <p className="mt-1.5 text-sm text-slate-500">{t('“Stopped” counts as a breakdown from today until the case is solved.')}</p>
       </Step>
-      <Step n="4" title="Photos or video">
+      <Step n="4" title={t('Photos or video')}>
         <FileTiles files={files} video onAdd={(f) => setFiles((x) => [...x, f].slice(0, 6))} onRemove={(i) => setFiles((x) => x.filter((_, k) => k !== i))} slots={files.length < 6 ? [{ kind: 'photo', label: '+' }] : []} />
       </Step>
-      <Step n="5" title={`Hour meter (SMU) · optional`}>
+      <Step n="5" title={t('Hour meter (SMU) · optional')}>
         <div className="relative">
-          <input type="number" inputMode="decimal" min="0" step="0.1" value={smu} onChange={(e) => setSmu(e.target.value)} className={`${big} pr-12 text-xl font-bold tabular-nums`} aria-label="Meter reading" />
+          <input type="number" inputMode="decimal" min="0" step="0.1" value={smu} onChange={(e) => setSmu(e.target.value)} className={`${big} pr-12 text-xl font-bold tabular-nums`} aria-label={t('Meter reading')} />
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-base font-semibold text-slate-400">{unit}</span>
         </div>
       </Step>
-      <SendButton busy={busy}>Send to office</SendButton>
-      <p className="text-center text-sm text-slate-500">A case number is made (e.g. #8). The office picks the mechanic or workshop. You can still add photos by WhatsApp with “#8”.</p>
+      <SendButton busy={busy} sending={t('Sending…')}>
+        {t('Send to office')}
+      </SendButton>
+      <p className="text-center text-sm text-slate-500">{t('A case number is made (e.g. #8). The office picks the mechanic or workshop. You can still add photos by WhatsApp with “#8”.')}</p>
     </FormShell>
   )
 }
@@ -396,6 +407,7 @@ function RepairForm({ company, user, machines, allMachines, locations, loc, pick
 // ---- 2. I fixed something ------------------------------------------------------------
 
 function FixedForm({ company, user, machines, allMachines, locations, loc, pickLocation, onBack, onSent }) {
+  const t = useT()
   const [machineId, setMachineId] = useState('')
   const [smu, setSmu] = useState('')
   const [meter, setMeter] = useState(null)
@@ -415,12 +427,12 @@ function FixedForm({ company, user, machines, allMachines, locations, loc, pickL
 
   function submit(e) {
     e.preventDefault()
-    if (!machineId) return setError('Choose the machine.')
-    if (!part) return setError('Choose the part.')
-    if (!action) return setError('Choose what was done.')
-    if (fixed && !from) return setError('Fill in “From” as well, or clear “Fixed on”.')
-    if (from && fixed && fixed < from) return setError('“Fixed on” cannot be before “From”.')
-    if (last && smu !== '' && Number(smu) < last.smu && !window.confirm(`The reading is lower than the last one (${n(last.smu)} ${unit}). Send anyway?`)) return
+    if (!machineId) return setError(t('Choose the machine.'))
+    if (!part) return setError(t('Choose the part.'))
+    if (!action) return setError(t('Choose what was done.'))
+    if (fixed && !from) return setError(t('Fill in “From” as well, or clear “Fixed on”.'))
+    if (from && fixed && fixed < from) return setError(t('“Fixed on” cannot be before “From”.'))
+    if (last && smu !== '' && Number(smu) < last.smu && !window.confirm(t('The reading is lower than the last one ({smu} {unit}). Send anyway?', { smu: n(last.smu), unit }))) return
     send(
       'repair_done',
       {
@@ -438,58 +450,60 @@ function FixedForm({ company, user, machines, allMachines, locations, loc, pickL
   }
 
   return (
-    <FormShell kicker="Corrective" title="Record a repair" onBack={onBack} error={error} onSubmit={submit}>
-      <Step n="1" title="Machine">
+    <FormShell kicker={t('Corrective')} title={t('Record a repair')} onBack={onBack} error={error} onSubmit={submit}>
+      <Step n="1" title={t('Machine')}>
         <MachinePick machines={machines} locations={locations} loc={loc} pickLocation={pickLocation} value={machineId} onChange={setMachineId} />
       </Step>
-      <Step n="2" title="Hour meter (SMU)">
-        <SmuInput value={smu} onChange={setSmu} photo={meter} onPhoto={setMeter} unit={unit} hint={last ? `Last reading: ${n(last.smu)} ${unit} on ${shortDay(last.date)}` : null} />
+      <Step n="2" title={t('Hour meter (SMU)')}>
+        <SmuInput value={smu} onChange={setSmu} photo={meter} onPhoto={setMeter} unit={unit} hint={last ? t('Last reading: {smu} {unit} on {date}', { smu: n(last.smu), unit, date: shortDay(last.date) }) : null} />
       </Step>
-      <Step n="3" title="What part?">
+      <Step n="3" title={t('What part?')}>
         <Chips options={PARTS} value={part} onChange={setPart} />
       </Step>
-      <Step n="4" title="What was done?">
+      <Step n="4" title={t('What was done?')}>
         <Chips options={ACTIONS_DONE} value={action} onChange={setAction} square />
-        <p className="mb-1 mt-3 text-sm text-slate-500">Note (optional)</p>
-        <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} className={big} placeholder="e.g. Front left tyre burst" />
+        <p className="mb-1 mt-3 text-sm text-slate-500">{t('Note (optional)')}</p>
+        <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} className={big} placeholder={t('e.g. Front left tyre burst')} />
       </Step>
-      <Step n="5" title="Parts used (optional)">
+      <Step n="5" title={t('Parts used (optional)')}>
         <div className="space-y-2">
           {parts.map((p, i) => (
             <div key={i} className="flex gap-2">
-              <input value={p.name} onChange={(e) => setPartRow(i, 'name', e.target.value)} maxLength={80} className={`${big.replace('w-full', 'min-w-0 flex-1')}`} placeholder="e.g. Tyre 12.5/80-18" aria-label="Part" />
-              <input type="number" inputMode="numeric" min="1" step="1" value={p.qty} onChange={(e) => setPartRow(i, 'qty', e.target.value)} className={`${big.replace('w-full', 'w-20 shrink-0').replace('px-4', 'px-2')} text-center`} aria-label="Quantity" />
+              <input value={p.name} onChange={(e) => setPartRow(i, 'name', e.target.value)} maxLength={80} className={`${big.replace('w-full', 'min-w-0 flex-1')}`} placeholder={t('e.g. Tyre 12.5/80-18')} aria-label={t('Part')} />
+              <input type="number" inputMode="numeric" min="1" step="1" value={p.qty} onChange={(e) => setPartRow(i, 'qty', e.target.value)} className={`${big.replace('w-full', 'w-20 shrink-0').replace('px-4', 'px-2')} text-center`} aria-label={t('Quantity')} />
             </div>
           ))}
         </div>
         {parts.length < 5 && parts[parts.length - 1].name.trim() && (
           <button type="button" onClick={() => setParts((r) => [...r, { name: '', qty: '1' }])} className="mt-2 text-base font-semibold text-brand">
-            + Another part
+            {t('+ Another part')}
           </button>
         )}
       </Step>
-      <Step n="6" title="Photos">
+      <Step n="6" title={t('Photos')}>
         <FileTiles
           files={files}
           onAdd={(f) => setFiles((x) => [...x.filter((y) => y.kind !== f.kind), f])}
           onRemove={(i) => setFiles((x) => x.filter((_, k) => k !== i))}
-          slots={[!has('before') && { kind: 'before', label: '+ Before' }, !has('after') && { kind: 'after', label: '+ After' }].filter(Boolean)}
+          slots={[!has('before') && { kind: 'before', label: t('+ Before') }, !has('after') && { kind: 'after', label: t('+ After') }].filter(Boolean)}
         />
       </Step>
-      <Step n="7" title="Machine stopped">
+      <Step n="7" title={t('Machine stopped')}>
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-sm text-slate-600">
-            From
+            {t('From')}
             <input type="date" max={today()} value={from} onChange={(e) => setFrom(e.target.value)} className={`${big} mt-1 px-3 text-base`} />
           </label>
           <label className="block text-sm text-slate-600">
-            Fixed on
+            {t('Fixed on')}
             <input type="date" max={today()} value={fixed} onChange={(e) => setFixed(e.target.value)} className={`${big} mt-1 px-3 text-base`} />
           </label>
         </div>
-        <p className="mt-1.5 text-sm text-slate-500">Machine did not stop? Leave both empty. Not fixed yet? Leave “Fixed on” empty — the job stays Open.</p>
+        <p className="mt-1.5 text-sm text-slate-500">{t('Machine did not stop? Leave both empty. Not fixed yet? Leave “Fixed on” empty — the job stays Open.')}</p>
       </Step>
-      <SendButton busy={busy}>Send</SendButton>
+      <SendButton busy={busy} sending={t('Sending…')}>
+        {t('Send')}
+      </SendButton>
     </FormShell>
   )
 }
@@ -497,6 +511,7 @@ function FixedForm({ company, user, machines, allMachines, locations, loc, pickL
 // ---- 3. Request a service ------------------------------------------------------------
 
 function ServiceForm({ company, user, machines, allMachines, locations, loc, pickLocation, suppliers, onBack, onSent }) {
+  const t = useT()
   const [machineId, setMachineId] = useState('')
   const [smu, setSmu] = useState('')
   const [meter, setMeter] = useState(null)
@@ -510,65 +525,67 @@ function ServiceForm({ company, user, machines, allMachines, locations, loc, pic
 
   function submit(e) {
     e.preventDefault()
-    if (!machineId) return setError('Choose the machine.')
-    if (smu === '') return setError('Enter the meter reading.')
-    if (early) return setError(`Too early. You can request from ${n(check.from)} ${unit}.`)
+    if (!machineId) return setError(t('Choose the machine.'))
+    if (smu === '') return setError(t('Enter the meter reading.'))
+    if (early) return setError(t('Too early. You can request from {from} {unit}.', { from: n(check.from), unit }))
     send('service_request', { machine_id: machineId, smu, preferred_date: date }, meter ? [meter] : [])
   }
 
   return (
-    <FormShell kicker="Preventive" title="Request a service" onBack={onBack} error={error} onSubmit={submit}>
-      <Step n="1" title="Machine">
+    <FormShell kicker={t('Preventive')} title={t('Request a service')} onBack={onBack} error={error} onSubmit={submit}>
+      <Step n="1" title={t('Machine')}>
         <MachinePick machines={machines} locations={locations} loc={loc} pickLocation={pickLocation} value={machineId} onChange={setMachineId} />
       </Step>
-      <Step n="2" title="Hour meter (SMU) now">
+      <Step n="2" title={t('Hour meter (SMU) now')}>
         <SmuInput value={smu} onChange={setSmu} photo={meter} onPhoto={setMeter} unit={unit} />
       </Step>
 
       {machine && !check && (
         <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
-          No service schedule is set for this machine yet, so it cannot be checked here. You can still send; the office will check it.
+          {t('No service schedule is set for this machine yet, so it cannot be checked here. You can still send; the office will check it.')}
         </p>
       )}
       {check && (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          <Line label="Last service" value={`${n(machine.last_service_smu)} ${unit}${machine.last_service_date ? ` · ${shortDay(machine.last_service_date)}` : ''}`} />
-          <Line label="This service" value={`${n(check.interval)} ${unit} service at ${n(check.due)} ${unit}`} />
+          <Line label={t('Last service')} value={`${n(machine.last_service_smu)} ${unit}${machine.last_service_date ? ` · ${shortDay(machine.last_service_date)}` : ''}`} />
+          <Line label={t('This service')} value={t('{interval} {unit} service at {due} {unit}', { interval: n(check.interval), due: n(check.due), unit })} />
           <WindowBar check={check} smu={smu} />
           {check.state === 'ok' && (
             <p className="flex items-start gap-2 rounded-xl bg-green-100 p-3 text-base font-semibold text-green-800">
               <IconCheck width={20} height={20} className="mt-0.5 shrink-0" />
-              In the service window ({check.gap === 0 ? 'due now' : `${n(Math.abs(check.gap))} ${unit} ${check.gap < 0 ? 'early' : 'over'}`}). You can send.
+              {t('In the service window ({gap}). You can send.', {
+                gap: check.gap === 0 ? t('due now') : t(check.gap < 0 ? '{n} {unit} early' : '{n} {unit} over', { n: n(Math.abs(check.gap)), unit })
+              })}
             </p>
           )}
           {check.state === 'early' && (
             <p className="flex items-start gap-2 rounded-xl bg-orange-100 p-3 text-base font-semibold text-orange-800">
               <IconWarning width={20} height={20} className="mt-0.5 shrink-0" />
-              Too early. {n(check.from - Number(smu))} {unit} more — you can request from {n(check.from)} {unit}.
+              {t('Too early. {more} {unit} more — you can request from {from} {unit}.', { more: n(check.from - Number(smu)), from: n(check.from), unit })}
             </p>
           )}
           {check.state === 'late' && (
             <p className="flex items-start gap-2 rounded-xl bg-red-100 p-3 text-base font-semibold text-red-800">
               <IconWarning width={20} height={20} className="mt-0.5 shrink-0" />
-              Late by {n(check.gap)} {unit}. Send the request now.
+              {t('Late by {n} {unit}. Send the request now.', { n: n(check.gap), unit })}
             </p>
           )}
         </div>
       )}
 
-      <Step n="3" title="Preferred date" dim={early}>
+      <Step n="3" title={t('Preferred date')} dim={early}>
         <input type="date" min={today()} value={date} onChange={(e) => setDate(e.target.value)} disabled={early} className={big} />
       </Step>
       {machine && !early && (
         <p className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200">
-          Will be sent to: <span className="font-bold">{supplier ? supplier.name : 'the office (it picks the workshop)'}</span>
-          {supplier ? ' · after the office approves' : ''}
+          {t('Will be sent to:')} <span className="font-bold">{supplier ? supplier.name : t('the office (it picks the workshop)')}</span>
+          {supplier ? t(' · after the office approves') : ''}
         </p>
       )}
-      <SendButton busy={busy} disabled={early}>
-        Send request
+      <SendButton busy={busy} disabled={early} sending={t('Sending…')}>
+        {t('Send request')}
       </SendButton>
-      {early && <p className="text-center text-sm text-slate-500">Meter reading wrong? Retake the photo and fix the number.</p>}
+      {early && <p className="text-center text-sm text-slate-500">{t('Meter reading wrong? Retake the photo and fix the number.')}</p>}
     </FormShell>
   )
 }
