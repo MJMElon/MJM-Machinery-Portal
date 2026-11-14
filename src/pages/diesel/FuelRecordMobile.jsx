@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import { Spinner } from '../../components/ui.jsx'
 import { IconCamera, IconCheck } from '../../components/icons.jsx'
 import { listFuelRecords, listVehicles, removeRecordPhoto, saveFuelRecord, uploadRecordPhoto, vehicleLabel } from '../../lib/diesel.js'
@@ -8,7 +8,7 @@ import { METER_READER_VERSION, readMeterPhoto } from '../../lib/ocr.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, num, sum, today } from '../../lib/format.js'
 
-// Fuel Usage Record on a phone, for site workers: photograph the pump meter,
+// Fuel Usage Record in the Site App (/app/fuel), for site workers: photograph the pump meter,
 // pick the machine, check the litres, send. The date is today, the litres are
 // read off the photo (a draft the worker checks), the name is the signed-in
 // person. Entries land in Fuel Usage Record with the photo attached.
@@ -17,6 +17,7 @@ const LAST_LOCATION = 'mjm-fuel-record-location'
 
 export default function FuelRecordMobile() {
   const { company, access } = useOutletContext()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [machines, setMachines] = useState([])
   const [locations, setLocations] = useState([])
@@ -42,7 +43,6 @@ export default function FuelRecordMobile() {
   const scan = useRef(0)
 
   const canAdd = access.can('fuel_record', 'add')
-  const canView = access.can('fuel_record', 'view')
 
   const load = useCallback(async () => {
     try {
@@ -162,6 +162,9 @@ export default function FuelRecordMobile() {
         <button onClick={() => setSaved(null)} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark">
           Add another
         </button>
+        <button onClick={() => navigate('/app')} className="h-14 w-full rounded-2xl border border-slate-300 bg-white text-lg font-semibold text-slate-700">
+          Back to start
+        </button>
         <Today mine={mine} machineById={machineById} />
       </div>
     )
@@ -254,13 +257,6 @@ export default function FuelRecordMobile() {
 
       <Today mine={mine} machineById={machineById} />
       <p className="text-center text-xs text-slate-400">Meter reader v{METER_READER_VERSION}</p>
-      {canView && (
-        <p className="text-center">
-          <Link to="/diesel/records" className="text-sm font-medium text-brand underline">
-            Open the full Fuel Usage Record
-          </Link>
-        </p>
-      )}
     </form>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Field, Modal, Spinner, TextArea, TextInput } from '../../components/ui.jsx'
 import { IconCamera, IconConsolidate, IconDownload, IconRefresh } from '../../components/icons.jsx'
@@ -11,7 +11,6 @@ import { CaseEditModal } from '../../components/CaseEditModal.jsx'
 import { CASE_TYPES, caseNo, caseStage, caseSummary, caseType, fromApp, isStopped, serviceGap } from '../../lib/cases.js'
 import { approveCase, closeCase, deleteCase, listMachines, listSuppliers, sendToSupplier, setCasePinned, solveCase, useCmmsAccess } from '../../lib/cmms.js'
 import { CaseWorkflowModal } from '../../components/CaseWorkflowModal.jsx'
-import { EMBEDDED } from '../../components/Shell.jsx'
 import { downloadCsv, money } from '../../lib/format.js'
 
 const TABS = [
@@ -26,7 +25,6 @@ const TYPE_CHIPS = [['', 'All types'], ...Object.entries(CASE_TYPES).map(([k, v]
 export default function WorkManage() {
   const { isSuperAdmin } = useAuth()
   const { current } = useCompany()
-  const navigate = useNavigate()
   const [tab, setTab] = useState('pending')
   const [type, setType] = useState('')
   const { pending, solved, urls, loading, error, reload, forCompany } = useCases()
@@ -154,9 +152,8 @@ export default function WorkManage() {
     )
   }
 
-  // The worker app opens in its own tab from a module window, with a fresh ?v= so it is never a cached copy.
-  const openMobile = () =>
-    EMBEDDED ? window.open(`${window.location.pathname}?v=${Date.now()}#/cmms/work/mobile`, '_blank') : navigate('/cmms/work/mobile')
+  // The Site App (for workers) opens in its own tab, with a fresh ?v= so it is never a cached copy.
+  const openMobile = () => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank')
 
   return (
     <div className="space-y-4">
@@ -168,8 +165,8 @@ export default function WorkManage() {
               <IconRefresh width={18} height={18} />
             </Button>
             {/* Always shown; the app itself says which permission is needed when someone may not send requests. */}
-            <Button variant="secondary" onClick={openMobile} title="The worker app: need a mechanic, I fixed something, request a service">
-              <IconCamera width={18} height={18} /> Mobile view
+            <Button variant="secondary" onClick={openMobile} title="Opens the Site App for workers in a new tab: need a mechanic, I fixed something, request a service">
+              <IconCamera width={18} height={18} /> Site App
             </Button>
             <Button variant="secondary" onClick={exportCsv} disabled={loading || !key} title="All cases of this company as a CSV file">
               <IconDownload width={18} height={18} /> Export for OPISPRO

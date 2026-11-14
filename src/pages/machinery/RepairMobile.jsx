@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Badge, Spinner } from '../../components/ui.jsx'
-import { IconBack, IconCamera, IconCheck, IconWarning, IconWrench } from '../../components/icons.jsx'
-import { ACTIONS_DONE, PARTS, PROBLEMS, caseNo, caseSummary, caseType, serviceCheck, smuUnit } from '../../lib/cases.js'
-import { lastSmu, listMachines, listMyCases, listSuppliers, removeCaseFile, submitCase, uploadCaseFile, useCmmsAccess } from '../../lib/cmms.js'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Spinner } from '../../components/ui.jsx'
+import { IconBack, IconCamera, IconCheck, IconWarning } from '../../components/icons.jsx'
+import { ACTIONS_DONE, PARTS, PROBLEMS, caseNo, caseType, serviceCheck, smuUnit } from '../../lib/cases.js'
+import { lastSmu, listMachines, listSuppliers, removeCaseFile, submitCase, uploadCaseFile, useCmmsAccess } from '../../lib/cmms.js'
 import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, today } from '../../lib/format.js'
 
-// Repair & Maintenance on a phone, for site workers. Three things to record:
-//   Need a mechanic    – repair request (machine has a problem)
-//   I fixed something  – corrective job already done
-//   Request a service  – preventive, when the machine is due
+// Repair & Maintenance in the Site App (/app/repair/:kind), for site workers.
+// Three forms, opened from the app's start screen:
+//   repair   Need a mechanic    – repair request (machine has a problem)
+//   fixed    I fixed something  – corrective job already done
+//   service  Request a service  – preventive, when the machine is due
 // Each becomes a case in Maintenance Work Manage; the office does the rest.
+export const REPAIR_KINDS = ['repair', 'fixed', 'service']
+export const SITE_LOCATION_KEY = 'mjm-fuel-record-location' // the worker's site, shared by every form of the app
 const big = 'h-14 w-full rounded-2xl border border-slate-300 bg-white px-4 text-lg text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-slate-100 disabled:text-slate-400'
-const LAST_LOCATION = 'mjm-fuel-record-location' // the same site as in the fuel form
+const LAST_LOCATION = SITE_LOCATION_KEY
 const n = (v) => Number(v).toLocaleString('en-MY', { maximumFractionDigits: 1 })
 const shortDay = (d) => new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
@@ -24,11 +27,12 @@ export default function RepairMobile() {
   const { user } = useAuth()
   const company = current?.cmms_enabled ? current : null
   const access = useCmmsAccess(company?.id)
-  const [screen, setScreen] = useState('home') // home | repair | fixed | service
+  const { kind } = useParams()
+  const navigate = useNavigate()
+  const home = () => navigate('/app')
   const [machines, setMachines] = useState([])
   const [locations, setLocations] = useState([])
   const [suppliers, setSuppliers] = useState([])
-  const [mine, setMine] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sent, setSent] = useState(null) // the case just sent
@@ -43,16 +47,10 @@ export default function RepairMobile() {
   const load = useCallback(async () => {
     if (!company || !user) return setLoading(false)
     try {
-      const [m, l, s, c] = await Promise.all([
-        listMachines(company.id),
-        listLocations(company.id).catch(() => []),
-        listSuppliers(company.id).catch(() => []),
-        listMyCases(company.id, user.id).catch(() => [])
-      ])
+      const [m, l, s] = await Promise.all([listMachines(company.id), listLocations(company.id).catch(() => []), listSuppliers(company.id).catch(() => [])])
       setMachines(m.filter((x) => x.is_active !== false))
       setLocations(l)
       setSuppliers(s)
-      setMine(c)
       setLoc((v) => (v && !l.some((x) => x.id === v) ? '' : v))
       setError('')
     } catch (e) {
@@ -75,9 +73,9 @@ export default function RepairMobile() {
     }
   }
 
-  const machineById = useMemo(() => new Map(machines.map((m) => [m.id, m])), [machines])
-  const shown = machines.filter((m) => !loc || m.location_id === loc)
-  const locName = locations.find((l) => l.id === loc)?.name
+  const shown = useMemo(() => machines.filter((m) => !loc || m.location_id === loc), [machines, loc])
+
+  if (!REPAIR_KINDS.includes(kind)) return <Navigate to="/app" replace />
 
   if (!loaded || loading || !access.loaded)
     return (
@@ -107,13 +105,7 @@ export default function RepairMobile() {
             The office has it now. You can still add photos by WhatsApp with “{caseNo(sent)}” in the caption.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setSent(null)
-            setScreen('home')
-          }}
-          className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark"
-        >
+        <button onClick={home} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark">
           Back to start
         </button>
       </div>
@@ -127,103 +119,24 @@ export default function RepairMobile() {
     locations,
     loc,
     pickLocation,
-    onBack: () => setScreen('home'),
-    onSent: (c) => {
-      setSent(c)
-      load()
-    }
+    onBack: home,
+    onSent: setSent
   }
-  if (screen === 'repair') return <RepairForm {...formProps} />
-  if (screen === 'fixed') return <FixedForm {...formProps} />
-  if (screen === 'service') return <ServiceForm {...formProps} suppliers={suppliers} />
-
   return (
-    <div className="mx-auto max-w-md space-y-4 pb-10">
-      <p className="text-center text-sm text-slate-600">
-        <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-green-600 align-middle" />
-        {company.name}
-        {locName ? ` · ${locName}` : ''}
-      </p>
-      {error && <p className="rounded-2xl bg-red-100 p-4 text-base font-medium text-red-800">{error}</p>}
-      {locations.length > 0 && (
-        <select value={loc} onChange={(e) => pickLocation(e.target.value)} className={big} aria-label="Your location">
-          <option value="">All locations</option>
-          {locations.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-      )}
-      <p className="pt-1 text-base font-semibold text-slate-700">What do you want to record?</p>
-      <Choice tone="red" Icon={IconWarning} title="Need a mechanic" sub="Repair request · machine has a problem" onClick={() => setScreen('repair')} />
-      <Choice tone="amber" Icon={IconWrench} title="I fixed something" sub="Corrective · e.g. changed a tyre, hose, battery" onClick={() => setScreen('fixed')} />
-      <Choice tone="blue" Icon={IconCheck} title="Request a service" sub="Preventive · when the machine is due" onClick={() => setScreen('service')} />
-
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-        <p className="mb-1 text-sm font-semibold text-slate-600">Your requests</p>
-        {mine.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-400">Nothing sent yet.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {mine.map((c) => {
-              const s = myStatus(c)
-              return (
-                <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <span className="min-w-0">
-                    <span className="block truncate text-base font-bold text-slate-900">
-                      Case {caseNo(c)} · {c.machine_name || 'Machine'}
-                    </span>
-                    <span className="block truncate text-sm text-slate-500">
-                      {caseSummary(c, machineById.get(c.machine_id)) || 'Request'} · {shortDay(c.opened_at)}
-                    </span>
-                  </span>
-                  <Badge color={s.color} className="shrink-0 px-2.5 py-1 text-[13px] font-semibold">
-                    {s.label}
-                  </Badge>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-      {access.can_view && (
-        <p className="text-center">
-          <Link to="/cmms/work" className="text-sm font-medium text-brand underline">
-            Open Maintenance Work Manage (office)
-          </Link>
-        </p>
-      )}
-    </div>
+    <>
+      {error && <p className="mx-auto mb-4 max-w-md rounded-2xl bg-red-100 p-4 text-base font-medium text-red-800">{error}</p>}
+      {kind === 'repair' ? <RepairForm {...formProps} /> : kind === 'fixed' ? <FixedForm {...formProps} /> : <ServiceForm {...formProps} suppliers={suppliers} />}
+    </>
   )
 }
 
 // What the worker sees for a request of their own.
-function myStatus(c) {
+export function myStatus(c) {
   if (c.status === 'solved') return { label: 'Done', color: 'slate' }
   const t = caseType(c)
   if (t === 'service_request') return c.approved_at ? { label: c.sent_at ? 'Sent to supplier' : 'Approved', color: 'green' } : { label: 'Waiting approval', color: 'amber' }
   if (t === 'repair_done') return { label: 'Recorded', color: 'slate' }
   return c.sent_at ? { label: 'At workshop', color: 'amber' } : { label: 'Pending', color: 'amber' }
-}
-
-const TONES = {
-  red: 'bg-red-100 text-red-700',
-  amber: 'bg-orange-100 text-orange-700',
-  blue: 'bg-brand-light text-brand'
-}
-function Choice({ tone, Icon, title, sub, onClick }) {
-  return (
-    <button onClick={onClick} className="flex w-full items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-4 text-left shadow-sm active:border-brand active:bg-brand-light/30">
-      <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${TONES[tone]}`}>
-        <Icon width={28} height={28} />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-xl font-bold text-slate-900">{title}</span>
-        <span className="block text-sm text-slate-600">{sub}</span>
-      </span>
-    </button>
-  )
 }
 
 function Notice({ title, body }) {

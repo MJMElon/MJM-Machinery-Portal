@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Navigate, useNavigate, useOutletContext } from 'react-router-dom'
+import { Navigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Modal, Select, TextInput } from '../../components/ui.jsx'
 import { IconCamera, IconDownload, IconImage, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
@@ -7,7 +7,6 @@ import { Empty, ErrorBox, F, Loading, MonthSelect, Stats, inputCls, monthsOf } f
 import { deleteFuelRecord, listFuelRecords, listVehicles, openRecordPhoto, removeRecordPhoto, saveFuelRecord, vehicleLabel } from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
-import { EMBEDDED } from '../../components/Shell.jsx'
 import { day, downloadCsv, num, sum, thisMonth, today } from '../../lib/format.js'
 
 // Fuel Usage Record: fuel issued to each machine from the company's own tank
@@ -16,7 +15,6 @@ import { day, downloadCsv, num, sum, thisMonth, today } from '../../lib/format.j
 // totals by location when the company has locations.
 export default function FuelRecords() {
   const { company, access } = useOutletContext()
-  const navigate = useNavigate()
   const [records, setRecords] = useState([])
   const [machines, setMachines] = useState([])
   const [locations, setLocations] = useState([])
@@ -74,10 +72,9 @@ export default function FuelRecords() {
 
   const canAdd = access.can('fuel_record', 'add')
   // Site workers (Add only, no View) get the phone form straight away.
-  if (!access.can('fuel_record', 'view') && canAdd) return <Navigate to="/diesel/records/mobile" replace />
-  // The phone form opens in its own tab from a module window, so it can be bookmarked on a phone.
-  // A fresh ?v= makes the tab load the newest version of the app, never a cached one.
-  const openMobile = () => (EMBEDDED ? window.open(`${window.location.pathname}?v=${Date.now()}#/diesel/records/mobile`, '_blank') : navigate('/diesel/records/mobile'))
+  if (!access.can('fuel_record', 'view') && canAdd) return <Navigate to="/app/fuel" replace />
+  // The Site App (for workers) opens in its own tab, with a fresh ?v= so it is never a cached copy.
+  const openMobile = () => window.open(`${window.location.pathname}?v=${Date.now()}#/app/fuel`, '_blank')
   const canEdit = access.can('fuel_record', 'edit')
   const canDelete = access.can('fuel_record', 'delete')
 
@@ -121,7 +118,7 @@ export default function FuelRecords() {
             </Button>
             {canAdd && (
               <Button variant="secondary" onClick={openMobile} title="Simple phone form for site workers: photo of the meter, machine, litres">
-                <IconCamera width={18} height={18} /> Mobile view
+                <IconCamera width={18} height={18} /> Site App
               </Button>
             )}
             {canAdd && (

@@ -32,6 +32,7 @@ import FuelRecordMobile from './pages/diesel/FuelRecordMobile.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
 import DieselUsers from './pages/diesel/DieselUsers.jsx'
+import { WorkerFuel, WorkerHome, WorkerShell } from './pages/worker/WorkerApp.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -42,6 +43,15 @@ export default function App() {
     <Routes>
       {import.meta.env.DEV && <Route path="/login" element={user ? <Navigate to="/" replace /> : <DevLogin />} />}
       <Route element={<RequirePortalAdmin />}>
+        {/* The Site App for site workers: its own shell, apart from the office pages. */}
+        <Route path="/app" element={<WorkerShell />}>
+          <Route index element={<WorkerHome />} />
+          <Route path="fuel" element={<WorkerFuel />}>
+            <Route index element={<FuelRecordMobile />} />
+          </Route>
+          <Route path="repair/:kind" element={<RepairMobile />} />
+          <Route path="*" element={<Navigate to="/app" replace />} />
+        </Route>
         <Route element={<Shell />}>
           <Route path="/" element={<PortalHome />} />
           <Route path="/settings" element={<CompanySettings />} />
@@ -53,7 +63,7 @@ export default function App() {
             <Route index element={<CmmsHome />} />
             <Route path="work" element={<WorkManage />} />
             <Route path="work/all" element={<WorkConsolidated />} />
-            <Route path="work/mobile" element={<RepairMobile />} />
+            <Route path="work/mobile" element={<Navigate to="/app" replace />} />
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="machines/new" element={<MachinePage key="new" mode="new" />} />
@@ -72,7 +82,7 @@ export default function App() {
             <Route path="claims/:id/edit" element={<ClaimEdit />} />
             <Route path="usage" element={<DieselUsage />} />
             <Route path="records" element={<FuelRecords />} />
-            <Route path="records/mobile" element={<FuelRecordMobile />} />
+            <Route path="records/mobile" element={<Navigate to="/app/fuel" replace />} />
             <Route path="cards" element={<FleetCardManage />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
