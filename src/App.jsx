@@ -32,7 +32,7 @@ import FuelRecordMobile from './pages/diesel/FuelRecordMobile.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
 import DieselUsers from './pages/diesel/DieselUsers.jsx'
-import { WorkerFuel, WorkerHome, WorkerShell } from './pages/worker/WorkerApp.jsx'
+import { WorkerFuel, WorkerHome, WorkerService, WorkerShell } from './pages/worker/WorkerApp.jsx'
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -43,12 +43,13 @@ export default function App() {
     <Routes>
       {import.meta.env.DEV && <Route path="/login" element={user ? <Navigate to="/" replace /> : <DevLogin />} />}
       <Route element={<RequirePortalAdmin />}>
-        {/* The Site App for site workers: its own shell, apart from the office pages. */}
+        {/* Worker CMMS for site workers: its own shell and two modules, apart from the office pages. */}
         <Route path="/app" element={<WorkerShell />}>
           <Route index element={<WorkerHome />} />
           <Route path="fuel" element={<WorkerFuel />}>
             <Route index element={<FuelRecordMobile />} />
           </Route>
+          <Route path="service" element={<WorkerService />} />
           <Route path="repair/:kind" element={<RepairMobile />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Route>
@@ -63,7 +64,7 @@ export default function App() {
             <Route index element={<CmmsHome />} />
             <Route path="work" element={<WorkManage />} />
             <Route path="work/all" element={<WorkConsolidated />} />
-            <Route path="work/mobile" element={<Navigate to="/app" replace />} />
+            <Route path="work/mobile" element={<Navigate to="/app/service" replace />} />
             <Route path="work/case/:id" element={<CaseDetail />} />
             <Route path="machines" element={<MachineryProfile />} />
             <Route path="machines/new" element={<MachinePage key="new" mode="new" />} />

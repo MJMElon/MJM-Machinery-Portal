@@ -73,7 +73,7 @@ export default function FuelRecords() {
   const canAdd = access.can('fuel_record', 'add')
   // Site workers (Add only, no View) get the phone form straight away.
   if (!access.can('fuel_record', 'view') && canAdd) return <Navigate to="/app/fuel" replace />
-  // The Site App (for workers) opens in its own tab, with a fresh ?v= so it is never a cached copy.
+  // Worker CMMS opens in its own tab, straight on this page's own module (Diesel Usage Record), with a fresh ?v= so it is never a cached copy.
   const openMobile = () => window.open(`${window.location.pathname}?v=${Date.now()}#/app/fuel`, '_blank')
   const canEdit = access.can('fuel_record', 'edit')
   const canDelete = access.can('fuel_record', 'delete')
@@ -117,8 +117,8 @@ export default function FuelRecords() {
               <IconDownload width={18} height={18} /> CSV
             </Button>
             {canAdd && (
-              <Button variant="secondary" onClick={openMobile} title="Simple phone form for site workers: photo of the meter, machine, litres">
-                <IconCamera width={18} height={18} /> Site App
+              <Button variant="secondary" onClick={openMobile} title="Worker CMMS → Diesel Usage Record, in a new tab: photo of the meter, machine, litres">
+                <IconCamera width={18} height={18} /> Mobile view
               </Button>
             )}
             {canAdd && (

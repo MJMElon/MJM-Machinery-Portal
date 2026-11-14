@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ModuleTile, TileGrid } from '../components/ModuleTile.jsx'
-import { DieselIcon, MachineryIcon, RenewalIcon, SettingsIcon, UserAccessIcon } from '../components/AppIcons.jsx'
+import { DieselIcon, MachineryIcon, RenewalIcon, SettingsIcon, UserAccessIcon, WorkerIcon } from '../components/AppIcons.jsx'
 import { Card, Spinner } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useCompany } from '../lib/CompanyContext.jsx'
@@ -72,6 +72,14 @@ export default function PortalHome() {
           Icon={RenewalIcon}
           disabled={!current.cmms_enabled}
           note={current.cmms_enabled ? null : 'Not enabled'}
+        />
+        <ModuleTile
+          key="worker"
+          to="/app"
+          label="Worker CMMS"
+          Icon={WorkerIcon}
+          disabled={!current.cmms_enabled && !current.diesel_enabled}
+          note={current.cmms_enabled || current.diesel_enabled ? null : 'Not enabled'}
         />
         {userAccess && (
           <ModuleTile

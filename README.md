@@ -7,7 +7,7 @@ that company's modules:
 
 - **Machinery Manage** (CMMS 2 access per company):
   - **Maintenance Work Manage**: numbered cases from the worker app and WhatsApp, in three types (repair request, repair done, service request), Pending / Solved. Four figures on top (machines stopped, waiting for office, late service, repair cost this month), a type filter, and each case's next step as a button: Approve & send (service request → WhatsApp to the workshop that handles the machine), Send out, Mark solved, Add cost & solve. CSV export. The consolidate button shows every company's pending cases at once.
-  - **Site App** (`#/app`, see [Site App](#site-app-for-site-workers)) holds the worker forms. Repair & Maintenance, for people with "Send requests from the mobile app": *Need a mechanic* (machine, problem, still working / stopped, photos or video, hour meter), *I fixed something* (hour meter, part, what was done, parts used, before / after photos, stopped from / fixed on) and *Request a service* (hour meter checked against the machine's service schedule: 50 hr or 500 km either side of the due reading; too early cannot be sent). The service schedule (Service every, Last service at / date) is on each machine in Machinery Profile and moves on when a service request is solved. App cases carry their company as `wa_from = 'app:<company id>'`.
+  - **Worker CMMS** (`#/app`, see [Worker CMMS](#worker-cmms-for-site-workers)) holds the worker forms. Machine Service & Maintenance, for people with "Send requests from the mobile app": *Need a mechanic* (machine, problem, still working / stopped, photos or video, hour meter), *I fixed something* (hour meter, part, what was done, parts used, before / after photos, stopped from / fixed on) and *Request a service* (hour meter checked against the machine's service schedule: 50 hr or 500 km either side of the due reading; too early cannot be sent). The service schedule (Service every, Last service at / date) is on each machine in Machinery Profile and moves on when a service request is solved. App cases carry their company as `wa_from = 'app:<company id>'`.
   - **Supplier Workshop List**: suppliers/workshops and the machines each handles (suppliers that handle a case's machine are proposed first).
   - **Machinery Profile**: the company's machines **and vehicles** (fuel, tank, usual driver, KPDN diesel subsidy tick).
   - **CMMS User Setting**: per company, Machinery Manage rights (Solve, Edit, Delete, Manage lists) and Diesel Manage rights (Access, Cash Claim, Report, Admin). Also where display names are set.
@@ -17,19 +17,24 @@ that company's modules:
 - **Settings** → the selected company's profile (total area), its **locations** (plantations / estates / sites under the company; each machine in Machinery Profile can be put under one, and the listing filters by location) and its blocks (name, area, notes).
 - **Settings** also holds, for super admins, the company's staff WhatsApp numbers (a case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers") and the "Sync from MJM Intranet" button. Businesses, companies and **which company has which module** all come from MJM Intranet; there is no company admin page in the portal.
 
-## Site App (for site workers)
+## Worker CMMS (for site workers)
 
-`…/MJM-Machinery-Portal/#/app` is a stand-alone phone app inside this project: its own slim header, one start
-screen with big buttons (Diesel taken, Need a mechanic, I fixed something, Request a service) and "Your requests".
-It shows no office pages, module windows or settings, and shares the login, database and code with CMMS 2. The
-"Site App" buttons in Maintenance Work Manage and Fuel Usage Record open it in a new tab; the old links
-(`#/cmms/work/mobile`, `#/diesel/records/mobile`) lead to it.
+`…/MJM-Machinery-Portal/#/app` is a stand-alone phone app inside this project, opened from the **Worker CMMS** icon
+on the CMMS 2 main page. It has its own slim header and two modules, and shows no office pages, module windows or
+settings; it shares the login, database and code with CMMS 2.
 
-To give workers their own icon in MJM Intranet: Master Manage → Module → add an Icon (kind **Link**, URL
-`…/MJM-Machinery-Portal/#/app`, access **2 · Token**), **Generate API key**, and save that key in this Supabase
-project as the Edge Function secret `GW_API_KEY_<ICON CODE>` ("-" → "_"). Tick Access on that Icon for the workers.
-What a worker may record is still set per company in Role setup: "Add records" (Fuel Usage Record) and "Send
-requests from the mobile app" (Maintenance Work Manage). A button only shows when its tick is on.
+| Module | Link | What it does | Needs (Role setup) |
+| --- | --- | --- | --- |
+| **Diesel Usage Record** | `#/app/fuel` | The diesel-taken form: photo of the pump meter, machine, litres | Fuel Usage Record → Add records |
+| **Machine Service & Maintenance** | `#/app/service` | Need a mechanic, I fixed something, Request a service (`#/app/repair/<kind>`), and "Your requests" | Maintenance Work Manage → Send requests from the mobile app |
+
+A module the person has no rights for is greyed out on the start screen. The **Mobile view** buttons of the office
+pages open their own module directly in a new tab: Fuel Usage Record → Diesel Usage Record, Maintenance Work Manage →
+Machine Service & Maintenance. The old links (`#/cmms/work/mobile`, `#/diesel/records/mobile`) lead there too.
+
+A separate icon in MJM Intranet for workers can be added later: an Icon of kind **Link** with URL
+`…/MJM-Machinery-Portal/#/app` and access **2 · Token**, its API key saved in this Supabase project as the Edge
+Function secret `GW_API_KEY_<ICON CODE>` ("-" → "_").
 
 ## Businesses and companies (same as MJM Intranet)
 
@@ -57,7 +62,7 @@ Ported from the Intranet's Diesel Claims module, per company. Opens on a page of
 | --- | --- | --- |
 | **Fuel Claims** | A year dashboard (litres per month, subsidised vs non-subsidised; RM per month, cash vs fleet card) and the claim list (No. · Description · Claim amount · Action: view / edit / print / delete), latest first. A claim is a **document with receipt rows**: submission date, company, name, totals; a drop zone for receipt photos (each photo becomes a row, read in the browser by Tesseract.js and attached to that row; the figures are a draft to check) or rows typed by hand; per row: vehicle (optional), receipt date, receipt no., litres, unit price, amount, payment (cash = claim back, fleet card = recorded only), subsidy tick, remark, attachment. **Payable = cash rows only.** The claim page prints as a claim form with the receipts; reviewers Approve / Reject / Mark paid | claims: view add edit delete · view_all approve pay |
 | **Fuel Usage** | Every fill-up of the company in one log (cash claims not rejected + fleet card fill-ups) by month and vehicle, totals, CSV. Admins record fleet card fill-ups here | Report / Admin |
-| **Fuel Usage Record** | The log of fuel issued to machines from the company's own tank: date, machine, litres, issued by, remark. Location follows the machine (Machinery Profile); the list filters by month, location and machine, totals litres by location and exports CSV. **In the Site App** (`#/app/fuel`): a phone form for site workers — photo of the pump meter (the number-wheel window is found in the photo and read by Tesseract.js as whole litres; a draft the worker checks), machine, litres, Send; the date is today and the photo is kept with the record (bucket `machinery_fuel_record_photos`). A worker with only Add sees the phone form and their own entries | fuel_record: view add edit delete |
+| **Fuel Usage Record** | The log of fuel issued to machines from the company's own tank: date, machine, litres, issued by, remark. Location follows the machine (Machinery Profile); the list filters by month, location and machine, totals litres by location and exports CSV. **In Worker CMMS** (`#/app/fuel`, Diesel Usage Record): a phone form for site workers — photo of the pump meter (the number-wheel window is found in the photo and read by Tesseract.js as whole litres; a draft the worker checks), machine, litres, Send; the date is today and the photo is kept with the record (bucket `machinery_fuel_record_photos`). A worker with only Add sees the phone form and their own entries | fuel_record: view add edit delete |
 | **Fleet Card Manage** | Fuel cards (balance = reloads − fill-ups, monthly limit), reloads, and the **KPDN diesel subsidy vehicles**: vehicles ticked in Machinery Profile that apply for the subsidised-diesel fleet card, with or without a card yet | Report / Admin |
 | **Report** | Per month: totals, by vehicle (cash vs card, km/L, over-tank flags), by driver, CSV | Report / Admin |
 

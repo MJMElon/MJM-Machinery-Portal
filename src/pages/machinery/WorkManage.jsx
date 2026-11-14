@@ -152,8 +152,9 @@ export default function WorkManage() {
     )
   }
 
-  // The Site App (for workers) opens in its own tab, with a fresh ?v= so it is never a cached copy.
-  const openMobile = () => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank')
+  // Worker CMMS opens in its own tab, straight on this page's own module (Machine Service & Maintenance),
+  // with a fresh ?v= so it is never a cached copy.
+  const openMobile = () => window.open(`${window.location.pathname}?v=${Date.now()}#/app/service`, '_blank')
 
   return (
     <div className="space-y-4">
@@ -165,8 +166,8 @@ export default function WorkManage() {
               <IconRefresh width={18} height={18} />
             </Button>
             {/* Always shown; the app itself says which permission is needed when someone may not send requests. */}
-            <Button variant="secondary" onClick={openMobile} title="Opens the Site App for workers in a new tab: need a mechanic, I fixed something, request a service">
-              <IconCamera width={18} height={18} /> Site App
+            <Button variant="secondary" onClick={openMobile} title="Worker CMMS → Machine Service & Maintenance, in a new tab: need a mechanic, I fixed something, request a service">
+              <IconCamera width={18} height={18} /> Mobile view
             </Button>
             <Button variant="secondary" onClick={exportCsv} disabled={loading || !key} title="All cases of this company as a CSV file">
               <IconDownload width={18} height={18} /> Export for OPISPRO

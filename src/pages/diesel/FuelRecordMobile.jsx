@@ -8,7 +8,7 @@ import { METER_READER_VERSION, readMeterPhoto } from '../../lib/ocr.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, num, sum, today } from '../../lib/format.js'
 
-// Fuel Usage Record in the Site App (/app/fuel), for site workers: photograph the pump meter,
+// Diesel Usage Record in Worker CMMS (/app/fuel), for site workers: photograph the pump meter,
 // pick the machine, check the litres, send. The date is today, the litres are
 // read off the photo (a draft the worker checks), the name is the signed-in
 // person. Entries land in Fuel Usage Record with the photo attached.
@@ -163,7 +163,7 @@ export default function FuelRecordMobile() {
           Add another
         </button>
         <button onClick={() => navigate('/app')} className="h-14 w-full rounded-2xl border border-slate-300 bg-white text-lg font-semibold text-slate-700">
-          Back to start
+          Back to Worker CMMS
         </button>
         <Today mine={mine} machineById={machineById} />
       </div>

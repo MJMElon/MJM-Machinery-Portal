@@ -9,8 +9,8 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, today } from '../../lib/format.js'
 
-// Repair & Maintenance in the Site App (/app/repair/:kind), for site workers.
-// Three forms, opened from the app's start screen:
+// Machine Service & Maintenance in Worker CMMS (/app/repair/:kind), for site workers.
+// Three forms, opened from the module's screen (/app/service):
 //   repair   Need a mechanic    – repair request (machine has a problem)
 //   fixed    I fixed something  – corrective job already done
 //   service  Request a service  – preventive, when the machine is due
@@ -29,7 +29,7 @@ export default function RepairMobile() {
   const access = useCmmsAccess(company?.id)
   const { kind } = useParams()
   const navigate = useNavigate()
-  const home = () => navigate('/app')
+  const home = () => navigate('/app/service') // the module's own start screen
   const [machines, setMachines] = useState([])
   const [locations, setLocations] = useState([])
   const [suppliers, setSuppliers] = useState([])
@@ -75,7 +75,7 @@ export default function RepairMobile() {
 
   const shown = useMemo(() => machines.filter((m) => !loc || m.location_id === loc), [machines, loc])
 
-  if (!REPAIR_KINDS.includes(kind)) return <Navigate to="/app" replace />
+  if (!REPAIR_KINDS.includes(kind)) return <Navigate to="/app/service" replace />
 
   if (!loaded || loading || !access.loaded)
     return (
@@ -106,7 +106,7 @@ export default function RepairMobile() {
           </p>
         </div>
         <button onClick={home} className="h-16 w-full rounded-2xl bg-brand text-xl font-bold text-white active:bg-brand-dark">
-          Back to start
+          Back to Machine Service &amp; Maintenance
         </button>
       </div>
     )

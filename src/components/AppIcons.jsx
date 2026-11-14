@@ -206,6 +206,18 @@ export function RenewalIcon({ className }) {
 }
 
 // User Access: a person with a key.
+// Worker CMMS: a phone with a tick (what site workers use to record).
+export function WorkerIcon({ className }) {
+  return (
+    <span className={className}>
+      <Tile id="ic-wkr" label="Worker CMMS">
+        <rect x="19" y="9" width="26" height="46" rx="5" />
+        <path d="M28 15h8M26 34l4.5 4.5L38.5 30" />
+      </Tile>
+    </span>
+  )
+}
+
 export function UserAccessIcon({ className }) {
   return (
     <span className={className}>
