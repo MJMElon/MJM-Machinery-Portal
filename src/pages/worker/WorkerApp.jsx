@@ -60,9 +60,16 @@ function WorkerBar() {
   return (
     <header className="pt-safe sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-md items-center gap-2 px-4">
-        <Link to={back[0]} className={btn} aria-label={t(back[1])} title={t(back[1])}>
-          <IconBack width={20} height={20} />
-        </Link>
+        {start && window.opener ? (
+          // Opened in its own tab from CMMS 2: going back means closing this tab.
+          <button onClick={() => window.close()} className={btn} aria-label={t(back[1])} title={t(back[1])}>
+            <IconBack width={20} height={20} />
+          </button>
+        ) : (
+          <Link to={back[0]} className={btn} aria-label={t(back[1])} title={t(back[1])}>
+            <IconBack width={20} height={20} />
+          </Link>
+        )}
         <Link to="/app" className="min-w-0 flex-1 pl-1">
           <span className="block font-display text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400">CMMS 2</span>
           <span className="block truncate font-display text-lg font-extrabold tracking-tight text-slate-900">{t('Worker CMMS')}</span>

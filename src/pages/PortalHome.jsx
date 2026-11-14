@@ -75,7 +75,8 @@ export default function PortalHome() {
         />
         <ModuleTile
           key="worker"
-          to="/app"
+          // Its own tab (a phone-style app, apart from the office pages); a fresh ?v= so it is never a cached copy.
+          onClick={current.cmms_enabled || current.diesel_enabled ? () => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank') : undefined}
           label="Worker CMMS"
           Icon={WorkerIcon}
           disabled={!current.cmms_enabled && !current.diesel_enabled}
