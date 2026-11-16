@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Badge, Card } from '../../components/ui.jsx'
+import { Badge, Button, Card, Select } from '../../components/ui.jsx'
 import { IconX } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { listPortalPeople, userLabel } from '../../lib/cmms.js'
-import { FUEL_ROLES, adminModules, approveFor, fuelRole, has, listCompanyPerms, savePerms, withFuelRole } from '../../lib/perms.js'
+import { FUEL_ROLES, approveFor, fuelRole, has, listCompanyPerms, savePerms, withFuelRole } from '../../lib/perms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // Fuel Manage → Claim approval setting. For every person of the company:
@@ -12,22 +12,27 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 //               marks approved claims paid)
 //   Approved by the people who review and approve this person's claims; an
 //               approver sees the claims of the people named here.
-// Same data as Settings → Role setup (perms.claims, perms.approve_for), seen
-// from the claimant's side.
+// Changes stay on the page until Save (Cancel throws them away). The filter
+// shows the people under one approver. Module admins are set in CMMS 2 user
+// access, not here.
 export default function DieselUsers() {
   const { company, access } = useOutletContext()
   const { isSuperAdmin } = useAuth()
   const [people, setPeople] = useState([])
-  const [perms, setPerms] = useState({}) // user_id → perms
+  const [saved, setSaved] = useState({}) // user_id → perms in the database
+  const [perms, setPerms] = useState({}) // user_id → perms on the page (with unsaved changes)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState('')
+  const [done, setDone] = useState('')
   const [q, setQ] = useState('')
+  const [approverFilter, setApproverFilter] = useState('')
 
   const load = useCallback(async () => {
     try {
       const [pp, rows] = await Promise.all([listPortalPeople(), listCompanyPerms(company.id)])
       const byUser = Object.fromEntries(rows.map((r) => [r.user_id, r.perms || {}]))
+      setSaved(byUser)
       setPerms(byUser)
       // People of this company: Fuel icon in the Intranet, or any role here, or named as an approver / claimant
       const named = new Set(rows.flatMap((r) => approveFor(r.perms)))
@@ -44,31 +49,25 @@ export default function DieselUsers() {
     load()
   }, [load])
 
+  const approves = (uid) => (has(perms[uid], 'claims', 'approve') ? approveFor(perms[uid]) : [])
   // approvers of a claimant = everyone whose approve_for names them
-  const approversOf = (uid) =>
-    people.filter((a) => a.user_id !== uid && has(perms[a.user_id], 'claims', 'approve') && approveFor(perms[a.user_id]).includes(uid))
-  const approvesCount = (uid) => (has(perms[uid], 'claims', 'approve') ? approveFor(perms[uid]).length : 0)
+  const approversOf = (uid) => people.filter((a) => a.user_id !== uid && approves(a.user_id).includes(uid))
   // Super admins and Fuel Manage admins change this; a module admin's save only touches Fuel Manage rights.
   const canEdit = isSuperAdmin || access.fuelAdmin
-  const saveOpts = isSuperAdmin ? {} : { modules: ['fuel'] }
 
-  async function save(uid, next, key) {
-    setBusy(key)
-    setError('')
-    try {
-      await savePerms(company.id, uid, next, saveOpts)
-      setPerms((p) => ({ ...p, [uid]: next }))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusy('')
-    }
+  const changed = (uid) => JSON.stringify(perms[uid] || {}) !== JSON.stringify(saved[uid] || {})
+  const changedIds = [...new Set([...Object.keys(perms), ...Object.keys(saved)])].filter(changed)
+  const dirty = changedIds.length > 0
+
+  const edit = (uid, next) => {
+    setDone('')
+    setPerms((p) => ({ ...p, [uid]: next }))
   }
 
   function changeApprover(approverId, claimantId, add) {
     const cur = perms[approverId] || {}
     const claims = new Set(cur.claims || [])
-    const list = new Set(has(cur, 'claims', 'approve') ? approveFor(cur) : [])
+    const list = new Set(approves(approverId))
     if (add) list.add(claimantId)
     else list.delete(claimantId)
     // Approves only the people named; with nobody left the approve right goes too
@@ -77,27 +76,40 @@ export default function DieselUsers() {
       claims.add('view')
       claims.add('approve')
     } else claims.delete('approve')
-    save(approverId, { ...cur, claims: [...claims], approve_for: [...list] }, `${approverId}:${claimantId}`)
+    const next = { ...cur, claims: [...claims], approve_for: [...list] }
+    if (!list.size) delete next.approve_for
+    edit(approverId, next)
+  }
+  const changeRole = (uid, role) => edit(uid, withFuelRole(perms[uid] || {}, role))
+
+  async function save() {
+    setSaving(true)
+    setError('')
+    setDone('')
+    try {
+      for (const uid of changedIds) {
+        await savePerms(company.id, uid, perms[uid] || {}, isSuperAdmin ? {} : { modules: ['fuel'] })
+        setSaved((s) => ({ ...s, [uid]: perms[uid] || {} }))
+      }
+      setDone('Saved')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  const cancel = () => {
+    setPerms(saved)
+    setDone('')
   }
 
-  const changeRole = (uid, role) => save(uid, withFuelRole(perms[uid] || {}, role), `role:${uid}`)
-  const isFuelAdmin = (uid) => adminModules(perms[uid]).includes('fuel')
-  const setFuelAdmin = (uid, on) => {
-    const cur = perms[uid] || {}
-    const list = new Set(adminModules(cur))
-    on ? list.add('fuel') : list.delete('fuel')
-    save(uid, { ...cur, admin: [...list] }, `admin:${uid}`)
-  }
-
+  // Approvers for the filter, with how many people each one approves
+  const approverList = people.filter((a) => approves(a.user_id).length > 0)
   const t = q.trim().toLowerCase()
   const shown = people.filter(
     (p) =>
-      !t ||
-      [p.full_name, p.email].some((v) =>
-        String(v || '')
-          .toLowerCase()
-          .includes(t),
-      ),
+      (!t || [p.full_name, p.email].some((v) => String(v || '').toLowerCase().includes(t))) &&
+      (!approverFilter || approves(approverFilter).includes(p.user_id))
   )
 
   return (
@@ -105,21 +117,50 @@ export default function DieselUsers() {
       <ErrorBox>{error}</ErrorBox>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
-          <h3 className="font-semibold text-slate-800">Users</h3>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name…" className={`${inputCls} h-10 sm:w-72`} />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-60">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name…" className={`${inputCls} h-10`} />
+            </span>
+            <span className="w-64">
+              <Select value={approverFilter} onChange={(e) => setApproverFilter(e.target.value)} className="h-10" aria-label="Filter by approver">
+                <option value="">All approvers</option>
+                {approverList.map((a) => (
+                  <option key={a.user_id} value={a.user_id}>
+                    {userLabel(a)} ({approves(a.user_id).length})
+                  </option>
+                ))}
+              </Select>
+            </span>
+            {approverFilter && (
+              <span className="text-sm font-semibold text-slate-700">
+                {shown.length} {shown.length === 1 ? 'person' : 'people'}
+              </span>
+            )}
+          </div>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              {done && !dirty && <span className="text-sm text-green-700">{done}</span>}
+              {dirty && <span className="text-sm text-amber-700">{changedIds.length} unsaved</span>}
+              <Button variant="secondary" size="sm" disabled={!dirty || saving} onClick={cancel}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={!dirty || saving} onClick={save}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          )}
         </div>
         {loading ? (
           <Loading />
         ) : shown.length === 0 ? (
-          <Empty>No users yet. Users come from the MJM Intranet (User Access → Sync from MJM Intranet).</Empty>
+          <Empty>{approverFilter ? 'Nobody under this approver.' : 'No users yet. Users come from the MJM Intranet (User Access → Sync from MJM Intranet).'}</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-72 px-5 py-2.5">User</th>
                   <th className="w-48 px-3 py-2.5">Role</th>
-                  <th className="w-24 px-3 py-2.5 text-center">Admin</th>
                   <th className="px-3 py-2.5">Claims approved by</th>
                 </tr>
               </thead>
@@ -128,17 +169,13 @@ export default function DieselUsers() {
                   const approvers = approversOf(p.user_id)
                   const options = people.filter((a) => a.user_id !== p.user_id && !approvers.some((x) => x.user_id === a.user_id))
                   const role = fuelRole(perms[p.user_id])
-                  const n = approvesCount(p.user_id)
+                  // a row is marked when its own role changed or its approvers changed
+                  const rowChanged = changed(p.user_id) || people.some((a) => changed(a.user_id) && approveFor(saved[a.user_id]).includes(p.user_id) !== approves(a.user_id).includes(p.user_id))
                   return (
-                    <tr key={p.user_id} className="align-top">
+                    <tr key={p.user_id} className={`align-top ${rowChanged ? 'bg-amber-50/70' : ''}`}>
                       <td className="px-5 py-3">
                         <p className="font-medium text-slate-800">{userLabel(p)}</p>
                         <p className="text-xs text-slate-500">{p.email}</p>
-                        {n > 0 && (
-                          <Badge color="green" className="mt-1">
-                            Approver for {n} {n === 1 ? 'person' : 'people'}
-                          </Badge>
-                        )}
                       </td>
                       <td className="px-3 py-3">
                         {p.is_super_admin ? (
@@ -147,7 +184,7 @@ export default function DieselUsers() {
                           <span className="block w-44">
                             <select
                               value={role}
-                              disabled={busy === `role:${p.user_id}`}
+                              disabled={saving}
                               onChange={(e) => changeRole(p.user_id, e.target.value)}
                               className={`${inputCls} h-9 px-2 ${role === 'accountant' ? 'font-semibold text-brand-dark' : ''}`}
                             >
@@ -162,34 +199,16 @@ export default function DieselUsers() {
                           <Badge color={role === 'accountant' ? 'blue' : 'slate'}>{FUEL_ROLES.find(([k]) => k === role)[1]}</Badge>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {p.is_super_admin ? (
-                          <span className="text-xs text-slate-400">—</span>
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={isFuelAdmin(p.user_id)}
-                            disabled={!canEdit || busy === `admin:${p.user_id}`}
-                            onChange={(e) => setFuelAdmin(p.user_id, e.target.checked)}
-                            className="mt-2 h-5 w-5 rounded border-slate-300 accent-[#2563eb] disabled:opacity-60"
-                            title="Fuel Manage admin: can change this page and the Fuel Manage part of User Access"
-                            aria-label={`Fuel Manage admin: ${userLabel(p)}`}
-                          />
-                        )}
-                      </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                           {approvers.length === 0 && <span className="text-sm text-slate-400">No approver yet</span>}
                           {approvers.map((a) => (
-                            <span
-                              key={a.user_id}
-                              className="inline-flex h-8 items-center gap-1 rounded-full bg-brand-light pl-3 pr-1.5 text-sm font-medium text-brand-dark"
-                            >
+                            <span key={a.user_id} className="inline-flex h-8 items-center gap-1 rounded-full bg-brand-light pl-3 pr-1.5 text-sm font-medium text-brand-dark">
                               {userLabel(a)}
                               {canEdit && (
                                 <button
                                   type="button"
-                                  disabled={busy === `${a.user_id}:${p.user_id}`}
+                                  disabled={saving}
                                   onClick={() => changeApprover(a.user_id, p.user_id, false)}
                                   className="rounded-full p-0.5 hover:bg-white/60"
                                   aria-label={`Remove ${userLabel(a)}`}
@@ -204,7 +223,7 @@ export default function DieselUsers() {
                               <select
                                 value=""
                                 onChange={(e) => e.target.value && changeApprover(e.target.value, p.user_id, true)}
-                                disabled={busy.endsWith(`:${p.user_id}`)}
+                                disabled={saving}
                                 className={`${inputCls} h-8 px-2 text-xs`}
                               >
                                 <option value="">+ Add approver…</option>
