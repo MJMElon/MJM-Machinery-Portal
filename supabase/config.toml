@@ -22,3 +22,8 @@ verify_jwt = false
 # Called from the portal with the user's token; the function checks super
 # admin itself (so the browser's CORS preflight is answered too).
 verify_jwt = false
+
+[functions.claim-notify]
+# Called from the portal after a fuel claim is submitted or reviewed. The
+# function checks the user's Supabase token itself (and answers CORS).
+verify_jwt = false

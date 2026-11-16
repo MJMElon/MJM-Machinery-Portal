@@ -160,7 +160,18 @@ export async function reviewClaim(id, status, note) {
     .select()
     .single()
   if (error) throw friendly(error)
+  notifyClaim(id)
   return data
+}
+
+/**
+ * Email about a claim (Edge Function claim-notify): new claim → its approvers;
+ * approved / rejected / paid → the claimant (approved also → accountants).
+ * Never blocks or fails the save: before the function is set up it does nothing.
+ */
+export function notifyClaim(id) {
+  if (!id) return
+  supabase.functions.invoke('claim-notify', { body: { claim_id: id } }).catch(() => {})
 }
 
 // ---- claim lines (one per receipt) ----------------------------------------------

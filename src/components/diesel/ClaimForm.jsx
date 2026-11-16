@@ -8,6 +8,7 @@ import {
   cardLabel,
   compressReceipt,
   createClaimWithLines,
+  notifyClaim,
   isReload,
   removeReceipt,
   updateClaimWithLines,
@@ -201,6 +202,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
       }
       const header = { submitted_on: submittedOn, notes: claim?.notes || '' }
       const id = claim ? (await updateClaimWithLines(claim.id, header, prepared), claim.id) : await createClaimWithLines(company.id, user.id, header, prepared)
+      if (!claim) notifyClaim(id) // email the approvers about the new claim
       onSaved(id)
     } catch (err) {
       uploaded.forEach(removeReceipt)

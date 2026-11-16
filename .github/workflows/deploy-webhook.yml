@@ -1,4 +1,5 @@
-# Deploys the Edge Functions (WhatsApp webhook, case-action, gw-login) from GitHub —
+# Deploys the Edge Functions (WhatsApp webhook, case-action, gw-login, claim-notify,
+# sync-intranet) from GitHub —
 # no terminal needed.
 #
 # One-time setup: add a repository secret named SUPABASE_ACCESS_TOKEN
@@ -75,6 +76,13 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           supabase functions deploy gw-login \
+            --project-ref "${{ steps.check.outputs.ref }}" \
+            --no-verify-jwt --yes
+
+      - name: Deploy claim-notify (fuel claim emails)
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          supabase functions deploy claim-notify \
             --project-ref "${{ steps.check.outputs.ref }}" \
             --no-verify-jwt --yes
 
