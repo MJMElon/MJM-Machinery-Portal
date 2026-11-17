@@ -62,13 +62,18 @@ export function companiesWithIcon(d: MasterData): string[] {
 // deno-lint-ignore no-explicit-any
 async function ensureUsers(db: any, users: IntranetUser[]): Promise<Map<string, string>> {
   const ids = new Map<string, string>()
+  // Everyone who already has a portal row, in one query (the table is small)
+  const { data: rows } = await db.from('machinery_portal_admins').select('user_id, email, full_name')
+  const byEmail = new Map<string, { user_id: string; full_name: string | null }>()
+  for (const r of rows ?? []) if (r.email) byEmail.set(String(r.email).trim().toLowerCase(), r)
+  const upserts: { user_id: string; email: string; full_name: string | null }[] = []
   for (const u of users) {
     const email = (u.email || '').trim().toLowerCase()
     if (!email) continue
-    let userId: string | undefined
-    const { data: existing } = await db.from('machinery_portal_admins').select('user_id').ilike('email', email).maybeSingle()
-    userId = existing?.user_id
+    const have = byEmail.get(email)
+    let userId: string | undefined = have?.user_id
     if (!userId) {
+      // New person: create the login (no e-mail is sent)
       const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: { full_name: u.full_name, source: 'mjm-intranet' } })
       userId = created.data?.user?.id
       if (!userId) {
@@ -78,11 +83,16 @@ async function ensureUsers(db: any, users: IntranetUser[]): Promise<Map<string, 
       }
     }
     if (!userId) continue
-    let { error } = await db.from('machinery_portal_admins').upsert({ user_id: userId, email, full_name: u.full_name || null }, { onConflict: 'user_id' })
+    ids.set(u.id, userId)
+    // Only write rows that are new or whose name changed
+    if (!have || (u.full_name || null) !== (have.full_name || null)) upserts.push({ user_id: userId, email, full_name: u.full_name || null })
+  }
+  if (upserts.length) {
+    let { error } = await db.from('machinery_portal_admins').upsert(upserts, { onConflict: 'user_id' })
     if (error && /full_name/.test(error.message)) {
-      ;({ error } = await db.from('machinery_portal_admins').upsert({ user_id: userId, email }, { onConflict: 'user_id' }))
+      ;({ error } = await db.from('machinery_portal_admins').upsert(upserts.map(({ user_id, email }) => ({ user_id, email })), { onConflict: 'user_id' }))
     }
-    if (!error) ids.set(u.id, userId)
+    if (error) throw new Error(`portal users: ${error.message}`)
   }
   return ids
 }

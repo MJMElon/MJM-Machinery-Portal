@@ -17,6 +17,11 @@ import { CORS, handle, type GatewayUser } from './handler.ts'
 import { syncMasterData } from '../_shared/intranet.ts'
 
 const env = (k: string) => (Deno.env.get(k) ?? '').trim()
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
+// Master data sync runs after the sign-in reply, so opening the portal does not wait for it.
+// One sync per minute per warm instance is plenty (sync-intranet does a full one on demand).
+const SYNC_EVERY_MS = 60_000
+let lastSync = 0
 const DEFAULT_CHECK_URL = 'https://briqzyxfxsvulyizzbiu.supabase.co/functions/v1/gw-check-access'
 
 /** The Icon code inside the (unverified) token; MJM Intranet verifies it properly. */
@@ -100,12 +105,15 @@ Deno.serve(async (req) => {
         ;({ error } = await db.from('machinery_portal_admins').upsert({ user_id: userId, email }, { onConflict: 'user_id' }))
       }
       if (error) throw new Error(`enrol: ${error.message}`)
-      // Keep businesses / companies in step with the Intranet. Best effort:
-      // a sync problem must never block the sign-in.
-      try {
-        await syncMasterData(db, env('GW_API_KEY'))
-      } catch (e) {
-        console.error('intranet master data sync failed', e)
+      // Keep businesses / companies in step with the Intranet. Best effort and in the
+      // background: a slow or failing sync must never hold up the sign-in.
+      if (Date.now() - lastSync > SYNC_EVERY_MS) {
+        lastSync = Date.now()
+        const job = syncMasterData(db, env('GW_API_KEY')).catch((e) => {
+          lastSync = 0
+          console.error('intranet master data sync failed', e)
+        })
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(job)
       }
     },
   })
