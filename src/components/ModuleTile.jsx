@@ -60,7 +60,9 @@ export function ModuleTile({ to, href, onClick, label, Icon, badge, disabled, no
  */
 const HOLD_MS = 450
 
-export function TileGrid({ children, orderKey }) {
+// layout 'list': one wide button per row, top to bottom (Fuel Manage).
+export function TileGrid({ children, orderKey, layout = 'grid' }) {
+  const list = layout === 'list'
   const items = Children.toArray(children).filter(Boolean)
   const { user } = useAuth()
   const storageKey = orderKey ? `tiles.order.${orderKey}.${user?.id || 'anon'}` : null
@@ -135,8 +137,10 @@ export function TileGrid({ children, orderKey }) {
     }
     const live = [...(drag?.live || baseOrder)]
     if (best && best.id !== g.id) {
+      // Take the target's place: moving forward it lands after it, moving back before it.
+      const to = live.indexOf(best.id)
       live.splice(live.indexOf(g.id), 1)
-      live.splice(live.indexOf(best.id), 0, g.id)
+      live.splice(to, 0, g.id)
     }
     setDrag({ id: g.id, x: e.clientX - g.dx, y: e.clientY - g.dy, w: g.w, h: g.h, live })
   }
@@ -157,7 +161,14 @@ export function TileGrid({ children, orderKey }) {
 
   return (
     <div>
-      <div ref={gridRef} className="mx-auto grid max-w-4xl grid-cols-3 justify-items-center gap-x-2 gap-y-6 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-x-4 sm:gap-y-8">
+      <div
+        ref={gridRef}
+        className={
+          list
+            ? 'mx-auto flex w-full max-w-md flex-col gap-3'
+            : 'mx-auto grid max-w-4xl grid-cols-3 justify-items-center gap-x-2 gap-y-6 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-x-4 sm:gap-y-8'
+        }
+      >
         {shown.map((id, i) => {
           const el = byId[id]
           if (!el) return null
@@ -166,7 +177,7 @@ export function TileGrid({ children, orderKey }) {
             <div
               key={id}
               data-tile={id}
-              className={`relative touch-none transition-opacity ${editing ? 'cursor-grab active:cursor-grabbing tile-wiggle' : ''} ${lifted ? 'opacity-30' : ''}`}
+              className={`relative touch-none transition-opacity ${editing ? `cursor-grab active:cursor-grabbing ${list ? 'row-wiggle' : 'tile-wiggle'}` : ''} ${lifted ? 'opacity-30' : ''}`}
               style={editing ? { animationDelay: `${(i % 4) * -0.12}s` } : undefined}
               onPointerDown={(e) => start(e, id)}
               onPointerMove={move}

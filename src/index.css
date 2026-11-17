@@ -138,6 +138,14 @@ input[type='number'] {
   0%, 100% { transform: rotate(-1.6deg); }
   50% { transform: rotate(1.6deg); }
 }
+/* Wide buttons (Fuel Manage list) shake less, or the ends swing too far. */
+.row-wiggle {
+  animation: row-wiggle 0.5s ease-in-out infinite;
+}
+@keyframes row-wiggle {
+  0%, 100% { transform: rotate(-0.45deg); }
+  50% { transform: rotate(0.45deg); }
+}
 
 /* Little machines driving along the bottom of the main page. */
 @keyframes mascot-drive {
@@ -150,7 +158,7 @@ input[type='number'] {
 .mascot-drive { animation: mascot-drive var(--mascot-time, 26s) linear forwards; }
 .mascot-wheel { animation: mascot-wheel 1.4s linear infinite; transform-origin: center; transform-box: fill-box; }
 @media (prefers-reduced-motion: reduce) {
-  .tile-wiggle, .mascot-drive, .mascot-wheel { animation: none; }
+  .tile-wiggle, .row-wiggle, .mascot-drive, .mascot-wheel { animation: none; }
 }
 
 /* ---- Worker CMMS (/app): dark mode -------------------------------------

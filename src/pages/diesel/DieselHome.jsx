@@ -22,5 +22,5 @@ export default function DieselHome() {
     const allowed = m.need(access)
     return { key: m.to.replace('/', '').replace('/', '-'), label: m.label, Icon: ART[m.to], path: m.to, disabled: !allowed, note: allowed ? null : 'No access' }
   })
-  return <ModuleList modules={modules} />
+  return <ModuleList modules={modules} orderKey="fuel-list" />
 }
