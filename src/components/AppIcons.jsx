@@ -12,8 +12,8 @@ function Tile({ id, label, children }) {
         </linearGradient>
       </defs>
       <rect x="2" y="2" width="60" height="60" rx="11" fill={`url(#${id}-body)`} stroke="#cbd5e1" strokeWidth="1" />
-      {/* the symbol, drawn on a 64 grid and shown a little smaller */}
-      <g transform="translate(32 32) scale(0.66) translate(-32 -32)" fill="none" stroke="#334155" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      {/* the symbol, drawn on a 64 grid and shown smaller (thicker stroke keeps the lines the same weight) */}
+      <g transform="translate(32 32) scale(0.56) translate(-32 -32)" fill="none" stroke="#334155" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
         {children}
       </g>
     </svg>

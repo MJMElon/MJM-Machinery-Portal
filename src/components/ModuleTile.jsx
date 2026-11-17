@@ -1,4 +1,5 @@
 import { Children, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { IconExternal } from './icons.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -185,12 +186,16 @@ export function TileGrid({ children, orderKey }) {
           )
         })}
       </div>
-      {/* The lifted tile follows the pointer */}
-      {drag && (
-        <div className="pointer-events-none fixed z-50 scale-110 drop-shadow-2xl" style={{ left: drag.x, top: drag.y, width: drag.w, height: drag.h }}>
-          {byId[drag.id]}
-        </div>
-      )}
+      {/* The lifted tile follows the pointer. Drawn on <body>: inside a box
+          with a blur / transform, "fixed" would be measured from that box
+          and the tile would jump away from the finger. */}
+      {drag &&
+        createPortal(
+          <div className="pointer-events-none fixed z-50 scale-110 drop-shadow-2xl" style={{ left: drag.x, top: drag.y, width: drag.w, height: drag.h }}>
+            {byId[drag.id]}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
