@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconPrint } from '../../components/icons.jsx'
+import { IconPrint, IconSearch } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { MultiPick } from '../../components/diesel/MultiPick.jsx'
 import { printElement } from '../../lib/printFrame.js'
@@ -15,6 +15,10 @@ import { day, money, num, today } from '../../lib/format.js'
 // tab has its own filters (tick as many as needed; none ticked = all):
 //   HQ vehicle:     fleet card (or cash), driver, vehicle, date from – to
 //   Estate machine: machine type, machine, date from – to
+// The filters take effect when Search is pressed (Search also reloads the
+// receipts from the database). Date defaults to the 1st of this month – today.
+// With a driver or fleet card filter every vehicle with matching receipts is
+// listed (HQ or not), plus "No vehicle recorded" for receipts without one.
 // Receipts = cash and fleet-card receipts on fuel claims (not rejected) plus
 // fill-ups typed on a card. Print prints the charts with the filters in the
 // heading.
@@ -34,8 +38,12 @@ export default function DieselUsage() {
   // Estate filters
   const [typeF, setTypeF] = useState([])
   const [machineF, setMachineF] = useState([])
-  const [from, setFrom] = useState(`${today().slice(0, 4)}-01-01`)
+  const [from, setFrom] = useState(`${today().slice(0, 7)}-01`)
   const [to, setTo] = useState(today())
+  // What the report shows: the filters as they were when Search was pressed.
+  const [applied, setApplied] = useState({ cardF: [], driverF: [], vehicleF: [], typeF: [], machineF: [], from: `${today().slice(0, 7)}-01`, to: today() })
+  const draft = { cardF, driverF, vehicleF, typeF, machineF, from, to }
+  const pending = JSON.stringify(draft) !== JSON.stringify(applied)
   const [printing, setPrinting] = useState(false)
   const report = useRef(null)
 
@@ -70,6 +78,14 @@ export default function DieselUsage() {
     setLoading(true)
     load()
   }, [load])
+
+  const [searching, setSearching] = useState(false)
+  async function search() {
+    setSearching(true)
+    setApplied(draft)
+    await load()
+    setSearching(false)
+  }
 
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const person = new Map(people.map((p) => [p.user_id, p]))
@@ -133,59 +149,54 @@ export default function DieselUsage() {
     .filter((v) => !typeF.length || typeF.includes(v.machine_type || 'No type'))
     .map((v) => ({ value: v.id, label: vehicleLabel(v) }))
 
-  // ---- Receipts that pass the filters of the tab
-  const inRange = (d) => (!from || d >= from) && (!to || d <= to)
+  // ---- Receipts that pass the filters of the tab (as applied by Search)
+  const A = applied
+  const inRange = (d) => (!A.from || d >= A.from) && (!A.to || d <= A.to)
   const passHq = (f) =>
-    (!vehicleF.length || vehicleF.includes(f.vehicle_id)) &&
-    (!driverF.length || driverF.includes(f.driver || 'none')) &&
-    (!cardF.length || (f.source === 'cash' ? cardF.includes('cash') : cardF.includes(cardOf(f)?.id)))
-  const rows = fills.filter((f) => inRange(f.fill_date) && (tab === 'hq' ? passHq(f) : !machineF.length || machineF.includes(f.vehicle_id)))
+    (!A.vehicleF.length || A.vehicleF.includes(f.vehicle_id)) &&
+    (!A.driverF.length || A.driverF.includes(f.driver || 'none')) &&
+    (!A.cardF.length || (f.source === 'cash' ? A.cardF.includes('cash') : A.cardF.includes(cardOf(f)?.id)))
+  const rows = fills.filter((f) => inRange(f.fill_date) && (tab === 'hq' ? passHq(f) : !A.machineF.length || A.machineF.includes(f.vehicle_id)))
   const hasVehicle = new Set(rows.map((r) => r.vehicle_id))
 
   // Vehicles listed: HQ with a card / driver filter → the vehicles with
   // receipts in it (and the chosen cards' own vehicles); a vehicle filter →
   // those vehicles. Estate: by type and machine.
-  const hqFiltered = cardF.length > 0 || driverF.length > 0
-  const chosenCardVehicles = new Set(cardF.map((id) => cardById.get(id)?.vehicle_id).filter(Boolean))
+  const hqFiltered = A.cardF.length > 0 || A.driverF.length > 0
+  const chosenCardVehicles = new Set(A.cardF.map((id) => cardById.get(id)?.vehicle_id).filter(Boolean))
+  const NO_VEHICLE = { id: '', name: 'No vehicle recorded', machine_type: '' }
   const listed =
     tab === 'hq'
-      ? hqVehicles.filter(
-          (v) => (!vehicleF.length || vehicleF.includes(v.id)) && (!hqFiltered || hasVehicle.has(v.id) || chosenCardVehicles.has(v.id))
-        )
-      : estateMachines.filter((v) => (!typeF.length || typeF.includes(v.machine_type || 'No type')) && (!machineF.length || machineF.includes(v.id)))
-  const linesOf = (vid) => rows.filter((f) => f.vehicle_id === vid).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' }))
+      ? hqFiltered
+        ? // every vehicle with matching receipts (HQ or not), the chosen cards' own vehicles, then receipts without a vehicle
+          [
+            ...vehicles
+              .filter((v) => (hasVehicle.has(v.id) || chosenCardVehicles.has(v.id)) && (!A.vehicleF.length || A.vehicleF.includes(v.id)))
+              .sort(byReg),
+            ...(rows.some((r) => !r.vehicle_id) && !A.vehicleF.length ? [NO_VEHICLE] : [])
+          ]
+        : hqVehicles.filter((v) => !A.vehicleF.length || A.vehicleF.includes(v.id))
+      : estateMachines.filter((v) => (!A.typeF.length || A.typeF.includes(v.machine_type || 'No type')) && (!A.machineF.length || A.machineF.includes(v.id)))
+  const linesOf = (vid) => rows.filter((f) => (f.vehicle_id || '') === vid).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' }))
+  // Driver column: the vehicle's driver; with a driver filter, or when the
+  // vehicle has none, the people whose receipts are on it.
   const driverOf = (v) => {
+    const claimants = [...new Set(rows.filter((f) => (f.vehicle_id || '') === v.id).map((f) => f.driver).filter(Boolean))]
     const id = v.driver_ids?.[0] || v.driver_id
+    if (claimants.length && (A.driverF.length || !id)) return claimants.map(who).join(', ')
     return id ? who(id) : '—'
   }
   // Charts show the 12 months of the year the date range ends in.
-  const year = Number((to || today()).slice(0, 4))
+  const year = Number((A.to || today()).slice(0, 4))
 
-  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  const now = new Date()
-  const presets = [
-    ['This month', ymd(new Date(now.getFullYear(), now.getMonth(), 1)), today()],
-    ['Last month', ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)), ymd(new Date(now.getFullYear(), now.getMonth(), 0))],
-    ['This year', `${now.getFullYear()}-01-01`, today()],
-    ['Last year', `${now.getFullYear() - 1}-01-01`, `${now.getFullYear() - 1}-12-31`]
-  ]
-  const resetFilters = () => {
-    setCardF([])
-    setDriverF([])
-    setVehicleF([])
-    setTypeF([])
-    setMachineF([])
-    setFrom(presets[2][1])
-    setTo(presets[2][2])
-  }
   const names = (vals, opts, all) => (vals.length ? vals.map((v) => opts.find((o) => o.value === v)?.label).filter(Boolean).join(', ') : all)
   const filterLines =
     tab === 'hq'
       ? [
-          `Fleet card: ${names(cardF, cardOpts, 'all (fleet card and cash)')}`,
-          `Driver: ${names(driverF, driverOpts, 'all')} · Vehicle: ${names(vehicleF, vehicleOpts, 'all')}`
+          `Fleet card: ${names(A.cardF, cardOpts, 'all (fleet card and cash)')}`,
+          `Driver: ${names(A.driverF, driverOpts, 'all')} · Vehicle: ${names(A.vehicleF, vehicleOpts, 'all')}`
         ]
-      : [`Machine type: ${names(typeF, typeOpts, 'all')} · Machine: ${names(machineF, machineOpts, 'all')}`]
+      : [`Machine type: ${names(A.typeF, typeOpts, 'all')} · Machine: ${names(A.machineF, machineOpts, 'all')}`]
 
   async function print() {
     if (!report.current) return
@@ -195,7 +206,7 @@ export default function DieselUsage() {
         title: 'Fuel Usage Report',
         lines: [
           `${company.name} · ${tab === 'hq' ? 'HQ vehicles' : 'Estate machines'}`,
-          `${from ? day(from) : 'Start'} – ${to ? day(to) : 'today'} (charts: ${year})`,
+          `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'} (charts: ${year})`,
           ...filterLines,
           `Printed ${day(today())}`
         ]
@@ -244,7 +255,7 @@ export default function DieselUsage() {
             </div>
 
             <div className="border-b border-slate-200 p-3" data-noprint>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)]">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)_auto]">
                 {tab === 'hq' ? (
                   <>
                     <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={setCardF} />
@@ -275,25 +286,11 @@ export default function DieselUsage() {
                     <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`${inputCls} h-12 min-w-0 flex-1 rounded-xl px-2 text-sm`} aria-label="To date" />
                   </div>
                 </div>
-              </div>
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                {presets.map(([label, f, t]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => {
-                      setFrom(f)
-                      setTo(t)
-                    }}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium ${from === f && to === t ? 'border-brand bg-brand text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <span className="flex-1" />
-                <button type="button" onClick={resetFilters} className="text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline">
-                  Reset filters
-                </button>
+                <div className="flex items-end">
+                  <Button onClick={search} disabled={searching} className={`h-12 w-full lg:w-auto ${pending ? '' : 'opacity-90'}`}>
+                    <IconSearch width={18} height={18} /> {searching ? 'Searching…' : 'Search'}
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -307,9 +304,14 @@ export default function DieselUsage() {
               <span className="font-semibold text-slate-700">{year}</span>
             </div>
 
+            {pending && (
+              <p className="border-b border-amber-100 bg-amber-50 px-4 py-1.5 text-xs text-amber-800" data-noprint>
+                Filters changed — press Search to update the report.
+              </p>
+            )}
             {listed.length === 0 ? (
               <Empty>
-                {hqFiltered || vehicleF.length || typeF.length || machineF.length
+                {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length
                   ? 'No vehicle for this filter.'
                   : tab === 'hq'
                     ? 'No HQ vehicles yet. Tick "HQ vehicle" in Machinery Profile.'
@@ -328,7 +330,7 @@ export default function DieselUsage() {
                   </thead>
                   <tbody>
                     {listed.map((v) => (
-                      <VehicleRow key={v.id} v={v} rows={linesOf(v.id)} second={tab === 'hq' ? driverOf(v) : v.machine_type || '—'} year={year} />
+                      <VehicleRow key={v.id || 'none'} v={v} rows={linesOf(v.id)} second={tab === 'hq' ? driverOf(v) : v.machine_type || '—'} year={year} />
                     ))}
                   </tbody>
                 </table>
