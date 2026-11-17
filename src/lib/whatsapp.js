@@ -62,6 +62,8 @@ export async function setReviewed(id, reviewed) {
 // ---- display helpers -------------------------------------------------------
 
 export function formatSender(waFrom) {
+  // A case made in Worker CMMS has no phone number: its wa_from is 'app:<company id>'.
+  if (String(waFrom || '').startsWith('app:')) return 'Worker CMMS'
   return waFrom ? `+${String(waFrom).replace(/^\+/, '')}` : '—'
 }
 
