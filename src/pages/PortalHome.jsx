@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ModuleTile, TileGrid } from '../components/ModuleTile.jsx'
-import { DieselIcon, MachineryIcon, RenewalIcon, SettingsIcon, UserAccessIcon, WorkerIcon } from '../components/AppIcons.jsx'
+import { DieselIcon, MachineryIcon, RenewalIcon, UserAccessIcon, WorkerIcon } from '../components/AppIcons.jsx'
 import { Card, Spinner } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useCompany } from '../lib/CompanyContext.jsx'
@@ -8,7 +8,9 @@ import { useWindows } from '../components/Windows.jsx'
 import { EMBEDDED } from '../components/Shell.jsx'
 import { usePerms } from '../lib/perms.js'
 
-// Portal main page: the selected company (top-right switcher) and its modules.
+// Portal main page: the selected company's modules in two boxes,
+// Operation (Machinery Manage, Fuel Manage, Worker CMMS) and HQ Admin
+// (Machinery Renewal, User Access).
 export default function PortalHome() {
   const { isSuperAdmin } = useAuth()
   const { current, loaded, error } = useCompany()
@@ -32,66 +34,81 @@ export default function PortalHome() {
         <p className="mt-1 text-sm text-slate-500">
           {error ||
             (isSuperAdmin
-              ? 'Companies come from MJM Intranet. Open Settings and press “Sync from MJM Intranet”.'
+              ? 'Companies come from MJM Intranet. Open User Access and press “Sync from MJM Intranet”.'
               : 'Ask a super admin to sync the companies from MJM Intranet and give you access.')}
         </p>
         {isSuperAdmin && (
           <Link
-            to="/settings"
+            to="/settings/users"
             className="mt-5 inline-flex h-11 items-center rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark"
           >
-            Open Settings
+            Open User Access
           </Link>
         )}
       </Card>
     )
 
   return (
-    <div className="pt-4 sm:pt-10">
-      <TileGrid orderKey="home">
-        <ModuleTile
-          key="cmms"
-          to="/cmms"
-          label="Machinery Manage"
-          Icon={MachineryIcon}
-          disabled={!current.cmms_enabled}
-          note={current.cmms_enabled ? null : 'Not enabled'}
-        />
-        <ModuleTile
-          key="diesel"
-          to="/diesel"
-          label="Fuel Manage"
-          Icon={DieselIcon}
-          disabled={!current.diesel_enabled}
-          note={current.diesel_enabled ? null : 'Not enabled'}
-        />
-        <ModuleTile
-          key="renewal"
-          onClick={current.cmms_enabled ? () => open({ key: 'renewal', label: 'Machinery\nRenewal', Icon: RenewalIcon, path: '/renewal' }) : undefined}
-          label={'Machinery\nRenewal'}
-          Icon={RenewalIcon}
-          disabled={!current.cmms_enabled}
-          note={current.cmms_enabled ? null : 'Not enabled'}
-        />
-        <ModuleTile
-          key="worker"
-          // Its own tab (a phone-style app, apart from the office pages); a fresh ?v= so it is never a cached copy.
-          onClick={current.cmms_enabled || current.diesel_enabled ? () => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank') : undefined}
-          label="Worker CMMS"
-          Icon={WorkerIcon}
-          disabled={!current.cmms_enabled && !current.diesel_enabled}
-          note={current.cmms_enabled || current.diesel_enabled ? null : 'Not enabled'}
-        />
-        {userAccess && (
+    <div className="mx-auto flex max-w-5xl flex-wrap items-start justify-center gap-5 pt-4 sm:gap-6 sm:pt-10">
+      <Group title="Operation">
+        <TileGrid orderKey="home-operation">
           <ModuleTile
-            key="users"
-            onClick={() => open({ key: 'users', label: 'User Access', Icon: UserAccessIcon, path: '/settings/users' })}
-            label="User Access"
-            Icon={UserAccessIcon}
+            key="cmms"
+            to="/cmms"
+            label="Machinery Manage"
+            Icon={MachineryIcon}
+            disabled={!current.cmms_enabled}
+            note={current.cmms_enabled ? null : 'Not enabled'}
           />
-        )}
-        <ModuleTile key="settings" onClick={() => open({ key: 'settings', label: 'Settings', Icon: SettingsIcon, path: '/settings' })} label="Settings" Icon={SettingsIcon} />
-      </TileGrid>
+          <ModuleTile
+            key="diesel"
+            to="/diesel"
+            label="Fuel Manage"
+            Icon={DieselIcon}
+            disabled={!current.diesel_enabled}
+            note={current.diesel_enabled ? null : 'Not enabled'}
+          />
+          <ModuleTile
+            key="worker"
+            // Its own tab (a phone-style app, apart from the office pages); a fresh ?v= so it is never a cached copy.
+            onClick={current.cmms_enabled || current.diesel_enabled ? () => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank') : undefined}
+            label="Worker CMMS"
+            Icon={WorkerIcon}
+            disabled={!current.cmms_enabled && !current.diesel_enabled}
+            note={current.cmms_enabled || current.diesel_enabled ? null : 'Not enabled'}
+          />
+        </TileGrid>
+      </Group>
+      <Group title="HQ Admin">
+        <TileGrid orderKey="home-hq">
+          <ModuleTile
+            key="renewal"
+            onClick={current.cmms_enabled ? () => open({ key: 'renewal', label: 'Machinery\nRenewal', Icon: RenewalIcon, path: '/renewal' }) : undefined}
+            label={'Machinery\nRenewal'}
+            Icon={RenewalIcon}
+            disabled={!current.cmms_enabled}
+            note={current.cmms_enabled ? null : 'Not enabled'}
+          />
+          {userAccess && (
+            <ModuleTile
+              key="users"
+              onClick={() => open({ key: 'users', label: 'User Access', Icon: UserAccessIcon, path: '/settings/users' })}
+              label="User Access"
+              Icon={UserAccessIcon}
+            />
+          )}
+        </TileGrid>
+      </Group>
     </div>
+  )
+}
+
+// A category box on the main page: its name on top, the module icons inside.
+function Group({ title, children }) {
+  return (
+    <section className="rounded-3xl border border-white/80 bg-white/55 px-4 pb-4 pt-3 shadow-sm backdrop-blur-sm sm:px-6 sm:pb-5">
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{title}</h2>
+      {children}
+    </section>
   )
 }
