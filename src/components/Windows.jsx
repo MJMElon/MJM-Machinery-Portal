@@ -11,7 +11,9 @@ import { useCompany } from '../lib/CompanyContext.jsx'
  * bottom, maximise it, close it. The windows and the bottom bar live here, in
  * the Shell, so they stay while the person moves around CMMS 2.
  * Each window shows the module page itself (an iframe of this app, which
- * hides its top bar when embedded). On phones the icon simply opens the page.
+ * hides its top bar when embedded). On phones and small tablets the window
+ * fills the screen (no dragging or resizing), with the same title bar and its
+ * close (X) button, so the person closes it to get back to the icons.
  *
  * A module is { key, label, Icon, path, href? }.
  */
@@ -55,7 +57,11 @@ export function WindowsProvider({ children }) {
   const open = useCallback(
     (m) => {
       if (m.href) return window.open(m.href, '_blank', 'noopener')
-      if (isPhone()) return navigate(m.path)
+      if (isPhone())
+        return setWins((ws) => [
+          ...ws.filter((w) => w.module.key !== m.key),
+          { module: m, x: 0, y: 0, w: window.innerWidth, h: 0, min: false, max: true, phone: true, z: ++zTop.current }
+        ])
       setWins((ws) => {
         if (ws.some((w) => w.module.key === m.key)) return ws.map((w) => (w.module.key === m.key ? { ...w, z: ++zTop.current, min: false } : w))
         const area = { w: window.innerWidth, h: window.innerHeight - TOP - BAR }
@@ -76,7 +82,7 @@ export function WindowsProvider({ children }) {
       ws.map((w) => {
         if (w.module.key !== key) return w
         const next = { ...w, ...p }
-        remember(key, { x: next.x, y: next.y, w: next.w, h: next.h, max: next.max })
+        if (!next.phone) remember(key, { x: next.x, y: next.y, w: next.w, h: next.h, max: next.max })
         return next
       })
     )
@@ -158,7 +164,7 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
 
   // Drag by the title bar / resize from the corner.
   function start(e, kind) {
-    if (e.button !== 0 || win.max) return
+    if (e.button !== 0 || win.max || win.phone) return
     e.preventDefault()
     onFocus()
     gesture.current = { kind, sx: e.clientX, sy: e.clientY, x: win.x, y: win.y, w: win.w, h: win.h }
@@ -189,7 +195,9 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
     window.addEventListener('pointercancel', up)
   }
 
-  const style = win.max
+  const style = win.phone
+    ? { left: 0, top, width: '100vw', height: `calc(100dvh - ${top + BAR}px)` }
+    : win.max
     ? { left: 0, top, width: '100vw', height: `calc(100dvh - ${top + BAR}px)` }
     : { left: win.x, top: win.y + top, width: win.w, height: win.h }
 
@@ -202,7 +210,7 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
     >
       <header
         onPointerDown={(e) => start(e, 'move')}
-        onDoubleClick={onMax}
+        onDoubleClick={win.phone ? undefined : onMax}
         className={`flex h-10 shrink-0 select-none items-center gap-2 border-b border-slate-200 bg-slate-50 pl-3 pr-1.5 ${win.max ? '' : 'cursor-move'}`}
       >
         <module.Icon className="h-6 w-6" />
@@ -213,6 +221,7 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
               <path d="M3 11h10" />
             </svg>
           </Ctl>
+          {!win.phone && (
           <Ctl onClick={onMax} label={win.max ? 'Restore' : 'Maximise'}>
             <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6">
               {win.max ? (
@@ -225,6 +234,7 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
               )}
             </svg>
           </Ctl>
+          )}
           <Ctl onClick={onClose} label="Close" danger>
             <IconX width={14} height={14} />
           </Ctl>
@@ -234,7 +244,7 @@ function Win({ win, companyId, top, onFocus, onClose, onMin, onMax, onMove, onDr
         {!loaded && <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">Loading {module.label.replace('\n', ' ')}…</div>}
         <iframe key={companyId || 'none'} src={src} title={module.label} data-win={module.key} onLoad={() => setLoaded(true)} className="h-full w-full border-0" />
       </div>
-      {!win.max && (
+      {!win.max && !win.phone && (
         <div onPointerDown={(e) => start(e, 'resize')} className="absolute bottom-0 right-0 h-5 w-5 cursor-nwse-resize" title="Resize">
           <svg viewBox="0 0 20 20" className="h-5 w-5 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M18 8L8 18M18 13l-5 5" />
