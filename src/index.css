@@ -223,3 +223,10 @@ body.wk-dark-body {
 .wk-dark .bg-red-100 { background-color: #451616; }
 .wk-dark .text-red-800,
 .wk-dark .text-red-700 { color: #fca5a5; }
+
+/* The top bar sits under the module windows; while one of its menus is open
+   (the company switcher), lift it above them so the list shows in front of an
+   open window and a company can be chosen. */
+header:has([aria-haspopup='listbox'][aria-expanded='true']) {
+  z-index: 1000;
+}
