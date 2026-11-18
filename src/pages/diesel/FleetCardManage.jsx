@@ -61,11 +61,16 @@ export default function FleetCardManage() {
       <ErrorBox>{error}</ErrorBox>
 
       <Card className="overflow-hidden">
-        <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">Fleet card list</h3>
+        <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">
+          Fleet card list <span className="font-normal text-slate-500">· {company.name}</span>
+        </h3>
         {loading ? (
           <Loading />
         ) : cards.length === 0 ? (
-          <Empty>No fleet cards yet.{access.can('cards', 'add') ? ' Start with New fleet card application.' : ''}</Empty>
+          <Empty>
+            No fleet cards in {company.name}. If your cards are under another company, switch company at the top of CMMS 2.
+            {access.can('cards', 'add') ? ' Or start with New fleet card application.' : ''}
+          </Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-sm">

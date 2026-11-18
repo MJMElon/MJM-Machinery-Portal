@@ -174,7 +174,14 @@ export default function DieselUsage() {
       })),
     { value: 'cash', label: 'Cash claims (no fleet card)', group: 'Cash' }
   ]
-  const driverIds = [...new Set([...fills.map((f) => f.driver).filter(Boolean), ...cards.flatMap((c) => c.driver_ids || [])])]
+  // Drivers to choose from: anyone with a receipt, fleet card drivers and the drivers of HQ vehicles.
+  const driverIds = [
+    ...new Set([
+      ...fills.map((f) => f.driver),
+      ...cards.flatMap((c) => (c.driver_ids?.length ? c.driver_ids : [c.driver_id])),
+      ...hqVehicles.flatMap((v) => (v.driver_ids?.length ? v.driver_ids : [v.driver_id]))
+    ].filter(Boolean))
+  ]
   const driverOpts = [
     ...driverIds.map((id) => ({ value: id, label: who(id) })).sort((a, b) => a.label.localeCompare(b.label)),
     { value: 'none', label: 'No driver recorded' }
@@ -284,8 +291,8 @@ export default function DieselUsage() {
             {/* Tabs on top; each tab has its own filters below */}
             <div className="flex border-b border-slate-200">
               {[
-                ['hq', 'HQ vehicle'],
-                ['estate', 'Estate machine']
+                ['hq', 'HQ Vehicle'],
+                ['estate', 'Estate Machinery']
               ].map(([k, label]) => (
                 <button
                   key={k}
@@ -302,10 +309,21 @@ export default function DieselUsage() {
             </div>
 
             <div className="border-b border-slate-200 p-3" data-noprint>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)_auto]">
+              <div
+                className={`grid gap-3 sm:grid-cols-2 ${
+                  tab === 'hq'
+                    ? 'lg:grid-cols-[minmax(0,1.7fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_auto]' // fleet card widest, driver narrower
+                    : 'lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)_auto]'
+                }`}
+              >
                 {tab === 'hq' ? (
                   <>
-                    <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={setCardF} />
+                    <div>
+                      <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={setCardF} />
+                      {!cardOpts.some((o) => o.value !== 'cash') && (
+                        <p className="mt-1 text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</p>
+                      )}
+                    </div>
                     <MultiPick label="Driver" allLabel="All drivers" options={driverOpts} value={driverF} onChange={setDriverF} />
                     <MultiPick label="Vehicle" allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />
                   </>
