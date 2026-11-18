@@ -1,9 +1,13 @@
-import { Outlet, useMatch, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { Button, Card, Spinner } from '../../components/ui.jsx'
 import { IconBack, IconCard, IconFuel, IconLock, IconReceipt, IconUsers } from '../../components/icons.jsx'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
+import { DieselClaimsIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
+import { useWindows } from '../../components/Windows.jsx'
+import { EMBEDDED } from '../../components/Shell.jsx'
 
 // Fuel Manage: four modules. The landing page shows them as square icons;
 // inside a module the same four sit in the left sidebar. Which ones a person
@@ -22,13 +26,36 @@ export const DIESEL_MODULES = [
   { to: '/diesel/users', label: 'Claim approval\nsetting', Icon: IconUsers, need: (a) => a.fuelAdmin, hint: 'Normal user / accountant / admin, and who approves whose fuel claims' }
 ]
 
+const ART = {
+  '/diesel/claims': DieselClaimsIcon,
+  '/diesel/records': FuelRecordIcon,
+  '/diesel/cards': FleetCardIcon,
+  '/diesel/users': FuelUsersIcon
+}
+/** A Fuel Manage module as a module window ({ key, label, Icon, path }). */
+export const fuelWindow = (m) => ({ key: m.to.replace('/', '').replace('/', '-'), label: m.label, Icon: ART[m.to] || m.Icon, path: m.to })
+
 export default function DieselLayout() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const { open } = useWindows()
   const { current, loaded } = useCompany()
   const { isSuperAdmin } = useAuth()
   const access = useDieselAccess(current?.diesel_enabled ? current.id : null)
   const landing = Boolean(useMatch({ path: '/diesel', end: true }))
   const back = () => navigate('/')
+
+  // Opened straight on a module (e.g. the Fuel Claims icon in MJM Intranet
+  // links to #/diesel/claims): show the Fuel Manage page with that module in
+  // its window on top, as when it is opened inside CMMS 2 — closing the
+  // window (X) leaves the person on the Fuel Manage page.
+  const direct = !EMBEDDED && DIESEL_MODULES.find((m) => m.to === pathname)
+  const ready = loaded && access.loaded && current?.diesel_enabled && access.use
+  useEffect(() => {
+    if (!direct || !ready || !direct.need(access)) return
+    navigate('/diesel', { replace: true })
+    open(fuelWindow(direct))
+  }, [direct, ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!loaded || !access.loaded)
     return (
@@ -65,6 +92,13 @@ export default function DieselLayout() {
     )
 
   const nav = DIESEL_MODULES.filter((n) => n.need(access))
+  // About to switch to the Fuel Manage page with the module in a window.
+  if (direct && direct.need(access))
+    return (
+      <div className="flex justify-center py-16 text-brand">
+        <Spinner className="h-7 w-7" />
+      </div>
+    )
 
   // Landing page and every module: just "Back to CMMS main page" and the content.
   // The top bar names the module (Fuel Claims, Fuel Usage, …).
