@@ -1,15 +1,7 @@
 import { useOutletContext } from 'react-router-dom'
 import { ModuleList } from '../../components/Desktop.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
-import { DieselClaimsIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
-import { DIESEL_MODULES } from './DieselLayout.jsx'
-
-const ART = {
-  '/diesel/claims': DieselClaimsIcon,
-  '/diesel/records': FuelRecordIcon,
-  '/diesel/cards': FleetCardIcon,
-  '/diesel/users': FuelUsersIcon
-}
+import { DIESEL_MODULES, fuelWindow } from './DieselLayout.jsx'
 
 // Fuel Manage landing page: the modules as a list of wide buttons (icon,
 // then the name); each opens in its own window. Modules the person has no
@@ -19,7 +11,7 @@ export default function DieselHome() {
   if (EMBEDDED) return <p className="p-6 text-center text-sm text-slate-500">This is the Fuel Manage main page. Close this window to go back to it.</p>
   const modules = DIESEL_MODULES.map((m) => {
     const allowed = m.need(access)
-    return { key: m.to.replace('/', '').replace('/', '-'), label: m.label, Icon: ART[m.to], path: m.to, disabled: !allowed, note: allowed ? null : 'No access' }
+    return { ...fuelWindow(m), disabled: !allowed, note: allowed ? null : 'No access' }
   })
   return <ModuleList modules={modules} orderKey="fuel-list" />
 }
