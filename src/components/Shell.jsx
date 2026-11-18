@@ -164,8 +164,14 @@ function CompanySwitcher({ wide = false }) {
   useEffect(() => {
     if (!open) return
     const close = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false)
+    // A click inside a module window (an iframe) only blurs this page: close then too.
+    const blur = () => setOpen(false)
     document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    window.addEventListener('blur', blur)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('blur', blur)
+    }
   }, [open])
 
   if (!current) return null
