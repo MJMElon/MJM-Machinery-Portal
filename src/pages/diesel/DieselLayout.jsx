@@ -5,7 +5,7 @@ import { IconBack, IconCard, IconFuel, IconLock, IconReceipt, IconUsers } from '
 import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
-import { DieselClaimsIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
+import { DieselClaimsIcon, DieselUsageIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
 import { useWindows } from '../../components/Windows.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
 
@@ -14,13 +14,20 @@ import { EMBEDDED } from '../../components/Shell.jsx'
 // gets depends on their Diesel access for the selected company (set under
 // Settings → User setting).
 export const DIESEL_MODULES = [
-  { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
+  { to: '/diesel/claims', label: 'Fuel Receipt Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
   {
     to: '/diesel/records',
-    label: 'Fuel Usage',
+    label: 'Operational Diesel Records',
     Icon: IconFuel,
-    need: (a) => a.can('fuel_record', 'view') || a.can('fuel_record', 'add') || a.can('usage', 'view') || a.can('report', 'view'),
-    hint: 'Diesel record: fuel issued to each machine, listed. Diesel report: monthly usage by vehicle and machine'
+    need: (a) => a.can('fuel_record', 'view') || a.can('fuel_record', 'add'),
+    hint: 'Diesel issued to each machine from the company tank, listed'
+  },
+  {
+    to: '/diesel/usage',
+    label: 'Fuel Usage Reports',
+    Icon: IconFuel,
+    need: (a) => a.can('usage', 'view') || a.can('report', 'view'),
+    hint: 'Monthly fuel usage by HQ vehicle and estate machine'
   },
   { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
   { to: '/diesel/users', label: 'Claim approval\nsetting', Icon: IconUsers, need: (a) => a.fuelAdmin, hint: 'Normal user / accountant / admin, and who approves whose fuel claims' }
@@ -29,6 +36,7 @@ export const DIESEL_MODULES = [
 const ART = {
   '/diesel/claims': DieselClaimsIcon,
   '/diesel/records': FuelRecordIcon,
+  '/diesel/usage': DieselUsageIcon,
   '/diesel/cards': FleetCardIcon,
   '/diesel/users': FuelUsersIcon
 }
@@ -101,7 +109,7 @@ export default function DieselLayout() {
     )
 
   // Landing page and every module: just "Back to CMMS main page" and the content.
-  // The top bar names the module (Fuel Claims, Fuel Usage, …).
+  // The top bar names the module (Fuel Receipt Claims, Operational Diesel Records, …).
   return (
     <div>
       <Outlet context={{ company: current, access }} />

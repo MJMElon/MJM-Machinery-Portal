@@ -35,7 +35,7 @@ import { day, money, num, today } from '../../lib/format.js'
 // listed (HQ or not), plus "No vehicle recorded" for receipts without one.
 // HQ vehicle data = receipts: cash and fleet-card receipts on fuel claims (not
 // rejected) plus fill-ups typed on a card.
-// Estate machine data = the Fuel Usage Record (Diesel record view): diesel
+// Estate machine data = Operational Diesel Records: diesel
 // issued to each machine from the company tank. A record has litres only; its
 // RM is litres x the diesel price in force on its date (the "Diesel price"
 // button keeps the price list). A location filter shows when the company has
@@ -242,7 +242,7 @@ export default function DieselUsage() {
         ]
       : [
           `Machine type: ${names(A.typeF, typeOpts, 'all')} · Machine: ${names(A.machineF, machineOpts, 'all')}${locations.length ? ` · Location: ${names(A.locF, locOpts, 'all')}` : ''}`,
-          `Diesel issued, from the Fuel Usage Record · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
+          `Diesel issued, from Operational Diesel Records · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
   async function print() {
@@ -250,7 +250,7 @@ export default function DieselUsage() {
     setPrinting(true)
     try {
       await printElement(report.current, {
-        title: 'Fuel Usage Report',
+        title: 'Fuel Usage Reports',
         lines: [
           `${company.name} · ${tab === 'hq' ? 'HQ vehicles' : 'Estate machines'}`,
           `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'} (charts: ${year})`,
@@ -367,7 +367,7 @@ export default function DieselUsage() {
               ) : (
                 <>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Diesel record)
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Operational Diesel Records)
                   </span>
                   <button
                     type="button"

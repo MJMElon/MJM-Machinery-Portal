@@ -30,8 +30,8 @@ const MS = {
   'No access yet': 'Belum ada akses',
   'You cannot send requests for {company} yet. Ask your admin to tick “Send requests from the mobile app” (Maintenance Work Manage) for you.':
     'Anda belum boleh menghantar permohonan untuk {company}. Minta admin tandakan “Send requests from the mobile app” (Maintenance Work Manage) untuk anda.',
-  'You cannot add fuel records for {company}. Ask your admin to tick “Add records” for you (Fuel Usage Record).':
-    'Anda tidak boleh menambah rekod diesel untuk {company}. Minta admin tandakan “Add records” (Fuel Usage Record) untuk anda.',
+  'You cannot add fuel records for {company}. Ask your admin to tick “Add records” for you (Operational Diesel Records).':
+    'Anda tidak boleh menambah rekod diesel untuk {company}. Minta admin tandakan “Add records” (Operational Diesel Records) untuk anda.',
   'Could not load.': 'Tidak dapat memuatkan.',
   'Could not send. Please try again.': 'Tidak dapat dihantar. Sila cuba lagi.',
 
