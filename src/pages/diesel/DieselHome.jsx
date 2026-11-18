@@ -1,12 +1,11 @@
 import { useOutletContext } from 'react-router-dom'
 import { ModuleList } from '../../components/Desktop.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
-import { DieselClaimsIcon, DieselUsageIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
+import { DieselClaimsIcon, FleetCardIcon, FuelRecordIcon, FuelUsersIcon } from '../../components/AppIcons.jsx'
 import { DIESEL_MODULES } from './DieselLayout.jsx'
 
 const ART = {
   '/diesel/claims': DieselClaimsIcon,
-  '/diesel/usage': DieselUsageIcon,
   '/diesel/records': FuelRecordIcon,
   '/diesel/cards': FleetCardIcon,
   '/diesel/users': FuelUsersIcon

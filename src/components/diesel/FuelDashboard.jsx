@@ -341,18 +341,19 @@ function niceStep(max) {
  * 'litres' or 'amount'. Hover (or tap) a month to see its fleet card, cash
  * and total.
  */
-export function MiniBars({ rows, year, metric, fmt }) {
+export function MiniBars({ rows, year, metric, fmt, plain }) {
   const [hover, setHover] = useState(null);
   const data = useMemo(() => {
     const m = MONTHS.map(() => ({ card: 0, cash: 0 }));
     for (const r of rows) {
       if (Number(r.fill_date.slice(0, 4)) !== year) continue;
       const i = Number(r.fill_date.slice(5, 7)) - 1;
-      m[i][r.payment === "fleet_card" ? "card" : "cash"] +=
+      // `plain` (a colour): one bar per month, not split by payment.
+      m[i][plain || r.payment === "fleet_card" ? "card" : "cash"] +=
         Number(r[metric]) || 0;
     }
     return m;
-  }, [rows, year, metric]);
+  }, [rows, year, metric, plain]);
   const totals = data.map((d) => d.card + d.cash);
   const max = Math.max(1, ...totals);
   const W = 360;
@@ -397,7 +398,7 @@ export function MiniBars({ rows, year, metric, fmt }) {
                   y={yCard}
                   width={barW}
                   height={y(0) - yCard}
-                  fill={C1}
+                  fill={plain || C1}
                   rx="2"
                 />
               )}
@@ -458,16 +459,20 @@ export function MiniBars({ rows, year, metric, fmt }) {
           <p className="font-semibold text-slate-800">
             {MONTHS[hover]} {year}
           </p>
-          <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
-            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C1 }} />
-            {fmt(data[hover].card)}
-          </p>
-          <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
-            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C2 }} />
-            {fmt(data[hover].cash)}
-          </p>
+          {!plain && (
+            <>
+              <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C1 }} />
+                {fmt(data[hover].card)}
+              </p>
+              <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C2 }} />
+                {fmt(data[hover].cash)}
+              </p>
+            </>
+          )}
           <p className="font-medium tabular-nums text-slate-800">
-            Total: {fmt(totals[hover])}
+            {plain ? fmt(totals[hover]) : <>Total: {fmt(totals[hover])}</>}
           </p>
         </div>
       )}

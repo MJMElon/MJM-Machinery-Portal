@@ -5,14 +5,19 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 import { useDieselAccess } from '../../lib/diesel.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
-// Fuel Manage: five modules. The landing page shows them as square icons;
-// inside a module the same five sit in the left sidebar. Which ones a person
+// Fuel Manage: four modules. The landing page shows them as square icons;
+// inside a module the same four sit in the left sidebar. Which ones a person
 // gets depends on their Diesel access for the selected company (set under
 // Settings → User setting).
 export const DIESEL_MODULES = [
   { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
-  { to: '/diesel/usage', label: 'Fuel Usage\nReport', Icon: IconFuel, need: (a) => a.can('usage', 'view') || a.can('report', 'view'), hint: 'Dashboards, monthly totals by vehicle and driver, fill-up log' },
-  { to: '/diesel/records', label: 'Fuel Usage\nRecord', Icon: IconFuel, need: (a) => a.can('fuel_record', 'view') || a.can('fuel_record', 'add'), hint: 'Fuel issued to each machine from the company tank, by date and location' },
+  {
+    to: '/diesel/records',
+    label: 'Fuel Usage',
+    Icon: IconFuel,
+    need: (a) => a.can('fuel_record', 'view') || a.can('fuel_record', 'add') || a.can('usage', 'view') || a.can('report', 'view'),
+    hint: 'Diesel record: fuel issued to each machine, listed. Diesel report: monthly usage by vehicle and machine'
+  },
   { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view'), hint: 'Fleet cards, reloads, balances and KPDN subsidy vehicles' },
   { to: '/diesel/users', label: 'Claim approval\nsetting', Icon: IconUsers, need: (a) => a.fuelAdmin, hint: 'Normal user / accountant / admin, and who approves whose fuel claims' }
 ]

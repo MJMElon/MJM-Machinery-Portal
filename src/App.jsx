@@ -26,8 +26,7 @@ import DieselClaims from './pages/diesel/DieselClaims.jsx'
 import ClaimEdit from './pages/diesel/ClaimEdit.jsx'
 import ClaimView from './pages/diesel/ClaimView.jsx'
 import ClaimReview from './pages/diesel/ClaimReview.jsx'
-import DieselUsage from './pages/diesel/DieselUsage.jsx'
-import FuelRecords from './pages/diesel/FuelRecords.jsx'
+import FuelUsage from './pages/diesel/FuelUsage.jsx'
 import FuelRecordMobile from './pages/diesel/FuelRecordMobile.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
@@ -81,8 +80,9 @@ export default function App() {
             <Route path="claims/review" element={<ClaimReview />} />
             <Route path="claims/:id" element={<ClaimView />} />
             <Route path="claims/:id/edit" element={<ClaimEdit />} />
-            <Route path="usage" element={<DieselUsage />} />
-            <Route path="records" element={<FuelRecords />} />
+            {/* Fuel Usage: one module, two views */}
+            <Route path="usage" element={<FuelUsage view="report" />} />
+            <Route path="records" element={<FuelUsage view="record" />} />
             <Route path="records/mobile" element={<Navigate to="/app/fuel" replace />} />
             <Route path="cards" element={<FleetCardManage />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />

@@ -48,8 +48,8 @@ export const MODULES = [
         special: ['view_all', 'approve', 'pay'],
         hint: 'View / add / edit / delete apply to the person’s own claims'
       },
-      { key: 'usage', label: 'Fuel Usage Report', actions: ['view', 'add', 'delete'], special: [] },
-      { key: 'fuel_record', label: 'Fuel Usage Record', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
+      { key: 'usage', label: 'Fuel Usage Report (Diesel report)', actions: ['view', 'add', 'delete'], special: [] },
+      { key: 'fuel_record', label: 'Fuel Usage Record (Diesel record)', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
       { key: 'cards', label: 'Fleet Card Manage', actions: ['view', 'add', 'edit', 'delete'], special: [] },
       { key: 'report', label: 'Report', actions: ['view'], special: [] }
     ]
@@ -119,7 +119,7 @@ export const ROLE_MODEL = [
       },
       {
         section: 'usage',
-        label: 'Fuel Usage Report',
+        label: 'Fuel Usage Report (Diesel report)',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'manage', label: 'Record / delete card fill-ups', actions: ['add', 'delete'] }
@@ -127,7 +127,7 @@ export const ROLE_MODEL = [
       },
       {
         section: 'fuel_record',
-        label: 'Fuel Usage Record',
+        label: 'Fuel Usage Record (Diesel record)',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'add', label: 'Add records', actions: ['add'] },

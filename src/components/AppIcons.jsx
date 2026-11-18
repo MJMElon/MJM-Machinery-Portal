@@ -89,7 +89,7 @@ export function DieselUsageIcon({ className }) {
 export function FuelRecordIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-frc" label="Fuel Usage Record">
+      <Tile id="ic-frc" label="Fuel Usage">
         <rect x="14" y="12" width="22" height="40" rx="3" />
         <path d="M19 19h12v9H19zM10 52h30" />
         <path d="M36 30h5a4 4 0 0 1 4 4v9a3.5 3.5 0 0 0 7 0V24l-6-6" />

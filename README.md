@@ -13,7 +13,7 @@ that company's modules:
   - **CMMS User Setting**: per company, Machinery Manage rights (Solve, Edit, Delete, Manage lists) and Diesel Manage rights (Access, Cash Claim, Report, Admin). Also where display names are set.
   - The main page shows the modules as square icons: Machinery Manage, Diesel Manage, Settings.
   - **MachTrek** link.
-- **Fuel Manage** (per company) — the Intranet's Diesel Claims module, now per company (see [Fuel Manage](#fuel-manage-was-diesel-manage)). Opens on five draggable square buttons.
+- **Fuel Manage** (per company) — the Intranet's Diesel Claims module, now per company (see [Fuel Manage](#fuel-manage-was-diesel-manage)). Opens on four draggable square buttons.
 - **Settings** → the selected company's profile (total area), its **locations** (plantations / estates / sites under the company; each machine in Machinery Profile can be put under one, and the listing filters by location) and its blocks (name, area, notes).
 - **Settings** also holds, for super admins, the company's staff WhatsApp numbers (a case belongs to the company whose numbers include the sender; unknown senders show as "Unassigned numbers") and the "Sync from MJM Intranet" button. Businesses, companies and **which company has which module** all come from MJM Intranet; there is no company admin page in the portal.
 
@@ -57,13 +57,14 @@ inactive here. The Intranet side registers the portal as an Icon by SQL (`gw_reg
 
 ## Fuel Manage (was Diesel Manage)
 
-Ported from the Intranet's Diesel Claims module, per company. Opens on a page of five square module buttons
+Ported from the Intranet's Diesel Claims module, per company. Opens on a page of four square module buttons
 (also in the left sidebar); "Back to CMMS main page" returns to the portal home.
 
 | Module | What it holds | Who |
 | --- | --- | --- |
 | **Fuel Claims** | A year dashboard (litres per month, subsidised vs non-subsidised; RM per month, cash vs fleet card) and the claim list (No. · Description · Claim amount · Action: view / edit / print / delete), latest first. A claim is a **document with receipt rows**: submission date, company, name, totals; a drop zone for receipt photos (each photo becomes a row, read in the browser by Tesseract.js and attached to that row; the figures are a draft to check) or rows typed by hand; per row: vehicle (optional), receipt date, receipt no., litres, unit price, amount, payment (cash = claim back, fleet card = recorded only), subsidy tick, remark, attachment. **Payable = cash rows only.** The claim page prints as a claim form with the receipts; reviewers Approve / Reject / Mark paid | claims: view add edit delete · view_all approve pay |
 | **Fuel Usage** | Every fill-up of the company in one log (cash claims not rejected + fleet card fill-ups) by month and vehicle, totals, CSV. Admins record fleet card fill-ups here | Report / Admin |
+| **Fuel Usage** (one module, two buttons on top: **Diesel record** `#/diesel/records` = the Fuel Usage Record below, **Diesel report** `#/diesel/usage` = the Fuel Usage report above; its **Estate machine** tab is built from the fuel usage records — litres only, with a location filter — while **HQ vehicle** stays on receipts) | | |
 | **Fuel Usage Record** | The log of fuel issued to machines from the company's own tank: date, machine, litres, issued by, remark. Location follows the machine (Machinery Profile); the list filters by month, location and machine, totals litres by location and exports CSV. **In Worker CMMS** (`#/app/fuel`, Diesel Usage Record): a phone form for site workers — photo of the pump meter (the number-wheel window is found in the photo and read by Tesseract.js as whole litres; a draft the worker checks), machine, litres, Send; the date is today and the photo is kept with the record (bucket `machinery_fuel_record_photos`). A worker with only Add sees the phone form and their own entries | fuel_record: view add edit delete |
 | **Fleet Card Manage** | Fuel cards (balance = reloads − fill-ups, monthly limit), reloads, and the **KPDN diesel subsidy vehicles**: vehicles ticked in Machinery Profile that apply for the subsidised-diesel fleet card, with or without a card yet | Report / Admin |
 | **Report** | Per month: totals, by vehicle (cash vs card, km/L, over-tank flags), by driver, CSV | Report / Admin |
@@ -198,6 +199,7 @@ Then do the same, in order, with:
 - `supabase/migrations/20261111120000_permissions_matrix.sql` (permission matrix `machinery_user_perms` + `machinery_can()`, finer RLS per section, fuel claims without a vehicle, module access per company from the Intranet's Icon tags).
 - `supabase/migrations/20261112120000_fuel_claim_lines.sql` (a fuel claim is a header + receipt lines `machinery_diesel_claim_lines`; totals and payable amount kept by trigger; existing claims become one-line claims).
 - `supabase/migrations/20261113120000_claim_approvers_intranet_users.sql` (named approvers `machinery_claim_reviewable()`, Intranet Icon access flags on portal users, `machinery_apply_intranet_users()`).
+- `supabase/migrations/20261204120000_fuel_usage_merge.sql` (people who may see the Fuel Usage report may read the fuel usage records it is built from).
 - `supabase/migrations/20261202120000_repair_maintenance.sql` (case types, cases from the mobile app `machinery_submit_case`, approve / solve with cost, service schedule on machines, bucket `machinery_case_files`).
 - `supabase/migrations/20261201120000_fuel_record_mobile.sql` (meter photo on a fuel record, photo bucket, workers read their own entries).
 - `supabase/migrations/20261129120000_fuel_usage_records.sql` (Fuel Usage Record: `machinery_fuel_records`, permission section `fuel_record`).
