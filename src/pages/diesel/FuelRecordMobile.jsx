@@ -12,7 +12,7 @@ import { useT } from '../worker/prefs.jsx'
 // Diesel Usage Record in Worker CMMS (/app/fuel), for site workers: photograph the pump meter,
 // pick the machine, check the litres, send. The date is today, the litres are
 // read off the photo (a draft the worker checks), the name is the signed-in
-// person. Entries land in Fuel Usage Record with the photo attached.
+// person. Entries land in Operational Diesel Records with the photo attached.
 const big = 'h-14 w-full rounded-2xl border border-slate-300 bg-white px-4 text-lg text-slate-900 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30'
 const LAST_LOCATION = 'mjm-fuel-record-location'
 
@@ -144,7 +144,7 @@ export default function FuelRecordMobile() {
     return (
       <div className="mx-auto max-w-md rounded-2xl bg-amber-50 p-5 text-center text-amber-900">
         <p className="text-lg font-bold">{t('No access')}</p>
-        <p className="mt-1 text-sm">{t('You cannot add fuel records for {company}. Ask your admin to tick “Add records” for you (Fuel Usage Record).', { company: company.name })}</p>
+        <p className="mt-1 text-sm">{t('You cannot add fuel records for {company}. Ask your admin to tick “Add records” for you (Operational Diesel Records).', { company: company.name })}</p>
       </div>
     )
 

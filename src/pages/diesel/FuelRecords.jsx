@@ -9,7 +9,7 @@ import { listLocations } from '../../lib/companies.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { day, downloadCsv, num, sum, thisMonth, today } from '../../lib/format.js'
 
-// Fuel Usage Record: fuel issued to each machine from the company's own tank
+// Operational Diesel Records: fuel issued to each machine from the company's own tank
 // (date, machine, litres, who issued it). A record's location
 // is the machine's location in Machinery Profile, so the list filters and
 // totals by location when the company has locations.
