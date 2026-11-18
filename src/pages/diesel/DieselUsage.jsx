@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card } from '../../components/ui.jsx'
-import { IconPrint, IconSearch } from '../../components/icons.jsx'
+import { Button, Card, Modal } from '../../components/ui.jsx'
+import { IconPencil, IconPrint, IconSearch, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { MultiPick } from '../../components/diesel/MultiPick.jsx'
 import { printElement } from '../../lib/printFrame.js'
 import { FUEL_COLORS, MiniBars } from '../../components/diesel/FuelDashboard.jsx'
-import { listCardData, listClaimLines, listClaims, listFuelRecords, listPeople, listVehicles, personLabel, vehicleLabel } from '../../lib/diesel.js'
+import {
+  deleteDieselPrice,
+  dieselPriceOn,
+  listCardData,
+  listClaimLines,
+  listClaims,
+  listDieselPrices,
+  listFuelRecords,
+  listPeople,
+  listVehicles,
+  personLabel,
+  saveDieselPrice,
+  vehicleLabel
+} from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
 import { day, money, num, today } from '../../lib/format.js'
 
@@ -23,15 +36,21 @@ import { day, money, num, today } from '../../lib/format.js'
 // HQ vehicle data = receipts: cash and fleet-card receipts on fuel claims (not
 // rejected) plus fill-ups typed on a card.
 // Estate machine data = the Fuel Usage Record (Diesel record view): diesel
-// issued to each machine from the company tank, in litres only (a record has
-// no price), with a location filter when the company has locations.
+// issued to each machine from the company tank. A record has litres only; its
+// RM is litres x the diesel price in force on its date (the "Diesel price"
+// button keeps the price list). A location filter shows when the company has
+// locations.
 // Print prints the charts with the filters in the heading.
 const ISSUED_COLOR = '#0d9488'
+/** 'RM 2.95 / L' (up to 3 decimals) */
+const perL = (v) => `RM ${Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} / L`
 export default function DieselUsage() {
-  const { company } = useOutletContext()
+  const { company, access } = useOutletContext()
   const [fills, setFills] = useState([])
   const [issued, setIssued] = useState([]) // fuel usage records, shaped like fills (estate tab)
   const [locations, setLocations] = useState([])
+  const [prices, setPrices] = useState([]) // diesel price per litre by date, newest first
+  const [pricing, setPricing] = useState(false)
   const [vehicles, setVehicles] = useState([])
   const [cards, setCards] = useState([])
   const [people, setPeople] = useState([])
@@ -57,16 +76,21 @@ export default function DieselUsage() {
 
   const load = useCallback(async () => {
     try {
-      const [v, claims, lines, cardData, p, records, locs] = await Promise.all([
+      const [v, claims, lines, cardData, p, records, locs, priceList] = await Promise.all([
         listVehicles(company.id),
         listClaims(company.id),
         listClaimLines(company.id).catch(() => []),
         listCardData(company.id),
         listPeople(company.id),
         listFuelRecords(company.id).catch(() => []),
-        listLocations(company.id).catch(() => [])
+        listLocations(company.id).catch(() => []),
+        listDieselPrices(company.id).catch(() => [])
       ])
-      setIssued(records.map((r) => ({ id: r.id, vehicle_id: r.machine_id, fill_date: r.record_date, litres: r.litres })))
+      setPrices(priceList)
+      // RM of a record = litres x the diesel price on its date (0 while no price covers that date).
+      setIssued(
+        records.map((r) => ({ id: r.id, vehicle_id: r.machine_id, fill_date: r.record_date, litres: r.litres, amount: Number(r.litres) * (dieselPriceOn(priceList, r.record_date) || 0) }))
+      )
       setLocations(locs)
       setVehicles(v)
       setCards(cardData.cards)
@@ -218,7 +242,7 @@ export default function DieselUsage() {
         ]
       : [
           `Machine type: ${names(A.typeF, typeOpts, 'all')} · Machine: ${names(A.machineF, machineOpts, 'all')}${locations.length ? ` · Location: ${names(A.locF, locOpts, 'all')}` : ''}`,
-          'Diesel issued, from the Fuel Usage Record'
+          `Diesel issued, from the Fuel Usage Record · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
   async function print() {
@@ -341,9 +365,20 @@ export default function DieselUsage() {
                   </span>
                 </>
               ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Diesel record)
-                </span>
+                <>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Diesel record)
+                  </span>
+                  <button
+                    type="button"
+                    data-noprint
+                    onClick={() => setPricing(true)}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-semibold ${prices.length ? 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand' : 'border-amber-300 bg-amber-50 text-amber-800'}`}
+                    title="RM = litres x the diesel price on the record's date"
+                  >
+                    <IconPencil width={12} height={12} /> {prices.length ? `Diesel price: ${perL(prices[0].price)}` : 'Set the diesel price (RM chart is empty)'}
+                  </button>
+                </>
               )}
               <span className="font-semibold text-slate-700">{year}</span>
             </div>
@@ -368,8 +403,8 @@ export default function DieselUsage() {
                     <tr className="border-y border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <th className="w-44 px-4 py-2">{tab === 'hq' ? 'Vehicle reg no.' : 'Machine'}</th>
                       <th className="w-40 px-3 py-2">{tab === 'hq' ? 'Driver' : 'Type'}</th>
-                      <th className="px-3 py-2">{tab === 'hq' ? 'Monthly Fuel Usage (Litre)' : 'Monthly Diesel Issued (Litre)'}</th>
-                      {tab === 'hq' ? <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th> : <th className="w-48 px-3 py-2 text-right">In the date range</th>}
+                      <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
+                      <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -390,15 +425,15 @@ export default function DieselUsage() {
           </div>
         </Card>
       )}
+      {pricing && <PriceModal company={company} prices={prices} canEdit={access.can('fuel_record', 'edit')} onClose={() => setPricing(false)} onChanged={load} />}
     </div>
   )
 }
 
 // One vehicle: reg no. (and name), driver (or type), and the two small month
-// charts. An estate machine (`issued`) has one chart, diesel issued in litres,
-// and its total for the date range.
+// charts. An estate machine (`issued`) has one colour: diesel issued.
 function VehicleRow({ v, rows, second, year, issued }) {
-  const litres = rows.reduce((n, r) => n + Number(r.litres || 0), 0)
+  const plain = issued ? ISSUED_COLOR : undefined
   return (
     <tr className="border-b border-slate-100 align-middle last:border-b-0">
       <td className="px-4 py-2 font-semibold text-slate-800">
@@ -407,20 +442,93 @@ function VehicleRow({ v, rows, second, year, issued }) {
       </td>
       <td className="px-3 py-2 text-slate-700">{second}</td>
       <td className="px-3 py-1.5">
-        <MiniBars rows={rows} year={year} metric="litres" fmt={(x) => `${num(x, 1)} L`} plain={issued ? ISSUED_COLOR : undefined} />
+        <MiniBars rows={rows} year={year} metric="litres" fmt={(x) => `${num(x, 1)} L`} plain={plain} />
       </td>
-      {issued ? (
-        <td className="px-3 py-2 text-right">
-          <span className="block text-base font-bold tabular-nums text-slate-900">{num(litres, 1)} L</span>
-          <span className="block text-xs text-slate-500">
-            {rows.length} record{rows.length === 1 ? '' : 's'}
-          </span>
-        </td>
-      ) : (
-        <td className="px-3 py-1.5">
-          <MiniBars rows={rows} year={year} metric="amount" fmt={money} />
-        </td>
-      )}
+      <td className="px-3 py-1.5">
+        <MiniBars rows={rows} year={year} metric="amount" fmt={money} plain={plain} />
+      </td>
     </tr>
+  )
+}
+
+// Diesel price per litre, by date. A record's RM uses the newest price dated
+// on or before the record, so an old price keeps applying to old months.
+function PriceModal({ company, prices, canEdit, onClose, onChanged }) {
+  const [date, setDate] = useState(today())
+  const [price, setPrice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function run(fn) {
+    setBusy(true)
+    setError('')
+    try {
+      await fn()
+      await onChanged()
+    } catch (e) {
+      setError(e.message || 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  function add(e) {
+    e.preventDefault()
+    if (!(Number(price) > 0)) return setError('Enter the price per litre.')
+    run(async () => {
+      await saveDieselPrice(company.id, { effective_from: date, price: Number(price) })
+      setPrice('')
+    })
+  }
+  return (
+    <Modal open onClose={onClose} title="Diesel price (RM per litre)">
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          The RM chart of estate machines is litres × this price. A price applies from its date until the next one, so add a new line when the
+          price changes; earlier months keep the earlier price.
+        </p>
+        <ErrorBox>{error}</ErrorBox>
+        {canEdit && (
+          <form onSubmit={add} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+            <label className="block text-xs font-medium text-slate-600">
+              From date
+              <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={`${inputCls} mt-1`} />
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              RM per litre
+              <input type="number" inputMode="decimal" min="0.001" step="0.001" required value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} mt-1`} placeholder="e.g. 2.95" />
+            </label>
+            <Button type="submit" disabled={busy}>
+              Add
+            </Button>
+          </form>
+        )}
+        {prices.length === 0 ? (
+          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">No price yet, so the RM chart is empty.{canEdit ? ' Add the first one above.' : ' Ask someone who may edit fuel usage records to add it.'}</p>
+        ) : (
+          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {prices.map((p, i) => (
+              <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <span className="text-slate-700">
+                  From {day(p.effective_from)}
+                  {i === 0 && p.effective_from <= today() && <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">current</span>}
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="font-semibold tabular-nums text-slate-900">{perL(p.price)}</span>
+                  {canEdit && (
+                    <button disabled={busy} onClick={() => window.confirm(`Remove the price from ${day(p.effective_from)}?`) && run(() => deleteDieselPrice(p.id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove price">
+                      <IconTrash width={16} height={16} />
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }

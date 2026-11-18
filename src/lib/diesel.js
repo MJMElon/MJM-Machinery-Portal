@@ -379,6 +379,31 @@ export async function deleteFuelRecord(id) {
   if (error) throw friendly(error, RECORDS_SQL)
 }
 
+// Diesel price per litre by date (company tank): RM of a record = litres x the price in force on its date.
+const DIESEL_PRICES = 'machinery_diesel_prices'
+/** Prices of a company, newest first ([] before the fuel_usage_merge migration). */
+export async function listDieselPrices(companyId) {
+  const { data, error } = await supabase.from(DIESEL_PRICES).select('*').eq('company_id', companyId).order('effective_from', { ascending: false })
+  if (error) {
+    if (['42P01', 'PGRST205'].includes(error.code)) return []
+    throw friendly(error)
+  }
+  return data || []
+}
+export async function saveDieselPrice(companyId, { effective_from, price }) {
+  const { error } = await supabase.from(DIESEL_PRICES).upsert({ company_id: companyId, effective_from, price }, { onConflict: 'company_id,effective_from' })
+  if (error) throw friendly(error, { '42P01': 'Database not up to date. Run the SQL migration …fuel_usage_merge.sql in Supabase.', PGRST205: 'Database not up to date. Run the SQL migration …fuel_usage_merge.sql in Supabase.' })
+}
+export async function deleteDieselPrice(id) {
+  const { error } = await supabase.from(DIESEL_PRICES).delete().eq('id', id)
+  if (error) throw friendly(error)
+}
+/** The price in force on a date: the newest one dated on or before it (prices newest first), else null. */
+export const dieselPriceOn = (prices, date) => {
+  const p = prices.find((x) => x.effective_from <= date)
+  return p ? Number(p.price) : null
+}
+
 // Meter photos taken in the mobile view: private bucket, <company>/<user>/<uuid>.jpg
 const RECORD_PHOTOS = 'machinery_fuel_record_photos'
 export async function uploadRecordPhoto(companyId, userId, file) {
