@@ -196,19 +196,12 @@ export default function DieselUsage() {
       .sort(byLabel),
     { value: 'none', label: 'No driver recorded', group: onChosenCards.size ? 'Other drivers' : '' }
   ]
-  // A driver's own cars: the vehicles they are the driver of (Machinery
-  // Profile); with none, the vehicle of the fleet card they are on. General
-  // cars (shared) are never "own".
+  // A driver's own cars come ONLY from Machinery Profile: the vehicles that
+  // have this person as a driver. A fleet card is shared by several drivers,
+  // so the card's vehicle is not anybody's own car. General cars are never "own".
   const isGeneral = (v) => Boolean(v?.general_use)
-  const ownCarIds = (uid) => {
-    const drives = vehicles
-      .filter((v) => !isGeneral(v) && (v.driver_ids?.length ? v.driver_ids : [v.driver_id]).includes(uid))
-      .map((v) => v.id)
-    if (drives.length) return drives
-    return [...new Set(cards.filter((c) => c.vehicle_id && driversOfCard(c).includes(uid)).map((c) => c.vehicle_id))].filter(
-      (id) => !isGeneral(vById.get(id))
-    )
-  }
+  const ownCarIds = (uid) =>
+    vehicles.filter((v) => !isGeneral(v) && (v.driver_ids?.length ? v.driver_ids : [v.driver_id]).includes(uid)).map((v) => v.id)
   // Vehicle list: general cars first (easy to find), then the other HQ vehicles.
   const generalCars = vehicles.filter((v) => isGeneral(v) && v.is_active !== false).sort(byReg)
   const vehicleOpts = [
