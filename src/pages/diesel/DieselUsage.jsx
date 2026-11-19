@@ -5,7 +5,7 @@ import { Button, Card, Modal } from '../../components/ui.jsx'
 import { IconPencil, IconPrint, IconSearch, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { MultiPick } from '../../components/diesel/MultiPick.jsx'
-import { printElement } from '../../lib/printFrame.js'
+import { printUsageTable } from '../../components/diesel/UsagePrint.js'
 import { FUEL_COLORS, MiniBars } from '../../components/diesel/FuelDashboard.jsx'
 import {
   deleteDieselPrice,
@@ -29,8 +29,10 @@ import { day, money, num, today } from '../../lib/format.js'
 // tab has its own filters (tick as many as needed; none ticked = all):
 //   HQ vehicle:     fleet card (or cash), driver, vehicle, date from – to
 //   Estate machine: machine type, machine, date from – to
-// The filters take effect when Search is pressed (Search also reloads the
-// receipts from the database). Date defaults to the 1st of this month – today.
+// The report follows the filters straight away; Search loads the latest data
+// again (for when something looks out of date). Date defaults to the 1st of
+// this month – today. Print = tables (Jan – Dec litres and RM per person or
+// machine, average price per litre), see UsagePrint.js.
 // With a driver or fleet card filter every vehicle with matching receipts is
 // listed (HQ or not), plus "No vehicle recorded" for receipts without one.
 // HQ vehicle data = receipts: cash and fleet-card receipts on fuel claims (not
@@ -67,10 +69,8 @@ export default function DieselUsage() {
   const [locF, setLocF] = useState([])
   const [from, setFrom] = useState(`${today().slice(0, 7)}-01`)
   const [to, setTo] = useState(today())
-  // What the report shows: the filters as they were when Search was pressed.
-  const [applied, setApplied] = useState({ cardF: [], driverF: [], vehicleF: [], typeF: [], machineF: [], locF: [], from: `${today().slice(0, 7)}-01`, to: today() })
+  // The report follows the filters straight away; Search reloads the data.
   const draft = { cardF, driverF, vehicleF, typeF, machineF, locF, from, to }
-  const pending = JSON.stringify(draft) !== JSON.stringify(applied)
   const [printing, setPrinting] = useState(false)
   const report = useRef(null)
 
@@ -118,7 +118,6 @@ export default function DieselUsage() {
   const [searching, setSearching] = useState(false)
   async function search() {
     setSearching(true)
-    setApplied(draft)
     await load()
     setSearching(false)
   }
@@ -194,8 +193,8 @@ export default function DieselUsage() {
     .filter((v) => (!typeF.length || typeF.includes(v.machine_type || 'No type')) && (!locF.length || locF.includes(locKey(v))))
     .map((v) => ({ value: v.id, label: vehicleLabel(v) }))
 
-  // ---- Receipts that pass the filters of the tab (as applied by Search)
-  const A = applied
+  // ---- Receipts that pass the filters of the tab
+  const A = draft
   const inRange = (d) => (!A.from || d >= A.from) && (!A.to || d <= A.to)
   const passHq = (f) =>
     (!A.vehicleF.length || A.vehicleF.includes(f.vehicle_id)) &&
@@ -252,15 +251,38 @@ export default function DieselUsage() {
           `Diesel issued, from Operational Diesel Records · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
+  // Print: a table, one row per person (HQ: who claimed / drove) or per
+  // machine (estate), Jan – Dec litres and RM of the year, and the average
+  // fuel price per litre.
   async function print() {
-    if (!report.current) return
     setPrinting(true)
     try {
-      await printElement(report.current, {
+      // The whole year (Jan – Dec of the year the date range ends in), with the other filters.
+      const yearRows =
+        tab === 'hq' ? fills.filter(passHq) : issued.filter((f) => !A.machineF.length || A.machineF.includes(f.vehicle_id))
+      const byKey = new Map()
+      for (const f of yearRows) {
+        if (!f.fill_date.startsWith(String(year))) continue
+        if (tab === 'estate' && !listed.some((v) => v.id === f.vehicle_id)) continue
+        const k = tab === 'hq' ? f.driver || 'none' : f.vehicle_id || 'none'
+        const r = byKey.get(k) || {
+          name: tab === 'hq' ? (k === 'none' ? 'No driver recorded' : who(k)) : k === 'none' ? 'No machine recorded' : vehicleLabel(vById.get(k)),
+          litres: Array(12).fill(0),
+          amount: Array(12).fill(0)
+        }
+        const m = Number(f.fill_date.slice(5, 7)) - 1
+        r.litres[m] += Number(f.litres || 0)
+        r.amount[m] += Number(f.amount || 0)
+        byKey.set(k, r)
+      }
+      await printUsageTable({
         title: 'Fuel Usage Reports',
+        nameHeader: tab === 'hq' ? 'User' : 'Machine',
+        year,
+        rows: [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name)),
         lines: [
-          `${company.name} · ${tab === 'hq' ? 'HQ vehicles' : 'Estate machines'}`,
-          `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'} (charts: ${year})`,
+          `${company.name} · ${tab === 'hq' ? 'HQ Vehicle' : 'Estate Machinery'}`,
+          `Year ${year}, January – December`,
           ...filterLines,
           `Printed ${day(today())}`
         ]
@@ -365,8 +387,8 @@ export default function DieselUsage() {
                   </div>
                 </div>
                 <div className="flex items-end">
-                  <Button onClick={search} disabled={searching} className={`h-12 w-full lg:w-auto ${pending ? '' : 'opacity-90'}`}>
-                    <IconSearch width={18} height={18} /> {searching ? 'Searching…' : 'Search'}
+                  <Button onClick={search} disabled={searching} className="h-12 w-full lg:w-auto" title="Load the latest data again">
+                    <IconSearch width={18} height={18} /> {searching ? 'Loading…' : 'Search'}
                   </Button>
                 </div>
               </div>
@@ -401,11 +423,6 @@ export default function DieselUsage() {
               <span className="font-semibold text-slate-700">{year}</span>
             </div>
 
-            {pending && (
-              <p className="border-b border-amber-100 bg-amber-50 px-4 py-1.5 text-xs text-amber-800" data-noprint>
-                Filters changed — press Search to update the report.
-              </p>
-            )}
             {listed.length === 0 ? (
               <Empty>
                 {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length || A.locF.length
