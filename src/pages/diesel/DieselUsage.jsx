@@ -146,9 +146,12 @@ export default function DieselUsage() {
     for (const d of c.driver_ids?.length ? c.driver_ids : c.driver_id ? [c.driver_id] : [])
       cardOfDriver.set(d, cardOfDriver.has(d) ? better(cardOfDriver.get(d), c) : c)
   }
+  // The card written on the receipt when it was saved wins (so removing a
+  // driver from a card later does not move their old receipts); receipts
+  // saved before that existed fall back to today's vehicle / drivers.
   const cardOf = (f) => {
     if (f.source !== 'card') return null
-    if (!f.fromClaim && f.card_id) return cardById.get(f.card_id) || null
+    if (f.card_id) return cardById.get(f.card_id) || null
     return cardOfVehicle.get(f.vehicle_id) || cardOfDriver.get(f.driver) || null
   }
 
