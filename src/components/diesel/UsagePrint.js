@@ -4,7 +4,7 @@ import { printHtml } from '../../lib/printFrame.js'
 // person (HQ vehicles: the claimant / driver) or per machine (estate):
 //   1. fuel usage in litres   2. fuel expenses in RM
 // and below them the average fuel price per litre (RM ÷ litres), per month
-// and for the year. Printed in place (A4 landscape, no browser header/footer).
+// and for the year. Printed in place (A4 portrait, no browser header/footer).
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const GREEN = '#14532d'
@@ -27,8 +27,8 @@ export function usageTableHtml({ title, lines = [], nameHeader, rows, year }) {
   const table = (caption, key, d, foot) => `
   <h2>${esc(caption)}</h2>
   <table class="t">
-    <colgroup><col style="width:3%" /><col style="width:15%" />${MONTHS.map(() => '<col />').join('')}<col style="width:8%" /></colgroup>
-    <thead><tr><th>No.</th><th class="l">${esc(nameHeader)}</th>${MONTHS.map((m) => `<th>${m}</th>`).join('')}<th>Total</th></tr></thead>
+    <colgroup><col style="width:3.5%" /><col style="width:14%" />${MONTHS.map(() => '<col />').join('')}<col style="width:8.5%" /></colgroup>
+    <thead><tr><th class="c">No.</th><th class="l">${esc(nameHeader)}</th>${MONTHS.map((m) => `<th>${m}</th>`).join('')}<th>Total</th></tr></thead>
     <tbody>
       ${
         rows.length
@@ -53,26 +53,26 @@ export function usageTableHtml({ title, lines = [], nameHeader, rows, year }) {
 <html lang="en"><head><meta charset="utf-8" />
 <title>${esc(title)} ${year}</title>
 <style>
-@page { size: A4 landscape; margin: 0; }
+@page { size: A4 portrait; margin: 0; }
 html, body { margin: 0; padding: 0; background: #fff; color: #111827; }
-body { font: 10px/1.4 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { font: 8px/1.35 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .page { width: 100%; border-collapse: collapse; }
 .page > thead td, .page > tfoot td { height: 10mm; padding: 0; }
-.page > tbody > tr > td { padding: 0 10mm; vertical-align: top; }
+.page > tbody > tr > td { padding: 0 8mm; vertical-align: top; }
 .head { padding-bottom: 6px; border-bottom: 2px solid ${GREEN}; margin-bottom: 4px; }
-.head h1 { margin: 0; font-size: 16px; color: ${GREEN}; }
+.head h1 { margin: 0; font-size: 15px; color: ${GREEN}; }
 .head p { margin: 2px 0 0; color: #475569; }
-h2 { font-size: 11.5px; margin: 12px 0 5px; color: ${GREEN}; }
+h2 { font-size: 10.5px; margin: 12px 0 5px; color: ${GREEN}; }
 .t { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.t th { background: ${GREEN}; color: #fff; font-weight: 600; padding: 5px 4px; text-align: right; }
-.t td { padding: 4px; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; }
+.t th { background: ${GREEN}; color: #fff; font-weight: 600; padding: 4px 2px; text-align: right; }
+.t td { padding: 3.5px 2px; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums; }
 .t tbody tr:nth-child(even) td { background: #f6f8f7; }
 .t .l { text-align: left; } .t .c { text-align: center; } .t .b { font-weight: 700; }
-.t th.l { text-align: left; }
+.t th.l { text-align: left; } .t th.c { text-align: center; }
 .t tr.sum td { font-weight: 700; border-top: 1.5px solid ${GREEN}; background: #eef5f0; }
 .t tr.avg td { font-weight: 600; color: #374151; background: #fff; }
 tr { break-inside: avoid; }
-.avgbox { margin-top: 10px; display: inline-block; border: 1.5px solid ${GREEN}; border-radius: 6px; padding: 6px 12px; font-size: 12px; }
+.avgbox { margin-top: 10px; display: inline-block; border: 1.5px solid ${GREEN}; border-radius: 6px; padding: 6px 12px; font-size: 11px; }
 .avgbox b { color: ${GREEN}; font-size: 14px; }
 </style></head><body>
 <table class="page"><thead><tr><td></td></tr></thead><tfoot><tr><td></td></tr></tfoot><tbody><tr><td>

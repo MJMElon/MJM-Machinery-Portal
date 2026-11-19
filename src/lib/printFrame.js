@@ -3,7 +3,7 @@
 // the page the person is on (also inside a CMMS 2 module window).
 //
 // printHtml(html): print a complete HTML document (string).
-// printElement(el, { title, lines, landscape }): print a part of the page as
+// printElement(el, { title, lines, landscape }): print a part of the page (A4 portrait unless landscape) as
 //   it looks on screen (the page's own stylesheets are carried over), under a
 //   small heading. Anything marked data-noprint inside it is left out.
 //
@@ -51,7 +51,7 @@ export function printHtml(html) {
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-export function printElement(el, { title = '', lines = [], landscape = true } = {}) {
+export function printElement(el, { title = '', lines = [], landscape = false } = {}) {
   const copy = el.cloneNode(true)
   copy.querySelectorAll('[data-noprint]').forEach((n) => n.remove())
   const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
