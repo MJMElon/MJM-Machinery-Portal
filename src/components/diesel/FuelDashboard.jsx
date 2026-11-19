@@ -341,20 +341,32 @@ function niceStep(max) {
  * 'litres' or 'amount'. Hover (or tap) a month to see its fleet card, cash
  * and total.
  */
-export function MiniBars({ rows, year, metric, fmt, plain }) {
+export function MiniBars({ rows, year, metric, fmt, plain, series }) {
   const [hover, setHover] = useState(null);
+  // The stacked parts of each bar, bottom first: { key, color, label?, test(row) }.
+  // Default: fleet card (blue) and cash (orange); `plain` (a colour): one part.
+  const parts = useMemo(
+    () =>
+      series ||
+      (plain
+        ? [{ key: "all", color: plain, test: () => true }]
+        : [
+            { key: "card", color: C1, label: "Fleet card", test: (r) => r.payment === "fleet_card" },
+            { key: "cash", color: C2, label: "Cash", test: () => true },
+          ]),
+    [series, plain],
+  );
   const data = useMemo(() => {
-    const m = MONTHS.map(() => ({ card: 0, cash: 0 }));
+    const m = MONTHS.map(() => Object.fromEntries(parts.map((p) => [p.key, 0])));
     for (const r of rows) {
       if (Number(r.fill_date.slice(0, 4)) !== year) continue;
       const i = Number(r.fill_date.slice(5, 7)) - 1;
-      // `plain` (a colour): one bar per month, not split by payment.
-      m[i][plain || r.payment === "fleet_card" ? "card" : "cash"] +=
-        Number(r[metric]) || 0;
+      const p = parts.find((x) => x.test(r)) || parts[parts.length - 1];
+      m[i][p.key] += Number(r[metric]) || 0;
     }
     return m;
-  }, [rows, year, metric, plain]);
-  const totals = data.map((d) => d.card + d.cash);
+  }, [rows, year, metric, parts]);
+  const totals = data.map((d) => parts.reduce((t, p) => t + d[p.key], 0));
   const max = Math.max(1, ...totals);
   const W = 360;
   const H = 74;
@@ -376,8 +388,15 @@ export function MiniBars({ rows, year, metric, fmt, plain }) {
       >
         {data.map((d, i) => {
           const x = i * slot + (slot - barW) / 2;
-          const yCard = y(d.card);
-          const yTop = y(d.card + d.cash);
+          let acc = 0;
+          const segs = parts.map((p) => {
+            const v = d[p.key];
+            const top = y(acc + v);
+            const seg = { p, v, top, h: y(acc) - top };
+            acc += v;
+            return seg;
+          });
+          const yTop = y(totals[i]);
           return (
             <g
               key={i}
@@ -392,25 +411,8 @@ export function MiniBars({ rows, year, metric, fmt, plain }) {
                 fill={hover === i ? "#f1f5f9" : "transparent"}
                 rx="3"
               />
-              {d.card > 0 && (
-                <rect
-                  x={x}
-                  y={yCard}
-                  width={barW}
-                  height={y(0) - yCard}
-                  fill={plain || C1}
-                  rx="2"
-                />
-              )}
-              {d.cash > 0 && (
-                <rect
-                  x={x}
-                  y={yTop}
-                  width={barW}
-                  height={yCard - yTop}
-                  fill={C2}
-                  rx="2"
-                />
+              {segs.map(({ p, v, top, h }) =>
+                v > 0 ? <rect key={p.key} x={x} y={top} width={barW} height={h} fill={p.color} rx="2" /> : null,
               )}
               {totals[i] > 0 && (
                 <text
@@ -459,20 +461,16 @@ export function MiniBars({ rows, year, metric, fmt, plain }) {
           <p className="font-semibold text-slate-800">
             {MONTHS[hover]} {year}
           </p>
-          {!plain && (
-            <>
-              <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
-                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C1 }} />
-                {fmt(data[hover].card)}
+          {parts.length > 1 &&
+            parts.map((p) => (
+              <p key={p.key} className="flex items-center gap-1.5 tabular-nums text-slate-600">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: p.color }} />
+                {series && p.label ? `${p.label}: ` : ""}
+                {fmt(data[hover][p.key])}
               </p>
-              <p className="flex items-center gap-1.5 tabular-nums text-slate-600">
-                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: C2 }} />
-                {fmt(data[hover].cash)}
-              </p>
-            </>
-          )}
+            ))}
           <p className="font-medium tabular-nums text-slate-800">
-            {plain ? fmt(totals[hover]) : <>Total: {fmt(totals[hover])}</>}
+            {parts.length > 1 ? <>Total: {fmt(totals[hover])}</> : fmt(totals[hover])}
           </p>
         </div>
       )}

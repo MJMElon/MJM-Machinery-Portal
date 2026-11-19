@@ -184,11 +184,60 @@ export default function DieselUsage() {
       ...hqVehicles.flatMap((v) => (v.driver_ids?.length ? v.driver_ids : [v.driver_id]))
     ].filter(Boolean))
   ]
+  // Drivers of a ticked fleet card are listed first.
+  const driversOfCard = (c) => (c?.driver_ids?.length ? c.driver_ids : c?.driver_id ? [c.driver_id] : [])
+  const onChosenCards = new Set(cardF.flatMap((id) => driversOfCard(cardById.get(id))))
+  const byLabel = (a, b) => a.label.localeCompare(b.label)
   const driverOpts = [
-    ...driverIds.map((id) => ({ value: id, label: who(id) })).sort((a, b) => a.label.localeCompare(b.label)),
-    { value: 'none', label: 'No driver recorded' }
+    ...driverIds.filter((id) => onChosenCards.has(id)).map((id) => ({ value: id, label: who(id), group: 'On the chosen fleet card' })).sort(byLabel),
+    ...driverIds
+      .filter((id) => !onChosenCards.has(id))
+      .map((id) => ({ value: id, label: who(id), group: onChosenCards.size ? 'Other drivers' : '' }))
+      .sort(byLabel),
+    { value: 'none', label: 'No driver recorded', group: onChosenCards.size ? 'Other drivers' : '' }
   ]
-  const vehicleOpts = hqVehicles.map((v) => ({ value: v.id, label: vehicleLabel(v) }))
+  // A driver's own cars: the vehicles they are the driver of (Machinery
+  // Profile); with none, the vehicle of the fleet card they are on. General
+  // cars (shared) are never "own".
+  const isGeneral = (v) => Boolean(v?.general_use)
+  const ownCarIds = (uid) => {
+    const drives = vehicles
+      .filter((v) => !isGeneral(v) && (v.driver_ids?.length ? v.driver_ids : [v.driver_id]).includes(uid))
+      .map((v) => v.id)
+    if (drives.length) return drives
+    return [...new Set(cards.filter((c) => c.vehicle_id && driversOfCard(c).includes(uid)).map((c) => c.vehicle_id))].filter(
+      (id) => !isGeneral(vById.get(id))
+    )
+  }
+  // Vehicle list: general cars first (easy to find), then the other HQ vehicles.
+  const generalCars = vehicles.filter((v) => isGeneral(v) && v.is_active !== false).sort(byReg)
+  const vehicleOpts = [
+    ...generalCars.map((v) => ({ value: v.id, label: vehicleLabel(v), group: 'General cars' })),
+    ...hqVehicles.filter((v) => !isGeneral(v)).map((v) => ({ value: v.id, label: vehicleLabel(v), group: generalCars.length ? 'HQ vehicles' : '' }))
+  ]
+  // Ticking a driver ticks their own cars under Vehicle (tick a general car
+  // there too to see the driver's receipts on it); unticking takes them off.
+  const pickDrivers = (next) => {
+    const added = next.filter((d) => !driverF.includes(d))
+    const removed = driverF.filter((d) => !next.includes(d))
+    setDriverF(next)
+    setVehicleF((vs) => {
+      const keep = new Set(next.flatMap(ownCarIds))
+      const out = vs.filter((id) => keep.has(id) || !removed.some((d) => ownCarIds(d).includes(id)))
+      for (const d of added) for (const id of ownCarIds(d)) if (!out.includes(id)) out.push(id)
+      return out
+    })
+  }
+  // Ticking a fleet card ticks its drivers (and so their cars); unticking takes them off.
+  const pickCards = (next) => {
+    const added = next.filter((c) => !cardF.includes(c))
+    const removed = cardF.filter((c) => !next.includes(c))
+    setCardF(next)
+    const stay = new Set(next.flatMap((id) => driversOfCard(cardById.get(id))))
+    let drivers = driverF.filter((d) => stay.has(d) || !removed.some((id) => driversOfCard(cardById.get(id)).includes(d)))
+    for (const id of added) for (const d of driversOfCard(cardById.get(id))) if (!drivers.includes(d)) drivers.push(d)
+    pickDrivers(drivers)
+  }
   const typeOpts = [...new Set(estateMachines.map((v) => v.machine_type || 'No type'))].sort().map((t) => ({ value: t, label: t }))
   const locOpts = [...locations.map((l) => ({ value: l.id, label: l.name })), { value: 'none', label: 'No location' }]
   const locKey = (v) => (locations.some((l) => l.id === v.location_id) ? v.location_id : 'none')
@@ -230,6 +279,36 @@ export default function DieselUsage() {
             (!A.locF.length || A.locF.includes(locKey(v))) &&
             (!A.machineF.length || A.machineF.includes(v.id))
         )
+  // With drivers ticked (HQ): one row per driver, every car they fuelled in
+  // one bar: own car / general car / other car.
+  const byDriver = tab === 'hq' && A.driverF.length > 0
+  const CAR_PARTS = [
+    { key: 'own', color: '#2a78d6', label: 'Own car' },
+    { key: 'general', color: '#8a5cd6', label: 'General car' },
+    { key: 'other', color: '#94a3b8', label: 'Other / no car' }
+  ]
+  const driverRows = byDriver
+    ? A.driverF
+        .map((d) => {
+          const mine = rows.filter((f) => (f.driver || 'none') === d)
+          const own = new Set(d === 'none' ? [] : ownCarIds(d))
+          const kind = (f) => (own.has(f.vehicle_id) ? 'own' : isGeneral(vById.get(f.vehicle_id)) ? 'general' : 'other')
+          const used = [...new Set(mine.map((f) => f.vehicle_id || ''))]
+          const cars = [
+            ...[...own].map((id) => ({ id, kind: 'own' })),
+            ...used.filter((id) => !own.has(id)).map((id) => ({ id, kind: id ? kind({ vehicle_id: id }) : 'other' }))
+          ]
+          return {
+            id: d,
+            name: d === 'none' ? 'No driver recorded' : who(d),
+            cars,
+            rows: mine,
+            series: CAR_PARTS.map((p) => ({ ...p, test: (f) => kind(f) === p.key }))
+          }
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : []
+
   const linesOf = (vid) => rows.filter((f) => (f.vehicle_id || '') === vid).map((f) => ({ ...f, payment: f.source === 'card' ? 'fleet_card' : 'cash' }))
   // Driver column: the vehicle's driver; with a driver filter, or when the
   // vehicle has none, the people whose receipts are on it.
@@ -344,12 +423,12 @@ export default function DieselUsage() {
                 {tab === 'hq' ? (
                   <>
                     <div>
-                      <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={setCardF} />
+                      <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={pickCards} />
                       {!cardOpts.some((o) => o.value !== 'cash') && (
                         <p className="mt-1 text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</p>
                       )}
                     </div>
-                    <MultiPick label="Driver" allLabel="All drivers" options={driverOpts} value={driverF} onChange={setDriverF} />
+                    <MultiPick label="Driver" allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />
                     <MultiPick label="Vehicle" allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />
                   </>
                 ) : (
@@ -398,7 +477,13 @@ export default function DieselUsage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-2 text-[11px] text-slate-600">
-              {tab === 'hq' ? (
+              {byDriver ? (
+                CAR_PARTS.map((p) => (
+                  <span key={p.key} className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: p.color }} /> {p.label}
+                  </span>
+                ))
+              ) : tab === 'hq' ? (
                 <>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: FUEL_COLORS.card }} /> Fleet card (KPDN)
@@ -426,7 +511,49 @@ export default function DieselUsage() {
               <span className="font-semibold text-slate-700">{year}</span>
             </div>
 
-            {listed.length === 0 ? (
+            {byDriver ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-sm">
+                  <thead>
+                    <tr className="border-y border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="w-44 px-4 py-2">Vehicle reg no.</th>
+                      <th className="w-40 px-3 py-2">Driver</th>
+                      <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
+                      <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {driverRows.map((d) => (
+                      <tr key={d.id} className="border-b border-slate-100 align-middle last:border-b-0">
+                        <td className="px-4 py-2">
+                          {d.cars.length === 0 ? (
+                            <span className="text-slate-400">—</span>
+                          ) : (
+                            d.cars.map((c) => {
+                              const part = CAR_PARTS.find((p) => p.key === c.kind)
+                              return (
+                                <span key={c.id || 'none'} className="flex items-center gap-1.5 py-0.5">
+                                  <span className="inline-block h-2 w-2 shrink-0 rounded-sm" style={{ background: part.color }} />
+                                  <span className="font-semibold text-slate-800">{c.id ? regOf(vById.get(c.id)) : 'No vehicle'}</span>
+                                  <span className="text-[11px] text-slate-400">{c.kind === 'own' ? 'own' : c.kind === 'general' ? 'general' : ''}</span>
+                                </span>
+                              )
+                            })
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">{d.name}</td>
+                        <td className="px-3 py-1.5">
+                          <MiniBars rows={d.rows} year={year} metric="litres" fmt={(x) => `${num(x, 1)} L`} series={d.series} />
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <MiniBars rows={d.rows} year={year} metric="amount" fmt={money} series={d.series} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : listed.length === 0 ? (
               <Empty>
                 {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length || A.locF.length
                   ? 'No vehicle for this filter.'
