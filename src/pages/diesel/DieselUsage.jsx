@@ -204,9 +204,27 @@ export default function DieselUsage() {
     vehicles.filter((v) => !isGeneral(v) && (v.driver_ids?.length ? v.driver_ids : [v.driver_id]).includes(uid)).map((v) => v.id)
   // Vehicle list: general cars first (easy to find), then the other HQ vehicles.
   const generalCars = vehicles.filter((v) => isGeneral(v) && v.is_active !== false).sort(byReg)
+  // Vehicle list: general cars, then the own cars of the ticked drivers (even
+  // when not an HQ vehicle), then the other HQ vehicles, then anything else
+  // that is ticked — every ticked vehicle is in the list, so it can be unticked.
+  const driverCarIds = [...new Set(driverF.filter((d) => d !== 'none').flatMap(ownCarIds))]
+  const shownIds = new Set()
+  const opt = (v, group) => {
+    shownIds.add(v.id)
+    return { value: v.id, label: vehicleLabel(v), group }
+  }
   const vehicleOpts = [
-    ...generalCars.map((v) => ({ value: v.id, label: vehicleLabel(v), group: 'General cars' })),
-    ...hqVehicles.filter((v) => !isGeneral(v)).map((v) => ({ value: v.id, label: vehicleLabel(v), group: generalCars.length ? 'HQ vehicles' : '' }))
+    ...generalCars.map((v) => opt(v, 'General cars')),
+    ...driverCarIds
+      .map((id) => vById.get(id))
+      .filter((v) => v && !shownIds.has(v.id))
+      .sort(byReg)
+      .map((v) => opt(v, "Ticked drivers' own cars")),
+    ...hqVehicles.filter((v) => !isGeneral(v) && !shownIds.has(v.id)).map((v) => opt(v, 'HQ vehicles')),
+    ...vehicleF
+      .map((id) => vById.get(id))
+      .filter((v) => v && !shownIds.has(v.id))
+      .map((v) => opt(v, 'Other vehicles'))
   ]
   // Ticking a driver ticks their own cars under Vehicle (tick a general car
   // there too to see the driver's receipts on it); unticking takes them off.
