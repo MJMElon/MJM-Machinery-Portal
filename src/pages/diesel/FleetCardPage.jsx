@@ -666,7 +666,7 @@ export default function FleetCardPage({ mode }) {
                       className={box}
                     />
                   </Row>
-                  <Row label="Login user ID" ro={ro} show={form.login_id}>
+                  <Row label="Fuel Station Web Login ID" ro={ro} show={form.login_id}>
                     <input
                       value={form.login_id}
                       onChange={set("login_id")}
@@ -675,7 +675,7 @@ export default function FleetCardPage({ mode }) {
                       className={box}
                     />
                   </Row>
-                  <Row label="Password record" ro={ro} show={form.login_password}>
+                  <Row label="Login Password" ro={ro} show={form.login_password}>
                     <input
                       value={form.login_password}
                       onChange={set("login_password")}
@@ -935,7 +935,7 @@ export default function FleetCardPage({ mode }) {
                 </Row>
               </div>
               <div>
-                <Row label="Login user ID" ro={ro} show={form.login_id}>
+                <Row label="Fuel Station Web Login ID" ro={ro} show={form.login_id}>
                   <input
                     value={form.login_id}
                     onChange={set("login_id")}
@@ -944,7 +944,7 @@ export default function FleetCardPage({ mode }) {
                     className={box}
                   />
                 </Row>
-                <Row label="Password record" ro={ro} show={form.login_password}>
+                <Row label="Login Password" ro={ro} show={form.login_password}>
                   <input
                     value={form.login_password}
                     onChange={set("login_password")}
