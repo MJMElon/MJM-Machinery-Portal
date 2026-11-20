@@ -57,7 +57,9 @@ export function useDieselAccess(companyId) {
     reviewable: p.reviewable,
     approves: p.approves,
     fuelAdmin: p.adminOf('fuel'),
-    approveFor: p.approveFor
+    approveFor: p.approveFor,
+    approvesTopup: p.approvesTopup,
+    topupApprover: p.can('topup', 'approve')
   }
 }
 
@@ -482,6 +484,48 @@ export async function saveCard(companyId, { id, ...fields }) {
 export async function deleteCard(id) {
   const { error } = await supabase.from(DIESEL.cards).delete().eq('id', id)
   if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Cancelled instead.' })
+}
+
+// ---- fleet card top-up requests ----------------------------------------------
+// Request (Pending) → an approver of the requester approves / rejects → the
+// approved request is printed for the office → Topped up → the reload is
+// claimed on a fuel claim. See migration 20261206120000_fleet_card_topup_requests.sql.
+export const TOPUPS = 'machinery_fleet_topup_requests'
+export const TOPUP_STATUS = {
+  pending: { label: 'Pending', color: 'amber' },
+  approved: { label: 'Approved', color: 'green' },
+  rejected: { label: 'Rejected', color: 'red' },
+  cancelled: { label: 'Cancelled', color: 'slate' },
+  topped_up: { label: 'Topped up', color: 'blue' }
+}
+export const topupNo = (r) => `TU-${String(r.request_no ?? '').padStart(4, '0')}`
+
+/** The top-up requests the signed-in user may see (own, as approver, card managers); null before the migration. */
+export async function listTopups(companyId) {
+  const { data, error } = await supabase.from(TOPUPS).select('*').eq('company_id', companyId).order('requested_at', { ascending: false }).limit(500)
+  if (error) {
+    if (['42P01', 'PGRST205'].includes(error.code)) return null
+    throw friendly(error)
+  }
+  return data || []
+}
+export async function requestTopup(companyId, { card_id, amount, needed_by, reason }) {
+  const { error } = await supabase
+    .from(TOPUPS)
+    .insert({ company_id: companyId, card_id, amount: round(amount, 2), needed_by: needed_by || null, reason: reason?.trim() || null })
+  if (error) throw friendly(error)
+}
+export async function decideTopup(id, approve, note) {
+  const { error } = await supabase.rpc('machinery_topup_decide', { p_id: id, p_approve: approve, p_note: note || null })
+  if (error) throw friendly(error)
+}
+export async function cancelTopup(id) {
+  const { error } = await supabase.rpc('machinery_topup_cancel', { p_id: id })
+  if (error) throw friendly(error)
+}
+export async function topupDone(id, date) {
+  const { error } = await supabase.rpc('machinery_topup_done', { p_id: id, p_date: date || null })
+  if (error) throw friendly(error)
 }
 
 export async function addReload(companyId, row) {

@@ -141,6 +141,15 @@ export const ROLE_MODEL = [
 ]
 
 export const approveFor = (perms) => (Array.isArray(perms?.approve_for) ? perms.approve_for : [])
+// Fleet card top-up requests: perms.topup = ['approve'] and perms.topup_approve_for = [user ids] (none = everyone)
+export const topupApproveFor = (perms) => (Array.isArray(perms?.topup_approve_for) ? perms.topup_approve_for : [])
+/** May the signed-in user approve / reject top-up requests of this person? */
+export const canApproveTopup = (perms, isSuper, requesterId) => {
+  if (isSuper) return true
+  if (!has(perms, 'topup', 'approve')) return false
+  const list = topupApproveFor(perms)
+  return list.length === 0 || list.includes(requesterId)
+}
 
 /** May the signed-in user approve / reject claims of this claimant? (approver named for them, or approve-all) */
 export const canApproveClaimant = (perms, isSuper, claimantId) => {
@@ -154,7 +163,7 @@ export const canApproveClaimant = (perms, isSuper, claimantId) => {
 export const canReviewClaimant = (perms, isSuper, claimantId) =>
   canApproveClaimant(perms, isSuper, claimantId) || has(perms, 'claims', 'pay')
 
-// Claim approval setting: a person's role in Fuel Manage.
+// Approval setting: a person's role in Fuel Manage.
 export const FUEL_ROLES = [
   ['user', 'Normal user'],
   ['accountant', 'Accountant']
@@ -174,7 +183,7 @@ export function withFuelRole(perms, role) {
   return { ...perms, claims: [...claims] }
 }
 
-export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report', 'fuel_record']
+export const FUEL_SECTIONS = ['claims', 'usage', 'cards', 'report', 'fuel_record', 'topup']
 export const MACHINERY_SECTIONS = ['work', 'machines', 'suppliers']
 
 export const has = (perms, section, action) => Array.isArray(perms?.[section]) && perms[section].includes(action)
@@ -217,6 +226,7 @@ export async function getUserPerms(companyId, userId) {
 export async function savePerms(companyId, userId, perms, { modules } = {}) {
   const clean = Object.fromEntries(Object.entries(perms).filter(([k, v]) => Array.isArray(v) && (v.length || k === 'approve_for')))
   if (!has(clean, 'claims', 'approve')) delete clean.approve_for
+  if (!has(clean, 'topup', 'approve')) delete clean.topup_approve_for
   if (modules) {
     for (const m of modules) {
       const { error } = await supabase.rpc('machinery_save_module_perms', { p_company: companyId, p_user: userId, p_module: m, p_perms: clean })
@@ -272,7 +282,8 @@ export function usePerms(companyId) {
       // Admin of a module ('machinery' / 'fuel'): sets that module's user access
       adminOf: (module) => isSuperAdmin || adminModules(state.perms).includes(module),
       adminModules: isSuperAdmin ? Object.keys(MODULE_ADMIN_LABEL) : adminModules(state.perms),
-      approveFor: approveFor(state.perms)
+      approveFor: approveFor(state.perms),
+      approvesTopup: (requesterId) => canApproveTopup(state.perms, isSuperAdmin, requesterId)
     }),
     [state, isSuperAdmin]
   )

@@ -11,7 +11,7 @@ import { RejectModal } from './ClaimView.jsx'
 
 // Review claims, in three tabs:
 //   Pending approval  claims waiting for me: the people I am approver for
-//                     (Claim approval setting → Approved by)
+//                     (Approval setting → Claims approved by)
 //   To pay            approved claims, for accountants: mark paid
 //   All claims        every claim I can see (accountants: the whole company)
 // Approve / reject / mark paid right in the row, or several at once.

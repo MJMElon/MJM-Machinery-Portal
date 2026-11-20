@@ -4,7 +4,9 @@ import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card } from '../../components/ui.jsx'
 import { IconEye, IconPlus } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { CARD_CHECKLIST, CARD_STATUS, cardBalances, cardLedger, checklistDone, listCardData, listVehicles, vehicleLabel } from '../../lib/diesel.js'
+import { CARD_CHECKLIST, CARD_STATUS, cardBalances, cardLedger, checklistDone, listCardData, listPeople, listTopups, listVehicles, vehicleLabel } from '../../lib/diesel.js'
+import { RequestTopupModal, TopupSection } from '../../components/diesel/TopupRequests.jsx'
+import { useAuth } from '../../auth/AuthContext.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
 
 // Fleet Card Manage: the fleet card list. Each card shows its number, fuel
@@ -18,12 +20,24 @@ export default function FleetCardManage() {
   const [data, setData] = useState({ cards: [], usage: [] })
   const [vehicles, setVehicles] = useState([])
   const [ledger, setLedger] = useState(null) // null until the database has machinery_card_ledger
+  const [topups, setTopups] = useState(null) // null until the database has the top-up requests
+  const [people, setPeople] = useState([])
+  const [asking, setAsking] = useState(false)
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
-      const [d, v, lg] = await Promise.all([listCardData(company.id, thisMonth() + '-01'), listVehicles(company.id), cardLedger(company.id).catch(() => null)])
+      const [d, v, lg, tu, pp] = await Promise.all([
+        listCardData(company.id, thisMonth() + '-01'),
+        listVehicles(company.id),
+        cardLedger(company.id).catch(() => null),
+        listTopups(company.id).catch(() => null),
+        listPeople(company.id).catch(() => [])
+      ])
+      setTopups(tu)
+      setPeople(pp)
       setData(d)
       setVehicles(v)
       setLedger(lg)
@@ -51,11 +65,18 @@ export default function FleetCardManage() {
     <div className="space-y-5">
       <PageHeader
         right={
-          access.can('cards', 'add') && (
-            <Button onClick={() => navigate('/diesel/cards/new')}>
-              <IconPlus width={18} height={18} /> New fleet card application
-            </Button>
-          )
+          <div className="flex flex-wrap gap-2">
+            {topups && (
+              <Button variant="secondary" onClick={() => setAsking(true)}>
+                <IconPlus width={18} height={18} /> Request top up
+              </Button>
+            )}
+            {access.can('cards', 'add') && (
+              <Button onClick={() => navigate('/diesel/cards/new')}>
+                <IconPlus width={18} height={18} /> New fleet card application
+              </Button>
+            )}
+          </div>
         }
       />
       <ErrorBox>{error}</ErrorBox>
@@ -135,6 +156,35 @@ export default function FleetCardManage() {
           </div>
         )}
       </Card>
+
+      {/* Top-up requests: request → approve → print for the office → topped up → claim the reload */}
+      {!loading && topups && (
+        <TopupSection
+          company={company}
+          access={access}
+          me={user?.id}
+          topups={topups}
+          cards={data.cards}
+          vById={vById}
+          person={new Map(people.map((p) => [p.user_id, p]))}
+          balance={ledger ? balance : null}
+          onChanged={load}
+          onError={setError}
+        />
+      )}
+      {!loading && topups === null && (
+        <p className="text-xs text-slate-500">Top-up requests: run the Fuel SQL migration 20261206 (fleet card top-up requests) to turn them on.</p>
+      )}
+      {asking && (
+        <RequestTopupModal
+          company={company}
+          cards={data.cards}
+          vById={vById}
+          balance={ledger ? balance : null}
+          onClose={() => setAsking(false)}
+          onSaved={load}
+        />
+      )}
     </div>
   )
 }
