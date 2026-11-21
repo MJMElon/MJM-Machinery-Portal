@@ -31,6 +31,7 @@ import FuelRecords from './pages/diesel/FuelRecords.jsx'
 import FuelRecordMobile from './pages/diesel/FuelRecordMobile.jsx'
 import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
 import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
+import TopupPage from './pages/diesel/TopupPage.jsx'
 import DieselUsers from './pages/diesel/DieselUsers.jsx'
 import { WorkerFuel, WorkerHome, WorkerService, WorkerShell } from './pages/worker/WorkerApp.jsx'
 
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="records" element={<FuelRecords />} />
             <Route path="records/mobile" element={<Navigate to="/app/fuel" replace />} />
             <Route path="cards" element={<FleetCardManage />} />
+            <Route path="cards/topup" element={<TopupPage />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
             <Route path="cards/:id/edit" element={<FleetCardPage key="edit" mode="edit" />} />

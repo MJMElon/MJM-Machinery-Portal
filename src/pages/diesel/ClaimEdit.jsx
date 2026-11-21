@@ -26,7 +26,7 @@ export default function ClaimEdit() {
       .then(([v, c, ls, cs]) => {
         if (!active) return
         if (id && !c) setError('Claim not found.')
-        if (id && c && (c.claimant_id !== user.id || c.status !== 'pending')) setError('Only your own pending claims can be edited.')
+        if (id && c && (c.claimant_id !== user.id || !['pending', 'draft'].includes(c.status))) setError('Only your own pending or draft claims can be edited.')
         setVehicles(v)
         setCards(cs)
         setClaim(c)
