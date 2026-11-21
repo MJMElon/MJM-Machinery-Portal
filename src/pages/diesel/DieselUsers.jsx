@@ -27,7 +27,6 @@ export default function DieselUsers() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [done, setDone] = useState('')
   const [q, setQ] = useState('')
 
   const load = useCallback(async () => {
@@ -65,7 +64,6 @@ export default function DieselUsers() {
   const dirty = changedIds.length > 0
 
   const edit = (uid, next) => {
-    setDone('')
     setPerms((p) => ({ ...p, [uid]: next }))
   }
 
@@ -119,13 +117,11 @@ export default function DieselUsers() {
   async function update() {
     setSaving(true)
     setError('')
-    setDone('')
     try {
       for (const uid of changedIds) {
         await savePerms(company.id, uid, perms[uid] || {}, isSuperAdmin ? {} : { modules: ['fuel'] })
         setSaved((s) => ({ ...s, [uid]: perms[uid] || {} }))
       }
-      setDone('Updated')
     } catch (e) {
       setError(e.message)
     } finally {
@@ -134,7 +130,6 @@ export default function DieselUsers() {
   }
   const cancel = () => {
     setPerms(saved)
-    setDone('')
   }
 
   const t = q.trim().toLowerCase()
@@ -154,8 +149,6 @@ export default function DieselUsers() {
         </span>
         {canEdit && (
           <div className="flex items-center gap-2">
-            {done && !dirty && <span className="text-sm text-green-700">{done}</span>}
-            {dirty && <span className="text-sm text-amber-700">{changedIds.length} unsaved</span>}
             <Button variant="secondary" size="sm" disabled={!dirty || saving} onClick={cancel}>
               Cancel
             </Button>
@@ -224,7 +217,7 @@ export default function DieselUsers() {
                         ) : (
                           <Badge color={role === 'user' ? 'slate' : 'blue'}>{roleInfo[1]}</Badge>
                         )}
-                        {!p.is_super_admin && role !== 'user' && <p className="mt-1.5 text-xs leading-snug text-slate-500">{roleInfo[2]}</p>}
+                        {!p.is_super_admin && role === 'accountant' && <p className="mt-1.5 text-xs text-slate-500">Can see all users&apos; submitted claims</p>}
                       </td>
                       <td className="px-3 py-3">
                         <ApproverChips
@@ -238,6 +231,8 @@ export default function DieselUsers() {
                         />
                       </td>
                       <td className="px-3 py-3">
+                        {/* Top-up requests: only for Claim approvers (they request top-ups) */}
+                        {(role === 'approver' || topupApprovers.length > 0) && (
                         <ApproverChips
                           approvers={topupApprovers}
                           options={pool.filter((a) => !topupApprovers.some((x) => x.user_id === a.user_id))}
@@ -247,6 +242,7 @@ export default function DieselUsers() {
                           onAdd={(aid) => changeTopupApprover(aid, p.user_id, true)}
                           onRemove={(aid) => changeTopupApprover(aid, p.user_id, false)}
                         />
+                        )}
                       </td>
                     </tr>
                   )
@@ -256,9 +252,6 @@ export default function DieselUsers() {
           </div>
         )}
       </Card>
-      {canEdit && !loading && approverPool.filter((p) => !p.is_super_admin).length === 0 && (
-        <p className="text-xs text-amber-700">Set someone&apos;s role to Claim approver first; approvers are chosen from them.</p>
-      )}
       {!canEdit && <p className="text-xs text-slate-500">Only super admins and Fuel Manage admins can change this.</p>}
     </div>
   )
@@ -269,7 +262,7 @@ function ApproverChips({ approvers, options, canEdit, saving, tone, onAdd, onRem
   const chip = tone === 'green' ? 'bg-emerald-50 text-emerald-800' : 'bg-brand-light text-brand-dark'
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {approvers.length === 0 && <span className="text-sm text-slate-400">No approver yet</span>}
+      {approvers.length === 0 && !canEdit && <span className="text-sm text-slate-400">—</span>}
       {approvers.map((a) => (
         <span key={a.user_id} className={`inline-flex h-8 items-center gap-1 rounded-full pl-3 pr-1.5 text-sm font-medium ${chip}`}>
           {userLabel(a)}
