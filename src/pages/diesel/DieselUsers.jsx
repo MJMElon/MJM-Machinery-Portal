@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Badge, Button, Card } from '../../components/ui.jsx'
+import { Badge, Button, Card, Modal } from '../../components/ui.jsx'
 import { IconX } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { EMBEDDED } from '../../components/Shell.jsx'
@@ -9,12 +9,11 @@ import { FUEL_ROLES, approveFor, fuelRole, has, listCompanyPerms, savePerms, top
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // Fuel Manage → Approval setting. For every person of the company:
-//   Role                 Normal user / Accountant / Claim approver / Procurement,
-//                        with what the role allows written beside it
-//   Claims approved by   who approves this person's claims (chosen from the
-//                        people whose role is Claim approver)
+//   Role                 Normal user / Accountant / Procurement
+//   Claims approved by   who approves this person's claims
 //   Top-up requests      who approves this person's fleet card top-up requests
-//   approved by          (also chosen from the Claim approvers)
+//   approved by          (shown for Procurement, who request the top-ups)
+// "+ Add approver" opens a list of names to add from.
 // Changes stay on the page until Update (Cancel throws them away). The bar
 // with the search, Cancel and Update stays on top while scrolling. Module
 // admins are set in CMMS 2 user access, not here.
@@ -54,8 +53,6 @@ export default function DieselUsers() {
   const approvesTopup = (uid) => (has(perms[uid], 'topup', 'approve') ? topupApproveFor(perms[uid]) : [])
   const approversOf = (uid) => people.filter((a) => a.user_id !== uid && approves(a.user_id).includes(uid))
   const topupApproversOf = (uid) => people.filter((a) => a.user_id !== uid && approvesTopup(a.user_id).includes(uid))
-  // Who can be chosen as an approver: the Claim approvers (and super admins)
-  const isApprover = (p) => p.is_super_admin || fuelRole(perms[p.user_id]) === 'approver'
   // Super admins and Fuel Manage admins change this; a module admin's update only touches Fuel Manage rights.
   const canEdit = isSuperAdmin || access.fuelAdmin
 
@@ -104,15 +101,8 @@ export default function DieselUsers() {
     if (!next.topup.length) delete next.topup
     edit(approverId, next)
   }
-  function changeRole(p, role) {
-    const uid = p.user_id
-    const n = approves(uid).length + approvesTopup(uid).length
-    if (fuelRole(perms[uid]) === 'approver' && role !== 'approver' && n > 0) {
-      const ok = window.confirm(`${userLabel(p)} is an approver for ${n} ${n === 1 ? 'entry' : 'entries'}. Changing the role removes them as approver. Continue?`)
-      if (!ok) return
-    }
-    edit(uid, withFuelRole(perms[uid] || {}, role))
-  }
+  const changeRole = (p, role) => edit(p.user_id, withFuelRole(perms[p.user_id] || {}, role))
+  const [picking, setPicking] = useState(null) // { person, kind: 'claims' | 'topup' }
 
   async function update() {
     setSaving(true)
@@ -134,7 +124,6 @@ export default function DieselUsers() {
 
   const t = q.trim().toLowerCase()
   const shown = people.filter((p) => !t || [p.full_name, p.email].some((v) => String(v || '').toLowerCase().includes(t)))
-  const approverPool = people.filter(isApprover)
 
   return (
     <div className="space-y-4">
@@ -166,14 +155,14 @@ export default function DieselUsers() {
         ) : shown.length === 0 ? (
           <Empty>{t ? 'Nobody matches the search.' : 'No users yet. Users come from the MJM Intranet (User Access → Sync from MJM Intranet).'}</Empty>
         ) : (
-          <div className="overflow-x-auto rounded-2xl">
-            <table className="w-full min-w-[1180px] text-sm">
+          <div className="rounded-2xl">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="w-64 px-5 py-2.5">User</th>
-                  <th className="w-[19rem] px-3 py-2.5">Role</th>
-                  <th className="px-3 py-2.5">Claims approved by</th>
-                  <th className="px-3 py-2.5">Top-up requests approved by</th>
+                  <th className="w-[26%] px-4 py-2.5">User</th>
+                  <th className="w-[20%] px-3 py-2.5">Role</th>
+                  <th className="w-[27%] px-3 py-2.5">Claims approved by</th>
+                  <th className="w-[27%] px-3 py-2.5">Top-up requests approved by</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -182,7 +171,6 @@ export default function DieselUsers() {
                   const roleInfo = FUEL_ROLES.find(([k]) => k === role)
                   const approvers = approversOf(p.user_id)
                   const topupApprovers = topupApproversOf(p.user_id)
-                  const pool = approverPool.filter((a) => a.user_id !== p.user_id)
                   // a row is marked when its own role changed or its approvers changed
                   const rowChanged =
                     changed(p.user_id) ||
@@ -194,9 +182,9 @@ export default function DieselUsers() {
                     )
                   return (
                     <tr key={p.user_id} className={`align-top ${rowChanged ? 'bg-amber-50/70' : ''}`}>
-                      <td className="px-5 py-3">
-                        <p className="font-medium text-slate-800">{userLabel(p)}</p>
-                        <p className="text-xs text-slate-500">{p.email}</p>
+                      <td className="px-4 py-3">
+                        <p className="break-words font-medium text-slate-800">{userLabel(p)}</p>
+                        <p className="break-all text-xs text-slate-500">{p.email}</p>
                       </td>
                       <td className="px-3 py-3">
                         {p.is_super_admin ? (
@@ -206,7 +194,7 @@ export default function DieselUsers() {
                             value={role}
                             disabled={saving}
                             onChange={(e) => changeRole(p, e.target.value)}
-                            className={`${inputCls} h-9 w-48 px-2 ${role !== 'user' ? 'font-semibold text-brand-dark' : ''}`}
+                            className={`${inputCls} h-9 w-full max-w-[12rem] px-2 ${role !== 'user' ? 'font-semibold text-brand-dark' : ''}`}
                           >
                             {FUEL_ROLES.map(([k, label]) => (
                               <option key={k} value={k}>
@@ -222,24 +210,22 @@ export default function DieselUsers() {
                       <td className="px-3 py-3">
                         <ApproverChips
                           approvers={approvers}
-                          options={pool.filter((a) => !approvers.some((x) => x.user_id === a.user_id))}
                           canEdit={canEdit}
                           saving={saving}
                           tone="blue"
-                          onAdd={(aid) => changeApprover(aid, p.user_id, true)}
+                          onAdd={() => setPicking({ person: p, kind: 'claims' })}
                           onRemove={(aid) => changeApprover(aid, p.user_id, false)}
                         />
                       </td>
                       <td className="px-3 py-3">
-                        {/* Top-up requests: only for Claim approvers (they request top-ups) */}
-                        {(role === 'approver' || topupApprovers.length > 0) && (
+                        {/* Top-up requests: for Procurement (they request the top-ups) */}
+                        {(role === 'procurement' || topupApprovers.length > 0) && (
                         <ApproverChips
                           approvers={topupApprovers}
-                          options={pool.filter((a) => !topupApprovers.some((x) => x.user_id === a.user_id))}
                           canEdit={canEdit}
                           saving={saving}
                           tone="green"
-                          onAdd={(aid) => changeTopupApprover(aid, p.user_id, true)}
+                          onAdd={() => setPicking({ person: p, kind: 'topup' })}
                           onRemove={(aid) => changeTopupApprover(aid, p.user_id, false)}
                         />
                         )}
@@ -253,38 +239,79 @@ export default function DieselUsers() {
         )}
       </Card>
       {!canEdit && <p className="text-xs text-slate-500">Only super admins and Fuel Manage admins can change this.</p>}
+      {picking && (
+        <ApproverPicker
+          title={`${picking.kind === 'claims' ? 'Claims' : 'Top-up requests'} of ${userLabel(picking.person)}: add approver`}
+          people={people.filter((a) => a.user_id !== picking.person.user_id)}
+          added={(picking.kind === 'claims' ? approversOf : topupApproversOf)(picking.person.user_id).map((a) => a.user_id)}
+          onAdd={(aid) => (picking.kind === 'claims' ? changeApprover : changeTopupApprover)(aid, picking.person.user_id, true)}
+          onClose={() => setPicking(null)}
+        />
+      )}
     </div>
   )
 }
 
-// Approvers of one person as chips (× to remove) and "+ Add approver…".
-function ApproverChips({ approvers, options, canEdit, saving, tone, onAdd, onRemove }) {
+// Approvers of one person as chips (× to remove) and a small "+ Add approver" link.
+function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove }) {
   const chip = tone === 'green' ? 'bg-emerald-50 text-emerald-800' : 'bg-brand-light text-brand-dark'
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {approvers.length === 0 && !canEdit && <span className="text-sm text-slate-400">—</span>}
       {approvers.map((a) => (
-        <span key={a.user_id} className={`inline-flex h-8 items-center gap-1 rounded-full pl-3 pr-1.5 text-sm font-medium ${chip}`}>
-          {userLabel(a)}
+        <span key={a.user_id} className={`inline-flex h-8 max-w-full items-center gap-1 rounded-full pl-3 pr-1.5 text-sm font-medium ${chip}`}>
+          <span className="truncate">{userLabel(a)}</span>
           {canEdit && (
-            <button type="button" disabled={saving} onClick={() => onRemove(a.user_id)} className="rounded-full p-0.5 hover:bg-white/60" aria-label={`Remove ${userLabel(a)}`}>
+            <button type="button" disabled={saving} onClick={() => onRemove(a.user_id)} className="shrink-0 rounded-full p-0.5 hover:bg-white/60" aria-label={`Remove ${userLabel(a)}`}>
               <IconX width={14} height={14} />
             </button>
           )}
         </span>
       ))}
-      {canEdit && options.length > 0 && (
-        <span className="w-52 shrink-0">
-          <select value="" onChange={(e) => e.target.value && onAdd(e.target.value)} disabled={saving} className={`${inputCls} h-8 px-2 text-xs`}>
-            <option value="">+ Add approver…</option>
-            {options.map((a) => (
-              <option key={a.user_id} value={a.user_id}>
-                {userLabel(a)}
-              </option>
-            ))}
-          </select>
-        </span>
+      {canEdit && (
+        <button type="button" disabled={saving} onClick={onAdd} className="px-1 text-xs font-semibold text-brand hover:underline">
+          + Add approver
+        </button>
       )}
     </div>
+  )
+}
+
+// Floating list of names: Add (then "Added"); saved with Update on the page.
+function ApproverPicker({ title, people, added, onAdd, onClose }) {
+  const [q, setQ] = useState('')
+  const t = q.trim().toLowerCase()
+  const list = people.filter((p) => !t || [p.full_name, p.email].some((v) => String(v || '').toLowerCase().includes(t)))
+  return (
+    <Modal open onClose={onClose} title={title}>
+      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name…" className={`${inputCls} mb-2 h-10`} />
+      <div className="max-h-[50vh] divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+        {list.length === 0 && <p className="px-3 py-4 text-center text-sm text-slate-400">No match</p>}
+        {list.map((p) => {
+          const isAdded = added.includes(p.user_id)
+          return (
+            <div key={p.user_id} className="flex items-center gap-3 px-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-slate-800">{userLabel(p)}</span>
+                <span className="block truncate text-xs text-slate-500">{p.email}</span>
+              </span>
+              {isAdded ? (
+                <span className="text-xs font-semibold text-emerald-700">Added ✓</span>
+              ) : (
+                <Button size="sm" onClick={() => onAdd(p.user_id)}>
+                  Add
+                </Button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-xs text-slate-500">Press Update on the page to save.</span>
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </Modal>
   )
 }

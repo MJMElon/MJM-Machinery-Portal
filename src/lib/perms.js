@@ -164,29 +164,26 @@ export const canReviewClaimant = (perms, isSuper, claimantId) =>
   canApproveClaimant(perms, isSuper, claimantId) || has(perms, 'claims', 'pay')
 
 // Approval setting: a person's role in Fuel Manage (one per person).
-//   Normal user     own claims only
-//   Accountant      sees every user's submitted claims, marks approved claims paid
-//   Claim approver  can be named as approver (claims, top-up requests); approves
-//                   the people who name them (perms.approve_for / topup_approve_for)
-//   Procurement     sees every fleet card top-up request, marks them topped up
+//   Normal user   own claims
+//   Accountant    sees every user's submitted claims, marks approved claims paid
+//   Procurement   sees every fleet card top-up request, marks them topped up
+// Anyone can be named as an approver (claims: approve_for, top-up requests:
+// topup_approve_for); that is set beside the role, not by it.
 // The role is kept in perms.fuel_role = [role]; people saved before that get
-// it from their rights (pay → accountant, topup process → procurement,
-// approve → claim approver).
+// it from their rights (pay → accountant, topup process → procurement).
 export const FUEL_ROLES = [
-  ['user', 'Normal user', 'Own claims'],
-  ['accountant', 'Accountant', "See all users' submitted claims · mark approved claims paid"],
-  ['approver', 'Claim approver', 'Approves the claims and top-up requests of the people who name them'],
-  ['procurement', 'Procurement', 'Sees all fleet card top-up requests · marks them topped up']
+  ['user', 'Normal user'],
+  ['accountant', 'Accountant'],
+  ['procurement', 'Procurement']
 ]
 export function fuelRole(perms) {
   const marked = Array.isArray(perms?.fuel_role) ? perms.fuel_role[0] : null
   if (FUEL_ROLES.some(([k]) => k === marked)) return marked
   if (has(perms, 'claims', 'pay')) return 'accountant'
   if (has(perms, 'topup', 'process')) return 'procurement'
-  if (has(perms, 'claims', 'approve') || has(perms, 'topup', 'approve')) return 'approver'
   return 'user'
 }
-/** perms with the role applied. Leaving Claim approver also ends being anyone's approver. */
+/** perms with the role applied (approver rights are left as they are). */
 export function withFuelRole(perms, role) {
   const claims = new Set(perms?.claims || [])
   const topup = new Set(perms?.topup || [])
@@ -194,12 +191,6 @@ export function withFuelRole(perms, role) {
   for (const a of ['view_all', 'pay']) claims.delete(a)
   topup.delete('process')
   const next = { ...perms, fuel_role: [role] }
-  if (role !== 'approver') {
-    claims.delete('approve')
-    topup.delete('approve')
-    delete next.approve_for
-    delete next.topup_approve_for
-  }
   if (role === 'accountant') {
     claims.add('view_all')
     claims.add('pay')
