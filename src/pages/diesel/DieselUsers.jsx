@@ -181,7 +181,7 @@ export default function DieselUsers() {
                           topupApproveFor(saved[a.user_id]).includes(p.user_id) !== approvesTopup(a.user_id).includes(p.user_id))
                     )
                   return (
-                    <tr key={p.user_id} className={`align-top ${rowChanged ? 'bg-amber-50/70' : ''}`}>
+                    <tr key={p.user_id} className={`align-middle ${rowChanged ? 'bg-amber-50/70' : ''}`}>
                       <td className="px-4 py-3">
                         <p className="break-words font-medium text-slate-800">{userLabel(p)}</p>
                         <p className="break-all text-xs text-slate-500">{p.email}</p>
@@ -241,11 +241,16 @@ export default function DieselUsers() {
       {!canEdit && <p className="text-xs text-slate-500">Only super admins and Fuel Manage admins can change this.</p>}
       {picking && (
         <ApproverPicker
-          title={`${picking.kind === 'claims' ? 'Claims' : 'Top-up requests'} of ${userLabel(picking.person)}: add approver`}
+          title={`Add ${picking.kind === 'claims' ? '' : 'top-up '}approver for ${userLabel(picking.person)}`}
           people={people.filter((a) => a.user_id !== picking.person.user_id)}
           added={(picking.kind === 'claims' ? approversOf : topupApproversOf)(picking.person.user_id).map((a) => a.user_id)}
           onAdd={(aid) => (picking.kind === 'claims' ? changeApprover : changeTopupApprover)(aid, picking.person.user_id, true)}
           onClose={() => setPicking(null)}
+          saving={saving}
+          onUpdate={async () => {
+            if (dirty) await update()
+            setPicking(null)
+          }}
         />
       )}
     </div>
@@ -254,7 +259,7 @@ export default function DieselUsers() {
 
 // Approvers of one person as chips (× to remove) and a small "+ Add approver" link.
 function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove }) {
-  const chip = tone === 'green' ? 'bg-emerald-50 text-emerald-800' : 'bg-brand-light text-brand-dark'
+  const chip = 'bg-emerald-50 text-emerald-800' // names added: green; + Add approver: blue
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {approvers.length === 0 && !canEdit && <span className="text-sm text-slate-400">—</span>}
@@ -269,7 +274,7 @@ function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove }) {
         </span>
       ))}
       {canEdit && (
-        <button type="button" disabled={saving} onClick={onAdd} className="px-1 text-xs font-semibold text-brand hover:underline">
+        <button type="button" disabled={saving} onClick={onAdd} className="inline-flex h-8 items-center px-1 text-xs font-semibold text-brand hover:underline">
           + Add approver
         </button>
       )}
@@ -277,8 +282,9 @@ function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove }) {
   )
 }
 
-// Floating list of names: Add (then "Added"); saved with Update on the page.
-function ApproverPicker({ title, people, added, onAdd, onClose }) {
+// Floating list of names: Add (then "Added"); Update saves (Close keeps the
+// additions on the page until Update or Cancel there).
+function ApproverPicker({ title, people, added, onAdd, onClose, onUpdate, saving }) {
   const [q, setQ] = useState('')
   const t = q.trim().toLowerCase()
   const list = people.filter((p) => !t || [p.full_name, p.email].some((v) => String(v || '').toLowerCase().includes(t)))
@@ -306,10 +312,12 @@ function ApproverPicker({ title, people, added, onAdd, onClose }) {
           )
         })}
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-xs text-slate-500">Press Update on the page to save.</span>
-        <Button variant="secondary" size="sm" onClick={onClose}>
-          Done
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
+          Close
+        </Button>
+        <Button size="sm" onClick={onUpdate} disabled={saving}>
+          {saving ? 'Updating…' : 'Update'}
         </Button>
       </div>
     </Modal>
