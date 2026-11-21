@@ -163,7 +163,7 @@ export const canApproveClaimant = (perms, isSuper, claimantId) => {
 export const canReviewClaimant = (perms, isSuper, claimantId) =>
   canApproveClaimant(perms, isSuper, claimantId) || has(perms, 'claims', 'pay')
 
-// Approval setting: a person's role in Fuel Manage (one per person).
+// User setting: a person's role in Fuel Manage (one per person).
 //   Normal user   own claims
 //   Accountant    sees every user's submitted claims, marks approved claims paid
 //   Procurement   sees every fleet card top-up request, marks them topped up

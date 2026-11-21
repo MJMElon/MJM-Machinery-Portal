@@ -140,7 +140,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
   <table class="meta">
     <tr><td class="k">Name</td><td>${esc(claimantName)}</td></tr>
     ${no ? `<tr><td class="k">Claim No.</td><td>${esc(no)}</td></tr>` : ''}
-    <tr><td class="k">Submission Date</td><td>${esc(day(claim.submitted_on || claim.fill_date))}</td></tr>
+    <tr><td class="k">Created Date</td><td>${esc(day(claim.submitted_on || claim.fill_date))}</td></tr>
   </table>
   <table class="lines">
     <colgroup>

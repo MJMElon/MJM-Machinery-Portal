@@ -8,11 +8,13 @@ import { listPortalPeople, userLabel } from '../../lib/cmms.js'
 import { FUEL_ROLES, approveFor, fuelRole, has, listCompanyPerms, savePerms, topupApproveFor, withFuelRole } from '../../lib/perms.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
-// Fuel Manage → Approval setting. For every person of the company:
+// Fuel Manage → User setting. For every person of the company:
 //   Role                 Normal user / Accountant / Procurement
 //   Claims approved by   who approves this person's claims
 //   Top-up requests      who approves this person's fleet card top-up requests
 //   approved by          (shown for Procurement, who request the top-ups)
+//   Fuel limit (Litre)   a number per person (perms.fuel_limit = [litres]),
+//                        for the dashboards and reports
 // "+ Add approver" opens a list of names to add from.
 // Changes stay on the page until Update (Cancel throws them away). The bar
 // with the search, Cancel and Update stays on top while scrolling. Module
@@ -101,6 +103,15 @@ export default function DieselUsers() {
     if (!next.topup.length) delete next.topup
     edit(approverId, next)
   }
+  // Fuel limit (litres): perms.fuel_limit = [n]; empty = no limit
+  const fuelLimit = (uid) => (Array.isArray(perms[uid]?.fuel_limit) ? perms[uid].fuel_limit[0] : '')
+  function changeLimit(uid, value) {
+    const next = { ...(perms[uid] || {}) }
+    const n = value === '' ? null : Number(value)
+    if (n == null || !(n >= 0)) delete next.fuel_limit
+    else next.fuel_limit = [Math.round(n * 100) / 100]
+    edit(uid, next)
+  }
   const changeRole = (p, role) => edit(p.user_id, withFuelRole(perms[p.user_id] || {}, role))
   const [picking, setPicking] = useState(null) // { person, kind: 'claims' | 'topup' }
 
@@ -159,10 +170,11 @@ export default function DieselUsers() {
             <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="w-[26%] px-4 py-2.5">User</th>
-                  <th className="w-[20%] px-3 py-2.5">Role</th>
-                  <th className="w-[27%] px-3 py-2.5">Claims approved by</th>
-                  <th className="w-[27%] px-3 py-2.5">Top-up requests approved by</th>
+                  <th className="w-[23%] px-4 py-2.5">User</th>
+                  <th className="w-[18%] px-3 py-2.5">Role</th>
+                  <th className="w-[24%] px-3 py-2.5">Claims approved by</th>
+                  <th className="w-[22%] px-3 py-2.5">Top-up requests approved by</th>
+                  <th className="w-[13%] px-3 py-2.5">Fuel limit (Litre)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -228,6 +240,24 @@ export default function DieselUsers() {
                           onAdd={() => setPicking({ person: p, kind: 'topup' })}
                           onRemove={(aid) => changeTopupApprover(aid, p.user_id, false)}
                         />
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {canEdit ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            inputMode="decimal"
+                            value={fuelLimit(p.user_id)}
+                            disabled={saving}
+                            onChange={(e) => changeLimit(p.user_id, e.target.value)}
+                            placeholder="—"
+                            aria-label={`Fuel limit of ${userLabel(p)} in litres`}
+                            className={`${inputCls} h-9 w-full max-w-[7rem] px-2 text-right tabular-nums`}
+                          />
+                        ) : (
+                          <span className="tabular-nums text-slate-700">{fuelLimit(p.user_id) !== '' ? `${fuelLimit(p.user_id)} L` : '—'}</span>
                         )}
                       </td>
                     </tr>

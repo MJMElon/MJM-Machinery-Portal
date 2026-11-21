@@ -17,7 +17,9 @@ import {
   personLabel,
   receiptUrl,
   removeReceipt,
+  notifyClaim,
   reviewClaim,
+  setClaimStatus,
   vehicleLabel
 } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
@@ -86,8 +88,9 @@ export default function ClaimView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, claim, params])
-  const canEdit = claim && own && claim.status === 'pending' && access.can('claims', 'edit')
-  const canDelete = claim && ((own && claim.status === 'pending' && access.can('claims', 'delete')) || isSuperAdmin)
+  const canEdit = claim && own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'edit')
+  const canDelete = claim && ((own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'delete')) || isSuperAdmin)
+  const canSubmit = claim && own && claim.status === 'draft' && access.can('claims', 'edit')
   // Approve / reject: an approver named for this claimant. Mark paid: an
   // accountant, on approved claims. Nobody approves their own claim.
   const canApprove = claim && !own && access.approves(claim.claimant_id)
@@ -194,6 +197,20 @@ export default function ClaimView() {
                 <Button variant="secondary" disabled={busy} onClick={print}>
                   <IconPrint width={18} height={18} /> Print
                 </Button>
+                {canSubmit && (
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      act(async () => {
+                        await setClaimStatus(claim.id, 'pending')
+                        notifyClaim(claim.id)
+                        setClaim((c) => ({ ...c, status: 'pending' }))
+                      })
+                    }
+                  >
+                    Submit claim
+                  </Button>
+                )}
                 {canEdit && (
                   <Button variant="secondary" onClick={() => navigate(`/diesel/claims/${claim.id}/edit`)}>
                     <IconPencil width={18} height={18} /> Edit
@@ -215,7 +232,7 @@ export default function ClaimView() {
         <>
           <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-sm text-slate-600">
-              <span>Submission date: <b className="text-slate-800">{day(claim.submitted_on || claim.fill_date)}</b></span>
+              <span>Created date: <b className="text-slate-800">{day(claim.submitted_on || claim.fill_date)}</b></span>
               <span>Total amount: <b className="text-slate-800">{money(total)}</b></span>
               <span>Payable amount: <b className="text-brand-dark">{money(payable)}</b></span>
               <span>Total litres: <b className="text-slate-800">{num(litres, 2)} L</b></span>

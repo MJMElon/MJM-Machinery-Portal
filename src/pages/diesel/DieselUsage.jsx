@@ -98,7 +98,7 @@ export default function DieselUsage() {
       const claimById = new Map(claims.map((c) => [c.id, c]))
       setFills([
         ...lines
-          .filter((l) => l.line_kind !== 'reload' && claimById.get(l.claim_id)?.status !== 'rejected')
+          .filter((l) => l.line_kind !== 'reload' && !['rejected', 'draft'].includes(claimById.get(l.claim_id)?.status))
           .map((l) => ({ ...l, source: l.payment === 'fleet_card' ? 'card' : 'cash', driver: claimById.get(l.claim_id)?.claimant_id, fromClaim: true })),
         ...cardData.usage.map((u) => ({ ...u, source: 'card', driver: u.driver_id }))
       ])

@@ -18,7 +18,7 @@ import {
 import { scanReceipt } from '../../lib/ocr.js'
 import { money, num, today } from '../../lib/format.js'
 
-// New / edit fuel claim: a header (submission date, company, claimant, totals,
+// New / edit fuel claim: a header (created date, company, claimant, totals,
 // drag & drop for receipts), then one row per receipt. A dropped file becomes
 // a row, is read for a draft of the figures, and is attached to that row; rows
 // can also be typed by hand. Payable = cash rows only; fleet-card rows are
@@ -183,7 +183,8 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
     lines.length > 0 &&
     lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (isReload(l) ? l.card_id && Number(l.amount) > 0 : Number(l.amount) > 0 || Number(l.litres) > 0))
 
-  async function save(e) {
+  // status: 'draft' (Save as draft) or 'pending' (Submit). A pending claim being edited stays pending.
+  async function save(e, status = 'pending') {
     e?.preventDefault?.()
     if (!valid || busy) return
     setBusy(true)
@@ -200,9 +201,11 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
         }
         prepared.push({ ...l, company_id: company.id, receipt_path: receipt_path || null, id: l.id || undefined })
       }
-      const header = { submitted_on: submittedOn, notes: claim?.notes || '' }
+      const wasDraft = claim?.status === 'draft'
+      const next = claim && !wasDraft ? undefined : status // only a new claim or a draft changes status here
+      const header = { submitted_on: submittedOn, notes: claim?.notes || '', status: next }
       const id = claim ? (await updateClaimWithLines(claim.id, header, prepared), claim.id) : await createClaimWithLines(company.id, user.id, header, prepared)
-      if (!claim) notifyClaim(id) // email the approvers about the new claim
+      if ((!claim || wasDraft) && status === 'pending') notifyClaim(id) // email the approvers about the submitted claim
       onSaved(id)
     } catch (err) {
       uploaded.forEach(removeReceipt)
@@ -211,13 +214,20 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
     }
   }
 
+  // New claim or a draft: Save as draft / Submit claim. A pending claim: Save changes.
+  const draftable = !claim || claim.status === 'draft'
   const buttons = (
     <div className="flex justify-end gap-2">
       <Button type="button" variant="secondary" onClick={onCancel}>
         Cancel
       </Button>
+      {draftable && (
+        <Button type="button" variant="secondary" disabled={busy || !valid || reading} onClick={(e) => save(e, 'draft')}>
+          {busy ? 'Saving…' : 'Save as draft'}
+        </Button>
+      )}
       <Button type="submit" disabled={busy || !valid || reading}>
-        {busy ? 'Saving…' : reading ? 'Reading receipts…' : claim ? 'Save changes' : 'Save claim'}
+        {busy ? 'Saving…' : reading ? 'Reading receipts…' : draftable ? 'Submit claim' : 'Save changes'}
       </Button>
     </div>
   )
@@ -234,7 +244,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
       <Card className="p-4 sm:p-5">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="grid gap-3 sm:grid-cols-3">
-            <F label="Submission date">
+            <F label="Created date">
               <input type="date" required max={today()} value={submittedOn} onChange={(e) => setSubmittedOn(e.target.value)} className={inputCls} />
             </F>
             <F label="Company">

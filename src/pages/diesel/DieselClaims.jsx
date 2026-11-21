@@ -88,7 +88,7 @@ export default function DieselClaims() {
     return da < db ? 1 : da > db ? -1 : (a.created_at || '') < (b.created_at || '') ? 1 : -1
   })
   // Rows not yet rejected count towards the dashboard (a card reload is not fuel: the fuel shows when the card is used)
-  const liveLines = lines.filter((l) => !isReload(l) && claims.find((c) => c.id === l.claim_id)?.status !== 'rejected')
+  const liveLines = lines.filter((l) => !isReload(l) && !['rejected', 'draft'].includes(claims.find((c) => c.id === l.claim_id)?.status))
 
   async function remove(c) {
     if (!window.confirm(`Delete claim ${claimNo(c, 0)}? This cannot be undone.`)) return
@@ -118,8 +118,8 @@ export default function DieselClaims() {
     }
   }
 
-  const canEdit = (c) => c.status === 'pending' && c.claimant_id === user.id && access.can('claims', 'edit')
-  const canDelete = (c) => (c.status === 'pending' && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin
+  const canEdit = (c) => ['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'edit')
+  const canDelete = (c) => (['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin
 
   return (
     <div className="space-y-5">

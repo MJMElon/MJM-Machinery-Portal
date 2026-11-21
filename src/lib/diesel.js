@@ -20,6 +20,7 @@ export const FUEL_TYPES = [
   ['petrol', 'Petrol']
 ]
 export const CLAIM_STATUS = {
+  draft: { label: 'Draft', color: 'slate' },
   pending: { label: 'Pending', color: 'amber' },
   approved: { label: 'Approved', color: 'green' },
   rejected: { label: 'Rejected', color: 'red' },
@@ -254,6 +255,7 @@ export async function createClaimWithLines(companyId, userId, header, lines) {
       submitted_on: header.submitted_on,
       fill_date: header.submitted_on,
       notes: header.notes || null,
+      status: header.status === 'draft' ? 'draft' : 'pending',
       amount: 0
     })
     .select('id')
@@ -268,7 +270,7 @@ export async function createClaimWithLines(companyId, userId, header, lines) {
   return data.id
 }
 
-/** Update a pending claim's header and replace its lines. */
+/** Update a pending / draft claim's header and replace its lines; header.status ('draft' / 'pending') changes it after. */
 export async function updateClaimWithLines(claimId, header, lines) {
   const { error } = await supabase
     .from(DIESEL.claims)
@@ -276,6 +278,13 @@ export async function updateClaimWithLines(claimId, header, lines) {
     .eq('id', claimId)
   if (error) throw friendly(error)
   await replaceLines(claimId, lines)
+  if (header.status) await setClaimStatus(claimId, header.status)
+}
+
+/** The claimant: submit a draft (→ Pending) or keep it as Draft. */
+export async function setClaimStatus(claimId, status) {
+  const { error } = await supabase.from(DIESEL.claims).update({ status }).eq('id', claimId)
+  if (error) throw friendly(error, { '23514': 'Run the Fuel SQL migration 20261208 (claim drafts) to save drafts.' })
 }
 
 async function replaceLines(claimId, lines) {

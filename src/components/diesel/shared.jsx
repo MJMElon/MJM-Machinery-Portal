@@ -97,7 +97,7 @@ export function ClaimRow({ claim: c, vehicle, meta, actions }) {
 
 /** Edit + delete buttons for a pending claim of your own. */
 export function OwnClaimActions({ claim, onEdit, onDelete, busy }) {
-  if (claim.status !== 'pending') return null
+  if (!['pending', 'draft'].includes(claim.status)) return null
   return (
     <>
       <Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}>
