@@ -85,8 +85,12 @@ export function TopupSection({ company, access, me, topups, cards, vById, person
   const approvable = (r) => r.status === 'pending' && r.requested_by !== me && access.approvesTopup?.(r.requested_by)
   const toApprove = topups.filter(approvable)
   const mine = topups.filter((r) => r.requested_by === me)
+  // Procurement: every approved request is theirs to top up
+  const procurement = access.can('topup', 'process')
+  const toTopUp = topups.filter((r) => r.status === 'approved')
   const tabs = [
     access.topupApprover || toApprove.length ? ['approve', `To approve (${toApprove.length})`] : null,
+    procurement ? ['topup', `To top up (${toTopUp.length})`] : null,
     ['mine', `My requests (${mine.length})`],
     topups.length > mine.length ? ['all', `All (${topups.length})`] : null
   ].filter(Boolean)
@@ -94,7 +98,7 @@ export function TopupSection({ company, access, me, topups, cards, vById, person
   const [decide, setDecide] = useState(null) // { r, approve }
   const [done, setDone] = useState(null) // request to mark topped up
   const [busyId, setBusyId] = useState(null)
-  const list = tab === 'approve' ? toApprove : tab === 'mine' ? mine : topups
+  const list = tab === 'approve' ? toApprove : tab === 'topup' ? toTopUp : tab === 'mine' ? mine : topups
 
   async function act(id, fn) {
     setBusyId(id)
@@ -126,7 +130,7 @@ export function TopupSection({ company, access, me, topups, cards, vById, person
         </div>
       </div>
       {list.length === 0 ? (
-        <Empty>{tab === 'approve' ? 'Nothing waiting for your approval.' : 'No top-up requests yet.'}</Empty>
+        <Empty>{tab === 'approve' ? 'Nothing waiting for your approval.' : tab === 'topup' ? 'No approved request waiting to be topped up.' : 'No top-up requests yet.'}</Empty>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] text-sm">
@@ -193,7 +197,7 @@ export function TopupSection({ company, access, me, topups, cards, vById, person
                             Cancel
                           </Button>
                         )}
-                        {r.status === 'approved' && (r.requested_by === me || access.approvesTopup?.(r.requested_by) || access.can('cards', 'edit')) && (
+                        {r.status === 'approved' && (r.requested_by === me || access.approvesTopup?.(r.requested_by) || access.can('cards', 'edit') || procurement) && (
                           <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDone(r)}>
                             Mark topped up
                           </Button>

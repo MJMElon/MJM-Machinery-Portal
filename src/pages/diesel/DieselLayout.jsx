@@ -29,7 +29,7 @@ export const DIESEL_MODULES = [
     need: (a) => a.can('usage', 'view') || a.can('report', 'view'),
     hint: 'Monthly fuel usage by HQ vehicle and estate machine'
   },
-  { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view') || a.can('topup', 'approve'), hint: 'Fleet cards, reloads, balances, top-up requests and KPDN subsidy vehicles' },
+  { to: '/diesel/cards', label: 'Fleet Card Manage', Icon: IconCard, need: (a) => a.can('cards', 'view') || a.can('topup', 'approve') || a.can('topup', 'process'), hint: 'Fleet cards, reloads, balances, top-up requests and KPDN subsidy vehicles' },
   { to: '/diesel/users', label: 'Approval\nsetting', Icon: IconUsers, need: (a) => a.fuelAdmin, hint: 'Normal user / accountant, who approves whose fuel claims and fleet card top-up requests' }
 ]
 
