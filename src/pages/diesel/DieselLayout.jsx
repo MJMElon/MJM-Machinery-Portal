@@ -75,13 +75,13 @@ export default function DieselLayout() {
   if (!current || !current.diesel_enabled)
     return (
       <Blocked
-        title="Fuel Manage is not enabled"
+        title={current ? 'Fuel Manage is not enabled' : 'No company yet'}
         body={
           current
             ? `${current.name} does not have Fuel Manage yet. ${
                 isSuperAdmin ? 'Turn it on under Businesses & Companies (gear icon, top right).' : 'Ask a super admin to turn it on.'
               }`
-            : 'Choose a company first.'
+            : 'You have not been given a company yet. Ask HR to allocate you to your company in MJM Intranet, then sign in again.'
         }
         onBack={back}
       />

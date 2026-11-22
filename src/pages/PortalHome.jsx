@@ -35,7 +35,7 @@ export default function PortalHome() {
           {error ||
             (isSuperAdmin
               ? 'Companies come from MJM Intranet. Open User Access and press “Sync from MJM Intranet”.'
-              : 'Ask a super admin to sync the companies from MJM Intranet and give you access.')}
+              : 'You have not been given a company yet. Ask HR to allocate you to your company in MJM Intranet (Business → Company), then sign in again.')}
         </p>
         {isSuperAdmin && (
           <Link

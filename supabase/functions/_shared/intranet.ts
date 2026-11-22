@@ -22,6 +22,9 @@ export interface IntranetUser {
   email: string
   full_name: string | null
   is_admin?: boolean
+  // Intranet companies this person may use with the Icon (HR allocation in the
+  // Businesses where the Icon is opened for them). Absent from older Intranets.
+  company_ids?: string[]
 }
 
 export interface MasterData {
@@ -133,6 +136,21 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
     if (fuel?.module_users) flags.fuel = fuel.module_users.map((u) => ids.get(u.id)).filter(Boolean)
     const { data: r, error: e2 } = await db.rpc('machinery_apply_intranet_users', { p: flags })
     users = e2 ? { users_warning: e2.message } : { users: all.size, ...(r ?? {}) }
+
+    // Which companies each person may see, per Icon (only when the Intranet sends it)
+    const scope = (list?: IntranetUser[]) =>
+      list && list.every((u) => Array.isArray(u.company_ids))
+        ? list.map((u) => ({ user_id: ids.get(u.id), company_ids: u.company_ids })).filter((x) => x.user_id)
+        : null
+    const companies: Record<string, unknown> = {}
+    const cmmsScope = scope(data.module_users)
+    const fuelScope = scope(fuel?.module_users)
+    if (cmmsScope) companies.cmms = cmmsScope
+    if (fuelScope) companies.fuel = fuelScope
+    if (Object.keys(companies).length) {
+      const { data: c, error: e3 } = await db.rpc('machinery_apply_intranet_user_companies', { p: companies })
+      users = { ...users, ...(e3 ? { companies_warning: e3.message } : { user_companies: c }) }
+    }
   } catch (e) {
     users = { users_warning: String((e as Error)?.message ?? e) }
   }
