@@ -22,7 +22,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const env = (k: string) => (Deno.env.get(k) ?? '').trim()
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  // Only our own site may call this from a browser (override with the ALLOWED_ORIGIN secret)
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? 'https://mjmelon.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
