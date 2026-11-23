@@ -305,7 +305,9 @@ export function usePerms(companyId) {
       adminOf: (module) => isSuperAdmin || adminModules(state.perms).includes(module),
       adminModules: isSuperAdmin ? Object.keys(MODULE_ADMIN_LABEL) : adminModules(state.perms),
       approveFor: approveFor(state.perms),
-      approvesTopup: (requesterId) => canApproveTopup(state.perms, isSuperAdmin, requesterId)
+      approvesTopup: (requesterId) => canApproveTopup(state.perms, isSuperAdmin, requesterId),
+      // Fuel Manage role (User setting): 'user' / 'accountant' / 'procurement'
+      fuelRole: isSuperAdmin ? 'procurement' : fuelRole(state.perms)
     }),
     [state, isSuperAdmin]
   )

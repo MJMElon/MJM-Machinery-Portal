@@ -60,7 +60,9 @@ export function useDieselAccess(companyId) {
     fuelAdmin: p.adminOf('fuel'),
     approveFor: p.approveFor,
     approvesTopup: p.approvesTopup,
-    topupApprover: p.can('topup', 'approve')
+    topupApprover: p.can('topup', 'approve'),
+    // Procurement role: may see fleet card web login passwords (eye button)
+    procurement: p.fuelRole === 'procurement'
   }
 }
 
@@ -602,4 +604,19 @@ export async function lastImports(companyId, limit = 5) {
     .limit(limit)
   if (error) return null
   return data
+}
+
+// ---- fleet card web login password (locked table, migration 20261213) ------
+
+/** The password, for the Procurement role only (the database refuses anyone else). */
+export async function cardPassword(cardId) {
+  const { data, error } = await supabase.rpc('machinery_card_password', { p_card: cardId })
+  if (error) throw friendly(error)
+  return data || ''
+}
+
+/** Set ('' clears) the password; whoever may edit the card. */
+export async function setCardPassword(cardId, password) {
+  const { error } = await supabase.rpc('machinery_set_card_password', { p_card: cardId, p_password: password })
+  if (error) throw friendly(error)
 }

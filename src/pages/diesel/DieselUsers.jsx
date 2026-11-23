@@ -21,7 +21,9 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 // admins are set in CMMS 2 user access, not here.
 export default function DieselUsers() {
   const { company, access } = useOutletContext()
-  const { isSuperAdmin } = useAuth()
+  const { isSuperAdmin, user } = useAuth()
+  // A module admin cannot change their own access (another admin or a super admin does)
+  const isMe = (uid) => !isSuperAdmin && uid === user?.id
   const [people, setPeople] = useState([])
   const [saved, setSaved] = useState({}) // user_id → perms in the database
   const [perms, setPerms] = useState({}) // user_id → perms on the page (with unsaved changes)
@@ -197,11 +199,12 @@ export default function DieselUsers() {
                       <td className="px-4 py-3">
                         <p className="break-words font-medium text-slate-800">{userLabel(p)}</p>
                         <p className="break-all text-xs text-slate-500">{p.email}</p>
+                        {isMe(p.user_id) && canEdit && <p className="mt-0.5 text-[11px] text-slate-400">You · another admin sets your access</p>}
                       </td>
                       <td className="px-3 py-3">
                         {p.is_super_admin ? (
                           <Badge>Super admin</Badge>
-                        ) : canEdit ? (
+                        ) : canEdit && !isMe(p.user_id) ? (
                           <select
                             value={role}
                             disabled={saving}
@@ -223,6 +226,7 @@ export default function DieselUsers() {
                         <ApproverChips
                           approvers={approvers}
                           canEdit={canEdit}
+                          fixed={isMe}
                           saving={saving}
                           tone="blue"
                           onAdd={() => setPicking({ person: p, kind: 'claims' })}
@@ -235,6 +239,7 @@ export default function DieselUsers() {
                         <ApproverChips
                           approvers={topupApprovers}
                           canEdit={canEdit}
+                          fixed={isMe}
                           saving={saving}
                           tone="green"
                           onAdd={() => setPicking({ person: p, kind: 'topup' })}
@@ -243,7 +248,7 @@ export default function DieselUsers() {
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        {canEdit ? (
+                        {canEdit && !isMe(p.user_id) ? (
                           <input
                             type="number"
                             min="0"
@@ -272,7 +277,7 @@ export default function DieselUsers() {
       {picking && (
         <ApproverPicker
           title={`Add ${picking.kind === 'claims' ? '' : 'top-up '}approver for ${userLabel(picking.person)}`}
-          people={people.filter((a) => a.user_id !== picking.person.user_id)}
+          people={people.filter((a) => a.user_id !== picking.person.user_id && !isMe(a.user_id))}
           added={(picking.kind === 'claims' ? approversOf : topupApproversOf)(picking.person.user_id).map((a) => a.user_id)}
           onAdd={(aid) => (picking.kind === 'claims' ? changeApprover : changeTopupApprover)(aid, picking.person.user_id, true)}
           onClose={() => setPicking(null)}
@@ -288,7 +293,7 @@ export default function DieselUsers() {
 }
 
 // Approvers of one person as chips (× to remove) and a small "+ Add approver" link.
-function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove }) {
+function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove, fixed = () => false }) {
   const chip = 'bg-emerald-50 text-emerald-800' // names added: green; + Add approver: blue
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -296,7 +301,7 @@ function ApproverChips({ approvers, canEdit, saving, tone, onAdd, onRemove }) {
       {approvers.map((a) => (
         <span key={a.user_id} className={`inline-flex h-8 max-w-full items-center gap-1 rounded-full pl-3 pr-1.5 text-sm font-medium ${chip}`}>
           <span className="truncate">{userLabel(a)}</span>
-          {canEdit && (
+          {canEdit && !fixed(a.user_id) && (
             <button type="button" disabled={saving} onClick={() => onRemove(a.user_id)} className="shrink-0 rounded-full p-0.5 hover:bg-white/60" aria-label={`Remove ${userLabel(a)}`}>
               <IconX width={14} height={14} />
             </button>

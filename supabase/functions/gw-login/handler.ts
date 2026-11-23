@@ -19,8 +19,14 @@ export interface Deps {
   checkAccess(token: string): Promise<{ allowed: boolean; user?: GatewayUser | null; error?: string }>
   /** Make sure a login exists for this e-mail (no e-mail is sent) and return a one-time token hash. */
   issueSession(email: string, fullName: string | null): Promise<{ userId: string; tokenHash: string }>
-  /** Keep the portal user list in step with MJM Intranet (adds the row, updates name/e-mail). */
-  enrol(userId: string, email: string, fullName: string | null): Promise<void>
+  /**
+   * Is this e-mail's CMMS 2 login tied to this Intranet account? 'ok' (or not
+   * tied yet), 'mismatch' (tied to another Intranet account), 'moved' (this
+   * Intranet account already has a login under another e-mail).
+   */
+  checkLink(email: string, intranetId: string): Promise<'ok' | 'mismatch' | 'moved'>
+  /** Keep the portal user list in step with MJM Intranet (adds the row, updates name/e-mail, ties it to the Intranet account). */
+  enrol(userId: string, email: string, fullName: string | null, intranetId: string): Promise<void>
 }
 
 export const CORS = {
@@ -54,9 +60,18 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
   const email = check.user.email.trim().toLowerCase()
   const fullName = check.user.full_name?.trim() || null
+  const intranetId = String(check.user.id ?? '').trim()
+  // A login belongs to the Intranet account that first opened it, not just to the e-mail.
+  let link: 'ok' | 'mismatch' | 'moved'
+  try {
+    link = intranetId ? await deps.checkLink(email, intranetId) : 'mismatch'
+  } catch (e) {
+    return json({ error: 'session_failed', detail: String((e as Error)?.message ?? e) }, 500)
+  }
+  if (link !== 'ok') return json({ error: link === 'moved' ? 'account_moved' : 'account_mismatch' }, 403)
   try {
     const { userId, tokenHash } = await deps.issueSession(email, fullName)
-    await deps.enrol(userId, email, fullName)
+    await deps.enrol(userId, email, fullName, intranetId)
     return json({ token_hash: tokenHash, email, full_name: fullName })
   } catch (e) {
     return json({ error: 'session_failed', detail: String((e as Error)?.message ?? e) }, 500)
