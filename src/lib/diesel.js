@@ -582,3 +582,24 @@ function friendly(error, custom = {}) {
   }
   return error instanceof Error ? error : new Error(error?.message || 'Could not save. Please try again.')
 }
+
+// ---- fleet card statement (Setel) import ----------------------------------
+
+/** Statement rows (normalized, see supabase/functions/_shared/statement.js) → saved on the cards of this company. */
+export async function importStatement(companyId, rows) {
+  const { data, error } = await supabase.rpc('machinery_import_card_transactions', { p_rows: rows, p_source: 'setel', p_company: companyId })
+  if (error) throw friendly(error)
+  return data
+}
+
+/** The latest statement imports that touched this company (AI agent or upload); null before migration 20261212. */
+export async function lastImports(companyId, limit = 5) {
+  const { data, error } = await supabase
+    .from('machinery_card_imports')
+    .select('*')
+    .contains('company_ids', [companyId])
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) return null
+  return data
+}

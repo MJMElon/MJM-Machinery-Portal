@@ -7,9 +7,9 @@ import { day, monthLabel, num, thisMonth } from '../../lib/format.js'
 
 // A fleet card's usage in one month (‹ › to change month): date, driver,
 // vehicle, litres, amount, and whether the driver has claimed it — a
-// fleet-card receipt on a fuel claim (with the receipt photo or not), or a
-// purchase recorded on the card (e.g. from the fuel station's records) that
-// no claim covers yet.
+// fleet-card receipt on a fuel claim (with the receipt photo or not, and
+// "Setel ✓" when the station statement has the same fill), or a purchase on
+// the station statement (daily import) that no claim covers yet.
 export function CardMonthUsage({ company, cardId, refresh }) {
   const [month, setMonth] = useState(thisMonth())
   const [rows, setRows] = useState(undefined) // undefined loading · null not available
@@ -31,7 +31,7 @@ export function CardMonthUsage({ company, cardId, refresh }) {
   const list = rows || []
   const totL = list.reduce((s, r) => s + Number(r.litres || 0), 0)
   const totRM = list.reduce((s, r) => s + Number(r.amount || 0), 0)
-  const notClaimed = list.filter((r) => !r.claim_id).length
+  const notClaimed = list.filter((r) => r.source === 'card').length
   const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
@@ -81,23 +81,43 @@ export function CardMonthUsage({ company, cardId, refresh }) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {list.map((r, i) => (
-                <tr key={i} className={r.claim_id ? '' : 'bg-amber-50/40'}>
-                  <td className="whitespace-nowrap px-5 py-2.5 text-slate-600">{day(r.date)}</td>
+                <tr key={i} className={r.source === 'card' ? 'bg-amber-50/40' : ''}>
+                  <td className="whitespace-nowrap px-5 py-2.5 text-slate-600">
+                    {day(r.date)}
+                    {r.time && <span className="ml-1.5 text-xs text-slate-400">{r.time}</span>}
+                  </td>
                   <td className="px-3 py-2.5 text-slate-800">{r.driver || '—'}</td>
                   <td className="px-3 py-2.5 text-slate-600">{r.vehicle || '—'}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{n2(r.litres)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{n2(r.amount)}</td>
                   <td className="px-3 py-2.5">
-                    {r.claim_id ? (
+                    {r.source === 'claim' ? (
                       <span className="inline-flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">Claimed</span>
                         <Link to={`/diesel/claims/${r.claim_id}`} className="text-xs font-medium text-brand hover:underline">
                           Claim {String(r.claim_no ?? '').padStart(3, '0')}
                         </Link>
                         <span className={`text-xs ${r.has_receipt ? 'text-slate-500' : 'text-red-600'}`}>{r.has_receipt ? '· receipt ✓' : '· no receipt photo'}</span>
+                        {r.on_statement && (
+                          <span className="text-xs text-emerald-700" title="The fuel station statement has the same fill">
+                            · Setel ✓{Math.abs(Number(r.statement_amount) - Number(r.amount)) >= 0.01 ? ` (RM ${n2(r.statement_amount)})` : ''}
+                          </span>
+                        )}
                       </span>
                     ) : (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Not claimed yet</span>
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        {r.claim_status === 'draft' ? (
+                          <>
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">Draft claim</span>
+                            <Link to={`/diesel/claims/${r.claim_id}`} className="text-xs font-medium text-brand hover:underline">
+                              Claim {String(r.claim_no ?? '').padStart(3, '0')}
+                            </Link>
+                          </>
+                        ) : (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Not claimed yet</span>
+                        )}
+                        {r.on_statement && <span className="text-xs text-slate-500">· from Setel</span>}
+                      </span>
                     )}
                   </td>
                 </tr>
