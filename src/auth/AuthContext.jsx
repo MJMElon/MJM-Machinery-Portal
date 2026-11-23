@@ -178,7 +178,7 @@ function handoffOnce() {
               .then(async ({ error }) => {
                 if (!error) return
                 const body = await error.context?.json?.().catch(() => null)
-                if (['not_allowed'].includes(body?.error)) {
+                if (['not_allowed', 'account_mismatch', 'account_moved'].includes(body?.error)) {
                   await supabase.auth.signOut()
                   window.location.replace(INTRANET_URL)
                 }
@@ -206,6 +206,8 @@ const REASONS = {
   invalid_token: 'The link from MJM Intranet has expired (it lasts 60 seconds). Open the portal again from MJM Intranet.',
   token_already_used: 'This link from MJM Intranet was already used. Open the portal again from MJM Intranet.',
   not_allowed: 'Your MJM Intranet account no longer has access to this portal.',
+  account_mismatch: 'This CMMS 2 login belongs to another MJM Intranet account with the same e-mail. Ask a super admin to check your account.',
+  account_moved: 'Your MJM Intranet account already has a CMMS 2 login under another e-mail (your e-mail changed?). Ask a super admin to move it.',
   not_configured: 'The portal is not linked to MJM Intranet yet (GW_API_KEY secret missing).',
   gateway_unreachable: 'Could not reach MJM Intranet to check the link. Please try again.'
 }

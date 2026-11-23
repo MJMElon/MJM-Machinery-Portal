@@ -7,7 +7,8 @@ import { ErrorBox, inputCls } from './shared.jsx'
 import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
 import { RequestTopupModal } from './TopupRequests.jsx'
-import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, vehicleLabel } from '../../lib/diesel.js'
+import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
+import { PasswordField } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
 
 // A fleet card in use (tested), one page, edited in place:
@@ -32,7 +33,7 @@ const detailsOf = (c) => ({
   vehicle_id: c.vehicle_id || '',
   subsidy_litres: c.subsidy_litres ?? '',
   login_id: c.login_id || '',
-  login_password: c.login_password || '',
+  login_password: '', // never loaded: typed only to set a new one
   notes: c.notes || ''
 })
 const driversOf = (c) => (c.driver_ids?.length ? c.driver_ids : c.driver_id ? [c.driver_id] : [])
@@ -47,6 +48,8 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const [drivers, setDrivers] = useState(() => driversOf(card))
   const [vehicleQuery, setVehicleQuery] = useState('')
   const [busy, setBusy] = useState(false)
+  const [clearPw, setClearPw] = useState(false)
+  const hasPw = Boolean(card.login_password_set || card.login_password)
   const [error, setError] = useState('')
   const [askTopup, setAskTopup] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear())
@@ -86,9 +89,11 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         vehicle_id: form.vehicle_id,
         subsidy_litres: form.subsidy_litres === '' ? null : Number(form.subsidy_litres),
         login_id: form.login_id.trim() || null,
-        login_password: form.login_password.trim() || null,
         notes: form.notes.trim() || null
       })
+      // the password is kept in a locked table (Procurement can see it)
+      if (form.login_password.trim() || clearPw) await setCardPassword(card.id, clearPw ? '' : form.login_password.trim())
+      setClearPw(false)
       setEditDetails(false)
       await reload()
     })
@@ -176,7 +181,9 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
               <div>
                 <Field label="Subsidy / month">{quota != null ? `${num(quota, 2)} L` : ''}</Field>
                 <Field label="Web login ID">{card.login_id}</Field>
-                <Field label="Login password">{card.login_password}</Field>
+                <Field label="Login password">
+                  <PasswordField cardId={card.id} has={hasPw} canSee={access.procurement} />
+                </Field>
                 <Field label="Notes">{card.notes}</Field>
               </div>
             </div>
@@ -223,7 +230,23 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                   <input value={form.login_id} onChange={set('login_id')} maxLength={80} autoComplete="off" className={box} />
                 </Input>
                 <Input label="Login password">
-                  <input value={form.login_password} onChange={set('login_password')} maxLength={80} autoComplete="off" className={box} />
+                  <input
+                    type="password"
+                    value={form.login_password}
+                    onChange={(e) => {
+                      setClearPw(false)
+                      set('login_password')(e)
+                    }}
+                    maxLength={80}
+                    autoComplete="new-password"
+                    placeholder={hasPw && !clearPw ? 'Saved · type to change' : 'Not set'}
+                    className={box}
+                  />
+                  {hasPw && !form.login_password && (
+                    <button type="button" onClick={() => setClearPw((v) => !v)} className="mt-1 text-xs font-medium text-red-600 hover:underline">
+                      {clearPw ? 'Keep the saved password' : 'Remove the saved password'}
+                    </button>
+                  )}
                 </Input>
                 <Input label="Notes" wide>
                   <input value={form.notes} onChange={set('notes')} maxLength={500} className={box} />

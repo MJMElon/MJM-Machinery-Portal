@@ -96,11 +96,24 @@ Deno.serve(async (req) => {
       return { userId, tokenHash }
     },
 
-    async enrol(userId, email, fullName) {
+    async checkLink(email, intranetId) {
+      const { data, error } = await db.rpc('machinery_check_intranet_login', { p_email: email, p_intranet_id: intranetId })
+      // Before migration 20261213 the check does not exist yet: sign in as before.
+      if (error) {
+        if (/machinery_check_intranet_login|PGRST202|42883/.test(`${error.code} ${error.message}`)) return 'ok'
+        throw error
+      }
+      return data === 'mismatch' || data === 'moved' ? data : 'ok'
+    },
+
+    async enrol(userId, email, fullName, intranetId) {
       // full_name exists after the businesses migration; fall back without it.
       let { error } = await db
         .from('machinery_portal_admins')
         .upsert({ user_id: userId, email, full_name: fullName }, { onConflict: 'user_id' })
+      // Tie the login to the Intranet account the first time (migration 20261213)
+      if (!error)
+        await db.from('machinery_portal_admins').update({ intranet_user_id: intranetId }).eq('user_id', userId).is('intranet_user_id', null)
       if (error && /full_name/.test(error.message)) {
         ;({ error } = await db.from('machinery_portal_admins').upsert({ user_id: userId, email }, { onConflict: 'user_id' }))
       }

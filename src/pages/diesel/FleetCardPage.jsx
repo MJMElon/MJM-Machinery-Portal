@@ -14,6 +14,7 @@ import { BalanceChart } from "../../components/diesel/CardCharts.jsx";
 import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
 import { FleetCardInUse } from "../../components/diesel/FleetCardInUse.jsx";
 import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
+import { PasswordField } from "../../components/diesel/CardPassword.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
@@ -115,7 +116,7 @@ export default function FleetCardPage({ mode }) {
           checklist: c.checklist || {},
           kpdn_apply: Boolean(c.kpdn_apply),
           login_id: c.login_id || "",
-          login_password: c.login_password || "",
+          login_password: "", // never loaded: typed only to set a new one (kept in a locked table)
         });
       }
       setError("");
@@ -213,7 +214,8 @@ export default function FleetCardPage({ mode }) {
         licence_expiry: form.licence_expiry || null,
         kpdn_apply: Boolean(form.kpdn_apply),
         login_id: form.login_id.trim() || null,
-        login_password: form.login_password.trim() || null,
+        // a typed password goes to the locked table (database trigger); blank keeps the saved one
+        ...(form.login_password.trim() ? { login_password: form.login_password.trim() } : {}),
         notes: form.notes.trim() || null,
         checklist: form.checklist,
       });
@@ -675,12 +677,14 @@ export default function FleetCardPage({ mode }) {
                       className={box}
                     />
                   </Row>
-                  <Row label="Login password" ro={ro} show={form.login_password}>
+                  <Row label="Login password" ro={ro} show={<PasswordField cardId={id} has={Boolean(card?.login_password_set || card?.login_password)} canSee={access.procurement} />}>
                     <input
+                      type="password"
                       value={form.login_password}
                       onChange={set("login_password")}
                       maxLength={80}
-                      autoComplete="off"
+                      autoComplete="new-password"
+                      placeholder={card?.login_password_set ? "Saved · type to change" : ""}
                       className={box}
                     />
                   </Row>
@@ -932,12 +936,14 @@ export default function FleetCardPage({ mode }) {
                     className={box}
                   />
                 </Row>
-                <Row label="Login Password" ro={ro} show={form.login_password}>
+                <Row label="Login Password" ro={ro} show={<PasswordField cardId={id} has={Boolean(card?.login_password_set || card?.login_password)} canSee={access.procurement} />}>
                   <input
+                    type="password"
                     value={form.login_password}
                     onChange={set("login_password")}
                     maxLength={80}
-                    autoComplete="off"
+                    autoComplete="new-password"
+                    placeholder={card?.login_password_set ? "Saved · type to change" : ""}
                     className={box}
                   />
                 </Row>

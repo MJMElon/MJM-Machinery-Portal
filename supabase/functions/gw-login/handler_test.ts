@@ -12,6 +12,7 @@ function setup(over: Partial<Deps> = {}) {
       t === 'good'
         ? { allowed: true, user: { id: 'gw1', email: 'Ali@MJM.local', full_name: ' Ali Driver ' } }
         : { allowed: false, error: 'invalid_token' },
+    checkLink: async () => 'ok',
     issueSession: async () => ({ userId: 'u1', tokenHash: 'hash1' }),
     enrol: async (...a) => void enrolled.push(a),
     ...over,
@@ -27,7 +28,7 @@ Deno.test('good token → session hash, user enrolled with lower-case e-mail and
   const res = await handle(post({ token: 'good' }), deps)
   eq(res.status, 200)
   eq(await res.json(), { token_hash: 'hash1', email: 'ali@mjm.local', full_name: 'Ali Driver' })
-  eq(enrolled, [['u1', 'ali@mjm.local', 'Ali Driver']])
+  eq(enrolled, [['u1', 'ali@mjm.local', 'Ali Driver', 'gw1']])
 })
 
 Deno.test('bad or used token → 403 with the gateway reason', async () => {
@@ -50,4 +51,15 @@ Deno.test('gateway down → 502; session failure → 500', async () => {
   eq((await handle(post({ token: 'good' }), down.deps)).status, 502)
   const broken = setup({ issueSession: async () => { throw new Error('no magic link token') } })
   eq((await handle(post({ token: 'good' }), broken.deps)).status, 500)
+})
+
+Deno.test('login tied to another Intranet account → 403, no session issued', async () => {
+  let issued = 0
+  const other = setup({ checkLink: async () => 'mismatch', issueSession: async () => (issued++, { userId: 'u1', tokenHash: 'h' }) })
+  const res = await handle(post({ token: 'good' }), other.deps)
+  eq(res.status, 403)
+  eq((await res.json()).error, 'account_mismatch')
+  eq(issued, 0)
+  const moved = setup({ checkLink: async () => 'moved' })
+  eq((await (await handle(post({ token: 'good' }), moved.deps)).json()).error, 'account_moved')
 })
