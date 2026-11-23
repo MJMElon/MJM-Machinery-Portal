@@ -23,11 +23,11 @@ export function Desktop({ modules, orderKey }) {
  * Press and hold one to move the buttons into another order (remembered
  * per user in this browser, under orderKey). modules: as for Desktop.
  */
-export function ModuleList({ modules, orderKey }) {
+export function ModuleList({ modules, orderKey, columns = 1 }) {
   const { open } = useWindows()
   return (
     <div className="pt-2 sm:pt-8">
-      <TileGrid orderKey={orderKey} layout="list">
+      <TileGrid orderKey={orderKey} layout={columns === 2 ? 'list2' : 'list'}>
         {modules.map((m) => (
           <ModuleRow key={m.key} m={m} onOpen={() => open(m)} />
         ))}

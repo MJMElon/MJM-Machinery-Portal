@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { useCompany } from "../../lib/CompanyContext.jsx";
 import PageHeader from "../../components/PageHeader.jsx";
 import { Badge, Button, Card } from "../../components/ui.jsx";
 import { IconPencil, IconTrash } from "../../components/icons.jsx";
@@ -57,7 +58,14 @@ const box = `${inputCls} h-10 px-3 text-sm`;
 const dateCls = `${inputCls} h-8 px-2 text-xs`;
 
 export default function FleetCardPage({ mode }) {
-  const { company, access } = useOutletContext();
+  const ctx = useOutletContext();
+  // Fleet Card Manage → Consolidate opens a card of another company of the
+  // same business (?co=<company>): shown read-only, in that company.
+  const [params] = useSearchParams();
+  const { companies } = useCompany();
+  const other = params.get("co") && params.get("co") !== ctx.company.id ? companies.find((c) => c.id === params.get("co")) : null;
+  const company = other || ctx.company;
+  const access = useMemo(() => (other ? { ...ctx.access, can: () => false } : ctx.access), [other, ctx.access]);
   const { id } = useParams();
   const navigate = useNavigate();
   const editing = mode === "new" || mode === "edit";
