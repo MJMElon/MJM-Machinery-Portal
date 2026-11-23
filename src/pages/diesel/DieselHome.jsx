@@ -4,8 +4,8 @@ import { EMBEDDED } from '../../components/Shell.jsx'
 import { DIESEL_MODULES, fuelWindow } from './DieselLayout.jsx'
 import { MyFleetCards } from '../../components/diesel/MyFleetCards.jsx'
 
-// Fuel Manage landing page: the modules as a list of wide buttons (icon,
-// then the name); each opens in its own window. Modules the person has no
+// Fuel Manage landing page: the modules as wide buttons in two equal
+// columns (icon, then the name; press and hold to drag them into another order); each opens in its own window. Modules the person has no
 // access to are greyed out. On top: My fleet card (the person's own cards:
 // this month's quota meter and the latest purchases).
 export default function DieselHome() {
@@ -18,7 +18,7 @@ export default function DieselHome() {
   return (
     <div>
       <MyFleetCards company={company} />
-      <ModuleList modules={modules} orderKey="fuel-list" />
+      <ModuleList modules={modules} orderKey="fuel-list" columns={2} />
     </div>
   )
 }

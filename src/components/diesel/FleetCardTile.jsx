@@ -17,14 +17,14 @@ const theme = (provider) => STATION_THEMES.find(([re]) => re.test(provider || ''
 // 7012345600019876 → 7012 3456 0001 9876
 const spaced = (no) => (/\s/.test(no) ? no : String(no).replace(/(.{4})(?=.)/g, '$1 '))
 
-export function FleetCardTile({ card, vehicle, usedL, balance, checklist }) {
+export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to }) {
   const st = CARD_STATUS[card.status] || CARD_STATUS.active
   const off = ['cancelled', 'inactive'].includes(card.status)
   const quota = card.subsidy_litres != null ? Number(card.subsidy_litres) : null
   const pct = quota ? Math.min(100, (usedL / quota) * 100) : null
   const bar = pct == null ? '' : pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-300' : 'bg-emerald-300'
   return (
-    <Link to={`/diesel/cards/${card.id}`} className={`group block ${off ? 'opacity-60 grayscale' : ''}`} title="Open this fleet card">
+    <Link to={to || `/diesel/cards/${card.id}`} className={`group block ${off ? 'opacity-60 grayscale' : ''}`} title="Open this fleet card">
       <div
         className={`relative aspect-[1.586] overflow-hidden rounded-xl bg-gradient-to-br ${theme(card.provider)} p-3 text-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-xl`}
       >

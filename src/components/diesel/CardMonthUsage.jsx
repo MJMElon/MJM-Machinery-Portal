@@ -71,7 +71,7 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
   )
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2.5">
           <h3 className="font-semibold text-slate-800">Usage</h3>

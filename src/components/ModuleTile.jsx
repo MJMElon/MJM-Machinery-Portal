@@ -62,7 +62,7 @@ const HOLD_MS = 450
 
 // layout 'list': one wide button per row, top to bottom (Fuel Manage).
 export function TileGrid({ children, orderKey, layout = 'grid' }) {
-  const list = layout === 'list'
+  const list = layout === 'list' || layout === 'list2'
   const items = Children.toArray(children).filter(Boolean)
   const { user } = useAuth()
   const storageKey = orderKey ? `tiles.order.${orderKey}.${user?.id || 'anon'}` : null
@@ -164,7 +164,9 @@ export function TileGrid({ children, orderKey, layout = 'grid' }) {
       <div
         ref={gridRef}
         className={
-          list
+          layout === 'list2'
+            ? 'mx-auto grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2'
+            : list
             ? 'mx-auto flex w-full max-w-md flex-col gap-3'
             : 'mx-auto grid max-w-4xl grid-cols-3 justify-items-center gap-x-2 gap-y-6 sm:flex sm:flex-wrap sm:items-start sm:justify-center sm:gap-x-4 sm:gap-y-8'
         }

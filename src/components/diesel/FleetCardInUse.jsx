@@ -4,7 +4,7 @@ import PageHeader from '../PageHeader.jsx'
 import { Badge, Button, Card } from '../ui.jsx'
 import { IconPencil, IconTrash } from '../icons.jsx'
 import { ErrorBox, inputCls } from './shared.jsx'
-import { MonthBars } from './CardCharts.jsx'
+import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
 import { RequestTopupModal } from './TopupRequests.jsx'
 import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, vehicleLabel } from '../../lib/diesel.js'
@@ -16,7 +16,7 @@ import { money, num, thisMonth } from '../../lib/format.js'
 //           same height, the driver list scrolls
 //   middle  this month's usage (‹ › month) with subsidy / used / balance,
 //           beside the month's usage by driver
-//   bottom  usage by month Jan – Dec in litres and in RM (‹ › year) and the
+//   bottom  usage by month Jan – Dec, one chart: a litres bar and an RM bar (‹ › year), and the
 //           card balance now.
 // Editing needs Fleet Card Manage edit rights (delete: delete rights);
 // everyone else only reads.
@@ -346,9 +346,8 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
           <span className="text-sm text-slate-500">Card balance now</span>
           <span className={`text-lg font-bold tabular-nums ${balanceNow < 0 ? 'text-red-600' : 'text-brand-dark'}`}>{ledger ? money(balanceNow) : '—'}</span>
         </div>
-        <div className="grid gap-6 px-4 py-4 md:grid-cols-2">
-          <MonthBars title="Usage (litres)" color="#2a78d6" rows={monthRows.map((r) => ({ ...r, value: r.litres }))} fmt={(v) => `${num(v, 2)} L`} />
-          <MonthBars title="Usage (RM)" color="#1f9d55" rows={monthRows.map((r) => ({ ...r, value: r.rm }))} fmt={(v) => money(v)} />
+        <div className="px-4 py-4">
+          <UsageBars rows={monthRows} />
         </div>
       </Card>
 
