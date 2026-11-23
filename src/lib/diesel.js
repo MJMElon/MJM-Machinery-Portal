@@ -509,6 +509,13 @@ export const TOPUP_STATUS = {
 }
 export const topupNo = (r) => `TU-${String(r.request_no ?? '').padStart(4, '0')}`
 
+/** Fuel Manage main page: the fleet cards the signed-in person drives, with this month's quota / use and the latest purchases; null before migration 20261210. */
+export async function myFleetCards(companyId) {
+  const { data, error } = await supabase.rpc('machinery_my_fleet_cards', { p_company: companyId })
+  if (error) return null
+  return data || []
+}
+
 /** The top-up requests the signed-in user may see (own, as approver, card managers); null before the migration. */
 export async function listTopups(companyId) {
   const { data, error } = await supabase.from(TOPUPS).select('*').eq('company_id', companyId).order('requested_at', { ascending: false }).limit(500)
