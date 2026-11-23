@@ -86,6 +86,13 @@ jobs:
             --project-ref "${{ steps.check.outputs.ref }}" \
             --no-verify-jwt --yes
 
+      - name: Deploy fleet-card-import (daily fleet card statement from the AI agent)
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          supabase functions deploy fleet-card-import \
+            --project-ref "${{ steps.check.outputs.ref }}" \
+            --no-verify-jwt --yes
+
       - name: Deploy sync-intranet (businesses / companies from MJM Intranet)
         if: steps.check.outputs.skip != 'true'
         run: |

@@ -112,11 +112,14 @@ export default function DieselUsage() {
       setCards(cardData.cards)
       setPeople(p)
       const claimById = new Map(claims.map((c) => [c.id, c]))
+      const counted = lines.filter((l) => l.line_kind !== 'reload' && !['rejected', 'draft'].includes(claimById.get(l.claim_id)?.status))
+      const countedIds = new Set(counted.map((l) => l.id))
       setFills([
-        ...lines
-          .filter((l) => l.line_kind !== 'reload' && !['rejected', 'draft'].includes(claimById.get(l.claim_id)?.status))
-          .map((l) => ({ ...l, source: l.payment === 'fleet_card' ? 'card' : 'cash', driver: claimById.get(l.claim_id)?.claimant_id, fromClaim: true })),
-        ...cardData.usage.map((u) => ({ ...u, source: 'card', driver: u.driver_id }))
+        ...counted.map((l) => ({ ...l, source: l.payment === 'fleet_card' ? 'card' : 'cash', driver: claimById.get(l.claim_id)?.claimant_id, fromClaim: true })),
+        // fuel station statement rows already matched to one of those receipts are that receipt (count once)
+        ...cardData.usage
+          .filter((u) => !u.claim_line_id || !countedIds.has(u.claim_line_id))
+          .map((u) => ({ ...u, source: 'card', driver: u.driver_id, remark: u.remark ?? (u.source && u.source !== 'manual' ? `Setel statement, not claimed yet${u.driver_name ? ` (${u.driver_name})` : ''}` : u.notes) }))
       ])
       setError('')
     } catch (e) {

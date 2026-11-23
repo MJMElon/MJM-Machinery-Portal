@@ -27,3 +27,8 @@ verify_jwt = false
 # Called from the portal after a fuel claim is submitted or reviewed. The
 # function checks the user's Supabase token itself (and answers CORS).
 verify_jwt = false
+
+[functions.fleet-card-import]
+# Called by the AI agent (no Supabase sign-in). Each call must carry the
+# FLEET_IMPORT_KEY secret in the x-api-key header; the function checks it.
+verify_jwt = false

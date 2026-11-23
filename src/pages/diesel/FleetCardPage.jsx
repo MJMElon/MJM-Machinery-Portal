@@ -270,7 +270,9 @@ export default function FleetCardPage({ mode }) {
   const st = CARD_STATUS[form.status] || CARD_STATUS.application;
   const month = thisMonth();
   const yr = String(ledgerYear);
-  const typed = data.usage.filter((u) => u.card_id === id); // fill-ups typed on the card (older records)
+  // fill-ups on the card (typed, or from the fuel station statement) not already matched to a claim receipt counted below
+  const countedLineIds = new Set((claimLines || []).map((l) => l.id));
+  const typed = data.usage.filter((u) => u.card_id === id && !(u.claim_line_id && countedLineIds.has(u.claim_line_id)));
   const quota = form.subsidy_litres === "" ? null : Number(form.subsidy_litres);
   // RM balance: every reload less every fill-up on this card, month by month.
   const mine = (ledger || []).filter((r) => r.card_id === id);

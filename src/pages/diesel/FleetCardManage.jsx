@@ -5,7 +5,8 @@ import { Button, Card } from '../../components/ui.jsx'
 import { IconPlus } from '../../components/icons.jsx'
 import { FleetCardTile } from '../../components/diesel/FleetCardTile.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, listCardData, listVehicles } from '../../lib/diesel.js'
+import { ImportProblemsModal, LastImportLine, StatementImportModal } from '../../components/diesel/StatementImport.jsx'
+import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
 import { thisMonth } from '../../lib/format.js'
 
 // Fleet Card Manage: every fleet card drawn as a card (number, fuel station,
@@ -20,10 +21,19 @@ export default function FleetCardManage() {
   const [ledger, setLedger] = useState(null) // null until the database has machinery_card_ledger
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [imports, setImports] = useState(null) // latest statement imports; null before migration 20261212
+  const [importing, setImporting] = useState(false)
+  const [showImport, setShowImport] = useState(null)
 
   const load = useCallback(async () => {
     try {
-      const [d, v, lg] = await Promise.all([listCardData(company.id, thisMonth() + '-01'), listVehicles(company.id), cardLedger(company.id).catch(() => null)])
+      const [d, v, lg, im] = await Promise.all([
+        listCardData(company.id, thisMonth() + '-01'),
+        listVehicles(company.id),
+        cardLedger(company.id).catch(() => null),
+        lastImports(company.id)
+      ])
+      setImports(im)
       setData(d)
       setVehicles(v)
       setLedger(lg)
@@ -55,6 +65,11 @@ export default function FleetCardManage() {
       <PageHeader
         right={
           <div className="flex flex-wrap gap-2">
+            {access.can('cards', 'edit') && imports && (
+              <Button variant="secondary" onClick={() => setImporting(true)}>
+                Import statement
+              </Button>
+            )}
             <Button variant="secondary" onClick={() => navigate('/diesel/cards/topup')}>
               <IconPlus width={18} height={18} /> Request top up
             </Button>
@@ -67,11 +82,16 @@ export default function FleetCardManage() {
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {importing && <StatementImportModal company={company} onClose={() => setImporting(false)} onDone={load} />}
+      {showImport && <ImportProblemsModal entry={showImport} onClose={() => setShowImport(null)} />}
 
       <Card className="p-4 sm:p-5">
-        <h3 className="mb-4 font-semibold text-slate-800">
-          Fleet cards <span className="font-normal text-slate-500">· {company.name}</span>
-        </h3>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h3 className="font-semibold text-slate-800">
+            Fleet cards <span className="font-normal text-slate-500">· {company.name}</span>
+          </h3>
+          <LastImportLine imports={imports} onOpen={setShowImport} />
+        </div>
         {loading ? (
           <Loading />
         ) : cards.length === 0 ? (
