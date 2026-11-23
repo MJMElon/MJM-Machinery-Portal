@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CompanyProvider, useCompany } from '../lib/CompanyContext.jsx'
@@ -7,6 +7,16 @@ import { IconCheck, IconLogout } from './icons.jsx'
 import BackButton from './BackButton.jsx'
 import { WindowsProvider } from './Windows.jsx'
 import Mascots from './Mascots.jsx'
+import { Spinner } from './ui.jsx'
+
+// Shown while a page's code is fetched (pages load when first opened).
+function PageLoading() {
+  return (
+    <div className="flex justify-center py-16 text-brand">
+      <Spinner className="h-7 w-7" />
+    </div>
+  )
+}
 
 // Page side padding, shared by the top bar and the content so they line up.
 const GUTTER = 'px-5 sm:px-10 lg:px-16 xl:px-20'
@@ -27,7 +37,9 @@ export function Shell() {
     return (
       <CompanyProvider>
         <main className="min-h-[100dvh] w-full px-4 pb-8 pt-4 sm:px-5">
-          <Outlet />
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
         </main>
       </CompanyProvider>
     )
@@ -37,7 +49,9 @@ export function Shell() {
         <div className="flex min-h-[100dvh] w-full flex-col">
           <TopBar title={title} gutter={gutter} />
           <main className={`w-full flex-1 pb-20 pt-6 sm:pt-8 ${gutter}`}>
-            <Outlet />
+            <Suspense fallback={<PageLoading />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
         <Mascots />

@@ -58,12 +58,22 @@ export default function DieselLayout() {
   // its window on top, as when it is opened inside CMMS 2 — closing the
   // window (X) leaves the person on the Fuel Manage page.
   const direct = !EMBEDDED && DIESEL_MODULES.find((m) => m.to === pathname)
-  const ready = loaded && access.loaded && current?.diesel_enabled && access.use
+  // The window starts loading as soon as the company is known; the module in
+  // it checks the person's access itself (no waiting for it here first).
+  const ready = loaded && current?.diesel_enabled
   useEffect(() => {
-    if (!direct || !ready || !direct.need(access)) return
+    if (!direct || !ready) return
     navigate('/diesel', { replace: true })
     open(fuelWindow(direct))
   }, [direct, ready]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // About to switch to the Fuel Manage page with the module in a window.
+  if (direct && ready)
+    return (
+      <div className="flex justify-center py-16 text-brand">
+        <Spinner className="h-7 w-7" />
+      </div>
+    )
 
   if (!loaded || !access.loaded)
     return (
@@ -100,13 +110,6 @@ export default function DieselLayout() {
     )
 
   const nav = DIESEL_MODULES.filter((n) => n.need(access))
-  // About to switch to the Fuel Manage page with the module in a window.
-  if (direct && direct.need(access))
-    return (
-      <div className="flex justify-center py-16 text-brand">
-        <Spinner className="h-7 w-7" />
-      </div>
-    )
 
   // Landing page and every module: just "Back to CMMS main page" and the content.
   // The top bar names the module (Fuel Receipt Claims, Operational Diesel Records, …).

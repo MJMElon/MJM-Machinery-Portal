@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card, Modal } from '../../components/ui.jsx'
-import { IconPencil, IconPrint, IconSearch, IconTrash } from '../../components/icons.jsx'
+import { IconChart, IconList, IconPencil, IconPrint, IconSearch, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, inputCls } from '../../components/diesel/shared.jsx'
 import { MultiPick } from '../../components/diesel/MultiPick.jsx'
-import { printUsageTable } from '../../components/diesel/UsagePrint.js'
+import { printUsageDetail, printUsageTable } from '../../components/diesel/UsagePrint.js'
 import { FUEL_COLORS, MiniBars } from '../../components/diesel/FuelDashboard.jsx'
 import {
   deleteDieselPrice,
@@ -72,6 +72,22 @@ export default function DieselUsage() {
   // The report follows the filters straight away; Search reloads the data.
   const draft = { cardF, driverF, vehicleF, typeF, machineF, locF, from, to }
   const [printing, setPrinting] = useState(false)
+  // Chart view (monthly bars per vehicle) or Table view (every receipt, grouped by fleet card); remembered in this browser
+  const [view, setViewState] = useState(() => {
+    try {
+      return localStorage.getItem('fuel.usage.view') === 'table' ? 'table' : 'chart'
+    } catch {
+      return 'chart'
+    }
+  })
+  const setView = (v) => {
+    setViewState(v)
+    try {
+      localStorage.setItem('fuel.usage.view', v)
+    } catch {
+      /* ignore */
+    }
+  }
   const report = useRef(null)
 
   const load = useCallback(async () => {
@@ -89,7 +105,7 @@ export default function DieselUsage() {
       setPrices(priceList)
       // RM of a record = litres x the diesel price on its date (0 while no price covers that date).
       setIssued(
-        records.map((r) => ({ id: r.id, vehicle_id: r.machine_id, fill_date: r.record_date, litres: r.litres, amount: Number(r.litres) * (dieselPriceOn(priceList, r.record_date) || 0) }))
+        records.map((r) => ({ id: r.id, vehicle_id: r.machine_id, fill_date: r.record_date, litres: r.litres, remark: r.remark, amount: Number(r.litres) * (dieselPriceOn(priceList, r.record_date) || 0) }))
       )
       setLocations(locs)
       setVehicles(v)
@@ -344,12 +360,75 @@ export default function DieselUsage() {
           `Diesel issued, from Operational Diesel Records · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
+  // Table view: every receipt in the filters, grouped by fleet card (HQ:
+  // which driver used the card for which vehicle, litres, RM and the remark,
+  // e.g. the other company to charge at month end), cash claims last.
+  // Estate: every diesel record, grouped by machine type.
+  const detailGroups = (() => {
+    const groups = new Map()
+    const add = (key, title, order, row) => {
+      if (!groups.has(key)) groups.set(key, { key, title, order, rows: [] })
+      groups.get(key).rows.push(row)
+    }
+    for (const f of rows) {
+      if (tab === 'hq') {
+        const c = f.source === 'card' ? cardOf(f) : null
+        const v = vById.get(f.vehicle_id)
+        const row = {
+          id: `${f.source}-${f.id}`,
+          date: f.fill_date,
+          who: f.driver ? who(f.driver) : 'No driver recorded',
+          vehicle: v ? regOf(v) : 'No vehicle',
+          general: Boolean(v?.general_use),
+          receipt: f.receipt_no || '',
+          litres: Number(f.litres || 0),
+          amount: Number(f.amount || 0),
+          remark: f.remark || f.notes || ''
+        }
+        if (f.source === 'cash') add('cash', 'Cash claims (no fleet card)', 'z', row)
+        else if (c) add(c.id, `Fleet card ${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${regOf(vById.get(c.vehicle_id))})` : ''}`, `a${c.card_no}`, row)
+        else add('nocard', 'Fleet card (card not found)', 'y', row)
+      } else {
+        const v = vById.get(f.vehicle_id)
+        if (v && !listed.some((x) => x.id === v.id)) continue
+        const type = v?.machine_type || 'No type'
+        add(type, type, type, {
+          id: f.id,
+          date: f.fill_date,
+          who: v ? vehicleLabel(v) : 'No machine recorded',
+          vehicle: locations.find((l) => l.id === v?.location_id)?.name || '',
+          litres: Number(f.litres || 0),
+          amount: Number(f.amount || 0),
+          remark: f.remark || ''
+        })
+      }
+    }
+    return [...groups.values()]
+      .sort((a, b) => a.order.localeCompare(b.order))
+      .map((g) => ({ ...g, rows: g.rows.sort((a, b) => a.date.localeCompare(b.date) || a.who.localeCompare(b.who)) }))
+  })()
+  const detailTotal = detailGroups.reduce((t, g) => ({ litres: t.litres + g.rows.reduce((s, r) => s + r.litres, 0), amount: t.amount + g.rows.reduce((s, r) => s + r.amount, 0), n: t.n + g.rows.length }), { litres: 0, amount: 0, n: 0 })
+
   // Print: a table, one row per person (HQ: who claimed / drove) or per
   // machine (estate), Jan – Dec litres and RM of the year, and the average
   // fuel price per litre.
   async function print() {
     setPrinting(true)
     try {
+      if (view === 'table') {
+        await printUsageDetail({
+          title: 'Fuel Usage Reports',
+          hq: tab === 'hq',
+          groups: detailGroups,
+          lines: [
+            `${company.name} · ${tab === 'hq' ? 'HQ Vehicle' : 'Estate Machinery'}`,
+            `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'}`,
+            ...filterLines,
+            `Printed ${day(today())}`
+          ]
+        })
+        return
+      }
       // The whole year (Jan – Dec of the year the date range ends in), with the other filters.
       const yearRows =
         tab === 'hq' ? fills.filter(passHq) : issued.filter((f) => !A.machineF.length || A.machineF.includes(f.vehicle_id))
@@ -391,9 +470,28 @@ export default function DieselUsage() {
     <div className="space-y-4">
       <PageHeader
         right={
-          <Button variant="secondary" onClick={print} disabled={loading || printing}>
-            <IconPrint width={18} height={18} /> {printing ? 'Preparing…' : 'Print'}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm" role="tablist" aria-label="Report view">
+              {[
+                ['chart', 'Chart view', IconChart],
+                ['table', 'Table view', IconList]
+              ].map(([k, label, Icon]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === k}
+                  onClick={() => setView(k)}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${view === k ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  <Icon width={16} height={16} /> {label}
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" onClick={print} disabled={loading || printing}>
+              <IconPrint width={18} height={18} /> {printing ? 'Preparing…' : 'Print'}
+            </Button>
+          </div>
         }
       />
       <ErrorBox>{error}</ErrorBox>
@@ -487,6 +585,10 @@ export default function DieselUsage() {
               </div>
             </div>
 
+            {view === 'table' ? (
+              <DetailTable groups={detailGroups} total={detailTotal} hq={tab === 'hq'} />
+            ) : (
+            <>
             <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-2 text-[11px] text-slate-600">
               {byDriver ? (
                 CAR_PARTS.map((p) => (
@@ -598,10 +700,85 @@ export default function DieselUsage() {
                 </table>
               </div>
             )}
+            </>
+            )}
           </div>
         </Card>
       )}
       {pricing && <PriceModal company={company} prices={prices} canEdit={access.can('fuel_record', 'edit')} onClose={() => setPricing(false)} onChanged={load} />}
+    </div>
+  )
+}
+
+// Table view: groups (fleet card / cash, or machine type) with their receipts,
+// a subtotal per group and the total.
+function DetailTable({ groups, total, hq }) {
+  if (!groups.length) return <Empty>No fuel usage for this filter.</Empty>
+  const cols = hq ? 7 : 6
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[860px] text-sm">
+        <thead>
+          <tr className="border-y border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="w-32 px-4 py-2">Date</th>
+            <th className="px-3 py-2">{hq ? 'Driver' : 'Machine'}</th>
+            <th className="px-3 py-2">{hq ? 'Vehicle' : 'Location'}</th>
+            {hq && <th className="px-3 py-2">Receipt no.</th>}
+            <th className="w-28 px-3 py-2 text-right">Litres</th>
+            <th className="w-32 px-3 py-2 text-right">Amount (RM)</th>
+            <th className="w-[24%] px-3 py-2">Remark</th>
+          </tr>
+        </thead>
+        {groups.map((g) => {
+          const l = g.rows.reduce((s, r) => s + r.litres, 0)
+          const a = g.rows.reduce((s, r) => s + r.amount, 0)
+          return (
+            <tbody key={g.key} className="border-b border-slate-200">
+              <tr className="bg-emerald-50/70">
+                <td colSpan={cols} className="px-4 py-2 text-sm font-bold text-emerald-900">
+                  {g.title}
+                  <span className="ml-2 text-xs font-medium text-emerald-700">
+                    {g.rows.length} {g.rows.length === 1 ? 'receipt' : 'receipts'}
+                  </span>
+                </td>
+              </tr>
+              {g.rows.map((r) => (
+                <tr key={r.id} className="border-t border-slate-100 align-top">
+                  <td className="whitespace-nowrap px-4 py-2 text-slate-600">{day(r.date)}</td>
+                  <td className="px-3 py-2 text-slate-800">{r.who}</td>
+                  <td className="px-3 py-2 text-slate-700">
+                    {r.vehicle}
+                    {r.general && <span className="ml-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">general</span>}
+                  </td>
+                  {hq && <td className="px-3 py-2 text-slate-500">{r.receipt || '—'}</td>}
+                  <td className="px-3 py-2 text-right tabular-nums">{n2(r.litres)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n2(r.amount)}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.remark || ''}</td>
+                </tr>
+              ))}
+              <tr className="border-t border-slate-200 font-semibold">
+                <td colSpan={hq ? 4 : 3} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
+                  Subtotal
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{n2(l)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{n2(a)}</td>
+                <td />
+              </tr>
+            </tbody>
+          )
+        })}
+        <tfoot>
+          <tr className="bg-slate-100 font-bold">
+            <td colSpan={hq ? 4 : 3} className="px-4 py-2.5 text-right text-xs uppercase tracking-wide text-slate-600">
+              Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
+            </td>
+            <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.litres)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.amount)}</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
     </div>
   )
 }
