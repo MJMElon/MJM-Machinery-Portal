@@ -509,6 +509,13 @@ export const TOPUP_STATUS = {
 }
 export const topupNo = (r) => `TU-${String(r.request_no ?? '').padStart(4, '0')}`
 
+/** One fleet card's usage in a month ('YYYY-MM'), claimed or not; null before migration 20261211 or without access. */
+export async function cardMonthUsage(companyId, cardId, month) {
+  const { data, error } = await supabase.rpc('machinery_card_month_usage', { p_company: companyId, p_card: cardId, p_month: month })
+  if (error) return null
+  return data
+}
+
 /** Fuel Manage main page: the fleet cards the signed-in person drives, with this month's quota / use and the latest purchases; null before migration 20261210. */
 export async function myFleetCards(companyId) {
   const { data, error } = await supabase.rpc('machinery_my_fleet_cards', { p_company: companyId })

@@ -15,9 +15,9 @@ import { printHtml } from '../../lib/printFrame.js'
 const cardText = (c, vById) =>
   c ? `${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${vById.get(c.vehicle_id).reg_no || vById.get(c.vehicle_id).name})` : ''}` : '—'
 
-export function RequestTopupModal({ company, cards, vById, balance, onClose, onSaved }) {
+export function RequestTopupModal({ company, cards, vById, balance, onClose, onSaved, cardId }) {
   const usable = cards.filter((c) => c.card_no && !['cancelled', 'inactive', 'application'].includes(c.status))
-  const [f, setF] = useState({ card_id: usable.length === 1 ? usable[0].id : '', amount: '', needed_by: '', reason: '' })
+  const [f, setF] = useState({ card_id: cardId || (usable.length === 1 ? usable[0].id : ''), amount: '', needed_by: '', reason: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
