@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom'
 import { CARD_STATUS } from '../../lib/diesel.js'
 import { money, num } from '../../lib/format.js'
 
-// A fleet card drawn as a card: fuel station colours, chip, card number,
+// A small fleet card picture: colours of the fuel station keyed in the card
+// details (Fuel station), card number,
 // vehicle and status; this month's litres against the subsidy quota and the
 // RM balance underneath. Clicking it opens the card.
 const STATION_THEMES = [
@@ -25,31 +26,29 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist }) {
   return (
     <Link to={`/diesel/cards/${card.id}`} className={`group block ${off ? 'opacity-60 grayscale' : ''}`} title="Open this fleet card">
       <div
-        className={`relative aspect-[1.586] overflow-hidden rounded-2xl bg-gradient-to-br ${theme(card.provider)} p-4 text-white shadow-md transition group-hover:-translate-y-0.5 group-hover:shadow-xl`}
+        className={`relative aspect-[1.586] overflow-hidden rounded-xl bg-gradient-to-br ${theme(card.provider)} p-3 text-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-xl`}
       >
         {/* soft shine */}
-        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-24 -left-10 h-48 w-48 rounded-full bg-black/10" />
+        <div className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full bg-white/10" />
+        <div className="pointer-events-none absolute -bottom-14 -left-6 h-28 w-28 rounded-full bg-black/10" />
         <div className="relative flex h-full flex-col">
           <div className="flex items-start justify-between gap-2">
-            <span className="text-sm font-bold tracking-wide">{card.provider || 'Fleet card'}</span>
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide backdrop-blur">{st.label}</span>
+            <span className="truncate text-xs font-bold tracking-wide">{card.provider || 'Fleet card'}</span>
+            <span className="shrink-0 rounded-full bg-white/20 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide backdrop-blur">{st.label}</span>
           </div>
-          {/* chip */}
-          <div className="mt-3 h-7 w-10 rounded-md bg-gradient-to-br from-yellow-200 to-amber-400 shadow-inner" />
           <div className="mt-auto">
-            <p className="font-mono text-lg font-semibold tracking-[0.12em] drop-shadow sm:text-xl">
-              {card.card_no ? spaced(card.card_no) : <span className="text-sm font-sans tracking-normal opacity-80">Not awarded yet</span>}
+            <p className="truncate font-mono text-[13px] font-semibold tracking-[0.08em] drop-shadow">
+              {card.card_no ? spaced(card.card_no) : <span className="font-sans text-xs tracking-normal opacity-80">Not awarded yet</span>}
             </p>
-            <div className="mt-1 flex items-end justify-between gap-2 text-xs">
+            <div className="mt-0.5 flex items-end justify-between gap-2 text-[10px]">
               <span className="truncate font-semibold uppercase tracking-wide opacity-90">{vehicle || 'No vehicle'}</span>
-              {card.status === 'application' && checklist && <span className="shrink-0 opacity-90">Check list {checklist}</span>}
+              {card.status === 'application' && checklist && <span className="shrink-0 opacity-90">{checklist}</span>}
             </div>
           </div>
         </div>
       </div>
       {card.status !== 'application' && (
-        <div className="mt-2 space-y-1 px-1 text-xs text-slate-600">
+        <div className="mt-1.5 space-y-0.5 px-0.5 text-[11px] text-slate-600">
           <div className="flex justify-between gap-2">
             <span>This month</span>
             <span className="tabular-nums">
@@ -58,7 +57,7 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist }) {
             </span>
           </div>
           {pct != null && (
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-1 overflow-hidden rounded-full bg-slate-200">
               <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
             </div>
           )}

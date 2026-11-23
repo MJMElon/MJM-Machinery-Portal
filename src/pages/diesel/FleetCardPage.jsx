@@ -9,19 +9,17 @@ import {
   Loading,
   inputCls,
 } from "../../components/diesel/shared.jsx";
-import { BalanceChart, DRIVER_COLORS, DriverShare } from "../../components/diesel/CardCharts.jsx";
+import { BalanceChart } from "../../components/diesel/CardCharts.jsx";
 import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
 import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
   cardBalances,
-  cardClaimLines,
   cardLedger,
   checklistDone,
   deleteCard,
   getCard,
-  listCardData,
   listPeople,
   listVehicles,
   personLabel,
@@ -67,25 +65,21 @@ export default function FleetCardPage({ mode }) {
   const [card, setCard] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [people, setPeople] = useState([]);
-  const [data, setData] = useState({ usage: [], reloads: [] });
   const [ledger, setLedger] = useState(null); // null until the database has machinery_card_ledger
   const [askTopup, setAskTopup] = useState(false);
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [claimLines, setClaimLines] = useState([]); // null before migration 20261128
-  const [shareMonth, setShareMonth] = useState(thisMonth()); // driver share chart, starts on this month
   const [vehicleQuery, setVehicleQuery] = useState("");
   const [showChecklist, setShowChecklist] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [c, v, p, d, lg] = await Promise.all([
+      const [c, v, p, lg] = await Promise.all([
         id ? getCard(id) : null,
         listVehicles(company.id),
         listPeople(company.id).catch(() => []),
-        id ? listCardData(company.id) : { usage: [], reloads: [] },
         id ? cardLedger(company.id).catch(() => null) : null,
       ]);
       setLedger(lg);
@@ -93,7 +87,6 @@ export default function FleetCardPage({ mode }) {
         throw new Error("Fleet card not found in this company.");
       setVehicles(v);
       setPeople(p);
-      setData(d);
       setCard(c);
       if (!c) setForm(EMPTY);
       if (c) {
@@ -128,16 +121,6 @@ export default function FleetCardPage({ mode }) {
     load();
   }, [load]);
 
-  // Fuel-claim receipts that belong to this card, for the year of the month shown in the driver chart.
-  const shareYear = Number(shareMonth.slice(0, 4));
-  useEffect(() => {
-    if (!id) return;
-    let live = true;
-    cardClaimLines(company.id, id, shareYear).then((r) => live && setClaimLines(r));
-    return () => {
-      live = false;
-    };
-  }, [id, company.id, shareYear]);
 
   const vById = useMemo(
     () => new Map(vehicles.map((v) => [v.id, v])),
@@ -270,9 +253,6 @@ export default function FleetCardPage({ mode }) {
   const st = CARD_STATUS[form.status] || CARD_STATUS.application;
   const month = thisMonth();
   const yr = String(ledgerYear);
-  // fill-ups on the card (typed, or from the fuel station statement) not already matched to a claim receipt counted below
-  const countedLineIds = new Set((claimLines || []).map((l) => l.id));
-  const typed = data.usage.filter((u) => u.card_id === id && !(u.claim_line_id && countedLineIds.has(u.claim_line_id)));
   const quota = form.subsidy_litres === "" ? null : Number(form.subsidy_litres);
   // RM balance: every reload less every fill-up on this card, month by month.
   const mine = (ledger || []).filter((r) => r.card_id === id);
@@ -310,29 +290,6 @@ export default function FleetCardPage({ mode }) {
     (t, r) => ({ inRM: t.inRM + r.inRM, outRM: t.outRM + r.outRM, outL: t.outL + r.outL }),
     { inRM: 0, outRM: 0, outL: 0 },
   );
-  // Driver share of the subsidy volume for the month shown: fleet-card
-  // litres only (claims + fill-ups typed on the card), card drivers first.
-  const byPerson = new Map();
-  const addL = (who, l) => byPerson.set(who || "", (byPerson.get(who || "") || 0) + Number(l || 0));
-  for (const l of claimLines || [])
-    if (l.payment === "fleet_card" && l.fill_date.startsWith(shareMonth)) addL(l.claimant_id, l.litres);
-  for (const u of typed) if (u.fill_date.startsWith(shareMonth)) addL(u.driver_id, u.litres);
-  const shareIds = [
-    ...form.driver_ids,
-    ...[...byPerson.keys()].filter((k) => !form.driver_ids.includes(k)),
-  ];
-  const shareDrivers = shareIds.map((uid, i) => ({
-    id: uid || "none",
-    name: uid ? (person.get(uid) ? personLabel(person.get(uid)) : "Other user") : "No driver recorded",
-    litres: byPerson.get(uid) || 0,
-    color: DRIVER_COLORS[i % DRIVER_COLORS.length],
-  }));
-  const moveMonth = (delta) => {
-    const [y, m] = shareMonth.split("-").map(Number);
-    const d = new Date(y, m - 1 + delta, 1);
-    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (next <= month) setShareMonth(next);
-  };
   const licence = form.licence_expiry
     ? Math.round(
         (new Date(form.licence_expiry) - new Date(new Date().toDateString())) /
@@ -477,21 +434,30 @@ export default function FleetCardPage({ mode }) {
       </div>
     </Card>
   );
+  const thisYear = new Date().getFullYear();
+  const firstYear = Math.min(thisYear, ...yearOptions);
   const yearSelect = (
-    <span className="w-28 shrink-0">
-      <select
-        value={ledgerYear}
-        onChange={(e) => setLedgerYear(Number(e.target.value))}
-        className={`${inputCls} h-9 px-2 text-sm`}
-        aria-label="Year"
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => setLedgerYear((y) => y - 1)}
+        disabled={ledgerYear <= firstYear}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+        aria-label="Previous year"
       >
-        {yearOptions.map((y) => (
-          <option key={y} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-    </span>
+        ‹
+      </button>
+      <span className="w-14 text-center text-sm font-semibold text-slate-800">{ledgerYear}</span>
+      <button
+        type="button"
+        onClick={() => setLedgerYear((y) => y + 1)}
+        disabled={ledgerYear >= thisYear}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+        aria-label="Next year"
+      >
+        ›
+      </button>
+    </div>
   );
 
   return (
@@ -576,14 +542,15 @@ export default function FleetCardPage({ mode }) {
       {inUse ? (
         <div className="space-y-4">
           {/* 1. Card in use: fleet card details with the vehicle */}
-          <Card className="p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <Card className="p-4">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
                 Fleet card details
               </h3>
               {checklistBtn}
             </div>
-            <div className="grid gap-x-10 lg:grid-cols-2">
+            <div className={ro ? "grid gap-x-8 md:grid-cols-2" : ""}>
               <div>
                   <Row label="Fleet card number" ro={ro} show={form.card_no}>
                     <input
@@ -624,7 +591,7 @@ export default function FleetCardPage({ mode }) {
                     </datalist>
                   </Row>
                   <Row
-                    label={inUse ? "Vehicle reg no." : "Vehicle"}
+                    label="Vehicle"
                     ro={ro}
                     show={
                       form.vehicle_id
@@ -663,7 +630,7 @@ export default function FleetCardPage({ mode }) {
               </div>
               <div>
                   <Row
-                    label="Subsidy volume (L / month)"
+                    label="Subsidy / month"
                     ro={ro}
                     show={quota != null ? `${num(quota, 2)} L` : ""}
                   >
@@ -676,7 +643,7 @@ export default function FleetCardPage({ mode }) {
                       className={box}
                     />
                   </Row>
-                  <Row label="Fuel Station Web Login ID" ro={ro} show={form.login_id}>
+                  <Row label="Web login ID" ro={ro} show={form.login_id}>
                     <input
                       value={form.login_id}
                       onChange={set("login_id")}
@@ -685,7 +652,7 @@ export default function FleetCardPage({ mode }) {
                       className={box}
                     />
                   </Row>
-                  <Row label="Login Password" ro={ro} show={form.login_password}>
+                  <Row label="Login password" ro={ro} show={form.login_password}>
                     <input
                       value={form.login_password}
                       onChange={set("login_password")}
@@ -704,7 +671,7 @@ export default function FleetCardPage({ mode }) {
               </div>
             </div>
             {inUse && (
-              <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center">
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-2 text-center">
                 <div>
                   <p className="text-[11px] text-slate-500">Subsidy volume</p>
                   <p className="text-sm font-semibold">
@@ -727,18 +694,10 @@ export default function FleetCardPage({ mode }) {
             )}
           </Card>
 
-          {form.kpdn_apply && showChecklist && checklistCard}
-
-          {/* 2. This month's usage: who used the card, for which vehicle, claimed or not */}
-          {!editing && <CardMonthUsage company={company} cardId={id} />}
-
-          {/* 3. Drivers sharing the card + fuel used this year (litres) */}
-          <Card className="p-5">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div>
-                <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-                  Fleet card drivers
-                </h3>
+          <Card className="p-4">
+            <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
+              Fleet card drivers
+            </h3>
               {form.driver_ids.length === 0 && ro ? (
                 <p className="text-sm text-slate-400">No driver set.</p>
               ) : (
@@ -787,27 +746,20 @@ export default function FleetCardPage({ mode }) {
                   )}
                 </ul>
               )}
-              </div>
-              <div>
-                <h3 className="mb-3 font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">
-                  Subsidy used by driver
-                </h3>
-                {claimLines == null ? (
-                  <p className="py-6 text-center text-sm text-slate-400">
-                    Run the Fuel SQL migration 20261128 (fleet card claim lines) to see the drivers&apos; share.
-                  </p>
-                ) : (
-                  <DriverShare
-                    month={shareMonth}
-                    onMonth={moveMonth}
-                    canNext={shareMonth < month}
-                    quota={quota}
-                    drivers={shareDrivers}
-                  />
-                )}
-              </div>
-            </div>
           </Card>
+          </div>
+
+          {form.kpdn_apply && showChecklist && checklistCard}
+
+          {/* 2. This month's usage (left) and the total by driver (right) */}
+          {!editing && (
+            <CardMonthUsage
+              company={company}
+              cardId={id}
+              quota={quota}
+              driverNames={form.driver_ids.map((uid) => (person.get(uid) ? personLabel(person.get(uid)) : "Unknown user"))}
+            />
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -1031,7 +983,7 @@ export default function FleetCardPage({ mode }) {
       {inUse && (
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-3">
-            <h3 className="font-semibold text-slate-800">Reloads, usage &amp; balance</h3>
+            <h3 className="font-semibold text-slate-800">Fleet card usage by month</h3>
             {yearSelect}
             <span className="flex-1" />
             <span className="text-sm text-slate-500">Card balance now</span>
@@ -1098,10 +1050,10 @@ export default function FleetCardPage({ mode }) {
 
 function Row({ label, ro, show, children }) {
   return (
-    <div className={`grid items-start border-b border-slate-100 py-2.5 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3 ${ro ? "grid-cols-[130px_minmax(0,1fr)] gap-3" : "gap-1"}`}>
-      <span className="pt-2 text-sm font-semibold text-slate-700">{label}</span>
+    <div className={`grid items-start border-b border-slate-100 ${ro ? "grid-cols-[110px_minmax(0,1fr)] gap-2 py-1.5" : "gap-1 py-2.5 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-3"}`}>
+      <span className={`${ro ? "pt-0.5" : "pt-2"} text-sm font-semibold text-slate-700`}>{label}</span>
       {ro ? (
-        <p className="min-h-10 py-2 text-sm text-slate-800">
+        <p className="py-0.5 text-sm text-slate-800">
           {show || <span className="text-slate-400">—</span>}
         </p>
       ) : (
