@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext.jsx'
 import DevLogin from './auth/DevLogin.jsx'
@@ -7,33 +7,39 @@ import { Shell } from './components/Shell.jsx'
 import { Button, Card, Spinner } from './components/ui.jsx'
 import PortalHome from './pages/PortalHome.jsx'
 import CmmsLayout from './pages/machinery/CmmsLayout.jsx'
-import WorkManage from './pages/machinery/WorkManage.jsx'
-import RepairMobile from './pages/machinery/RepairMobile.jsx'
-import WorkConsolidated from './pages/machinery/WorkConsolidated.jsx'
-import CaseDetail from './pages/machinery/CaseDetail.jsx'
-import MachineryProfile from './pages/machinery/MachineryProfile.jsx'
-import MachinePage from './pages/machinery/MachinePage.jsx'
-import CmmsHome from './pages/machinery/CmmsHome.jsx'
-import MachineImport from './pages/machinery/MachineImport.jsx'
-import MachineryRenewal from './pages/machinery/MachineryRenewal.jsx'
-import SupplierList from './pages/machinery/SupplierList.jsx'
-import CmmsUsers from './pages/machinery/CmmsUsers.jsx'
-import UserAccessEdit from './pages/machinery/UserAccessEdit.jsx'
-import CompanySettings from './pages/settings/CompanySettings.jsx'
 import DieselLayout from './pages/diesel/DieselLayout.jsx'
-import DieselHome from './pages/diesel/DieselHome.jsx'
-import DieselClaims from './pages/diesel/DieselClaims.jsx'
-import ClaimEdit from './pages/diesel/ClaimEdit.jsx'
-import ClaimView from './pages/diesel/ClaimView.jsx'
-import ClaimReview from './pages/diesel/ClaimReview.jsx'
-import DieselUsage from './pages/diesel/DieselUsage.jsx'
-import FuelRecords from './pages/diesel/FuelRecords.jsx'
-import FuelRecordMobile from './pages/diesel/FuelRecordMobile.jsx'
-import FleetCardManage from './pages/diesel/FleetCardManage.jsx'
-import FleetCardPage from './pages/diesel/FleetCardPage.jsx'
-import TopupPage from './pages/diesel/TopupPage.jsx'
-import DieselUsers from './pages/diesel/DieselUsers.jsx'
-import { WorkerFuel, WorkerHome, WorkerService, WorkerShell } from './pages/worker/WorkerApp.jsx'
+
+// Pages load when first opened (smaller first download; each module window
+// only fetches what it shows).
+const WorkManage = lazy(() => import('./pages/machinery/WorkManage.jsx'))
+const RepairMobile = lazy(() => import('./pages/machinery/RepairMobile.jsx'))
+const WorkConsolidated = lazy(() => import('./pages/machinery/WorkConsolidated.jsx'))
+const CaseDetail = lazy(() => import('./pages/machinery/CaseDetail.jsx'))
+const MachineryProfile = lazy(() => import('./pages/machinery/MachineryProfile.jsx'))
+const MachinePage = lazy(() => import('./pages/machinery/MachinePage.jsx'))
+const CmmsHome = lazy(() => import('./pages/machinery/CmmsHome.jsx'))
+const MachineImport = lazy(() => import('./pages/machinery/MachineImport.jsx'))
+const MachineryRenewal = lazy(() => import('./pages/machinery/MachineryRenewal.jsx'))
+const SupplierList = lazy(() => import('./pages/machinery/SupplierList.jsx'))
+const CmmsUsers = lazy(() => import('./pages/machinery/CmmsUsers.jsx'))
+const UserAccessEdit = lazy(() => import('./pages/machinery/UserAccessEdit.jsx'))
+const CompanySettings = lazy(() => import('./pages/settings/CompanySettings.jsx'))
+const DieselHome = lazy(() => import('./pages/diesel/DieselHome.jsx'))
+const DieselClaims = lazy(() => import('./pages/diesel/DieselClaims.jsx'))
+const ClaimEdit = lazy(() => import('./pages/diesel/ClaimEdit.jsx'))
+const ClaimView = lazy(() => import('./pages/diesel/ClaimView.jsx'))
+const ClaimReview = lazy(() => import('./pages/diesel/ClaimReview.jsx'))
+const DieselUsage = lazy(() => import('./pages/diesel/DieselUsage.jsx'))
+const FuelRecords = lazy(() => import('./pages/diesel/FuelRecords.jsx'))
+const FuelRecordMobile = lazy(() => import('./pages/diesel/FuelRecordMobile.jsx'))
+const FleetCardManage = lazy(() => import('./pages/diesel/FleetCardManage.jsx'))
+const FleetCardPage = lazy(() => import('./pages/diesel/FleetCardPage.jsx'))
+const TopupPage = lazy(() => import('./pages/diesel/TopupPage.jsx'))
+const DieselUsers = lazy(() => import('./pages/diesel/DieselUsers.jsx'))
+const WorkerFuel = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerFuel })))
+const WorkerHome = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerHome })))
+const WorkerService = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerService })))
+const WorkerShell = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerShell })))
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -41,6 +47,7 @@ export default function App() {
   if (!ready) return <FullSpinner />
 
   return (
+    <Suspense fallback={<FullSpinner />}>
     <Routes>
       {import.meta.env.DEV && <Route path="/login" element={user ? <Navigate to="/" replace /> : <DevLogin />} />}
       <Route element={<RequirePortalAdmin />}>
@@ -103,6 +110,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   )
 }
 

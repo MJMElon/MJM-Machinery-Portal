@@ -29,8 +29,8 @@ export function AuthProvider({ children }) {
       // The token is single-use, so the hand-off runs once per page load and
       // its result is shared (React StrictMode mounts effects twice in dev).
       const result = await handoffOnce()
-      if (active && result) {
-        if (result.ok) setHandoff('none')
+      if (active) {
+        if (!result || result.ok) setHandoff('none')
         else {
           setHandoffError(result.error)
           setHandoff('failed')
@@ -144,16 +144,52 @@ function takeGwToken() {
   return found.token
 }
 
+// The e-mail inside the token (read only to compare, the server checks the token).
+function tokenEmail(token) {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const json = JSON.parse(decodeURIComponent(escape(atob(part + '='.repeat((4 - (part.length % 4)) % 4)))))
+    return String(json.email || '').trim().toLowerCase() || null
+  } catch {
+    return null
+  }
+}
+
 let handoffPromise = null
-/** Redeems the gw_token (if any) once; resolves to null, { ok: true } or { ok: false, error }. */
+/**
+ * Redeems the gw_token (if any) once; resolves to null, { ok: true } or { ok: false, error }.
+ * Fast path: already signed in here as the same person → the page opens at
+ * once and the token is still checked in the background (access check +
+ * company sync on the server); if the Intranet no longer allows the person,
+ * they are signed out.
+ */
 function handoffOnce() {
   if (!handoffPromise) {
     const token = takeGwToken()
     handoffPromise = !token
       ? Promise.resolve(null)
-      : signInWithGatewayToken(token)
-          .then(() => ({ ok: true }))
-          .catch((e) => ({ ok: false, error: e.message || 'Could not sign in from MJM Intranet.' }))
+      : (async () => {
+          const email = tokenEmail(token)
+          const { data } = await supabase.auth.getSession()
+          const current = data?.session?.user?.email?.toLowerCase()
+          if (email && current && current === email) {
+            supabase.functions
+              .invoke('gw-login', { body: { token } })
+              .then(async ({ error }) => {
+                if (!error) return
+                const body = await error.context?.json?.().catch(() => null)
+                if (['not_allowed'].includes(body?.error)) {
+                  await supabase.auth.signOut()
+                  window.location.replace(INTRANET_URL)
+                }
+              })
+              .catch(() => {})
+            return null
+          }
+          return signInWithGatewayToken(token)
+            .then(() => ({ ok: true }))
+            .catch((e) => ({ ok: false, error: e.message || 'Could not sign in from MJM Intranet.' }))
+        })()
   }
   return handoffPromise
 }
