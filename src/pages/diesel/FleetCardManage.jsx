@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Badge, Button, Card } from '../../components/ui.jsx'
-import { IconEye, IconPlus } from '../../components/icons.jsx'
+import { Button, Card } from '../../components/ui.jsx'
+import { IconPlus } from '../../components/icons.jsx'
+import { FleetCardTile } from '../../components/diesel/FleetCardTile.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { CARD_CHECKLIST, CARD_STATUS, cardBalances, cardLedger, checklistDone, listCardData, listVehicles, vehicleLabel } from '../../lib/diesel.js'
-import { money, num, thisMonth } from '../../lib/format.js'
+import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, listCardData, listVehicles } from '../../lib/diesel.js'
+import { thisMonth } from '../../lib/format.js'
 
-// Fleet Card Manage: the fleet card list. Each card shows its number, fuel
-// station, entitled vehicle, subsidy volume, the balance volume left this
-// month, this month's reloads and the card's RM balance (every reload, by
-// hand or through a fuel claim, less every fill-up on the card: it must tally
-// with the fuel station). "New fleet card application" starts the check list.
+// Fleet Card Manage: every fleet card drawn as a card (number, fuel station,
+// vehicle, status), with this month's litres against the subsidy quota and
+// the RM balance under it; click a card to manage it. "Request top up" and
+// "New fleet card application" stay on top.
 export default function FleetCardManage() {
   const { company, access } = useOutletContext()
   const navigate = useNavigate()
@@ -42,9 +42,12 @@ export default function FleetCardManage() {
 
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const month = thisMonth()
-  const usedLitres = (cid) => data.usage.filter((u) => u.card_id === cid && u.fill_date.startsWith(month)).reduce((s, u) => s + Number(u.litres || 0), 0)
+  // Litres used on the card this month: from the card balance ledger (fuel-claim receipts + fill-ups on the card) when available
+  const usedLitres = (cid) =>
+    ledger
+      ? ledger.filter((r) => r.card_id === cid && r.kind === 'usage' && r.month === month).reduce((s, r) => s + Number(r.litres || 0), 0)
+      : data.usage.filter((u) => u.card_id === cid && u.fill_date.startsWith(month)).reduce((s, u) => s + Number(u.litres || 0), 0)
   const balance = cardBalances(ledger)
-  const reloadsThisMonth = (cid) => (ledger || []).filter((r) => r.card_id === cid && r.kind === 'reload' && r.month === month).reduce((s, r) => s + Number(r.amount || 0), 0)
   const cards = [...data.cards].sort((a, b) => ['cancelled', 'inactive'].includes(a.status) - ['cancelled', 'inactive'].includes(b.status) || String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz')))
 
   return (
@@ -65,9 +68,9 @@ export default function FleetCardManage() {
       />
       <ErrorBox>{error}</ErrorBox>
 
-      <Card className="overflow-hidden">
-        <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">
-          Fleet card list <span className="font-normal text-slate-500">· {company.name}</span>
+      <Card className="p-4 sm:p-5">
+        <h3 className="mb-4 font-semibold text-slate-800">
+          Fleet cards <span className="font-normal text-slate-500">· {company.name}</span>
         </h3>
         {loading ? (
           <Loading />
@@ -77,70 +80,20 @@ export default function FleetCardManage() {
             {access.can('cards', 'add') ? ' Or start with New fleet card application.' : ''}
           </Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-2.5">Fleet card number</th>
-                  <th className="px-3 py-2.5">Fuel station</th>
-                  <th className="px-3 py-2.5">Entitled vehicle</th>
-                  <th className="px-3 py-2.5 text-right">Subsidy volume</th>
-                  <th className="px-3 py-2.5 text-right">This month balance volume</th>
-                  <th className="px-3 py-2.5 text-right">Reloads this month</th>
-                  <th className="px-3 py-2.5 text-right">Card balance</th>
-                  <th className="w-28 px-3 py-2.5">Status</th>
-                  <th className="w-24 px-3 py-2.5 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {cards.map((c) => {
-                  const st = CARD_STATUS[c.status] || CARD_STATUS.active
-                  const used = usedLitres(c.id)
-                  const quota = c.subsidy_litres != null ? Number(c.subsidy_litres) : null
-                  const left = quota != null ? quota - used : null
-                  const done = checklistDone(c)
-                  return (
-                    <tr key={c.id} className="hover:bg-slate-50/60">
-                      <td className="px-5 py-3">
-                        <Link to={`/diesel/cards/${c.id}`} className="font-semibold tracking-wide text-slate-800 hover:text-brand">
-                          {c.card_no || <span className="font-normal italic text-slate-400">Not awarded yet</span>}
-                        </Link>
-                        {c.status === 'application' && (
-                          <span className="block text-xs text-slate-500">
-                            Check list {done} / {CARD_CHECKLIST.length}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-slate-700">{c.provider || '—'}</td>
-                      <td className="px-3 py-3 text-slate-700">{c.vehicle_id ? vehicleLabel(vById.get(c.vehicle_id)) : '—'}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{quota != null ? `${num(quota, 2)} L` : '—'}</td>
-                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${left != null && left < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-                        {left != null ? `${num(left, 2)} L` : '—'}
-                        {used > 0 && <span className="block text-xs font-normal text-slate-400">used {num(used, 2)} L</span>}
-                      </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{ledger ? money(reloadsThisMonth(c.id)) : '—'}</td>
-                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${ledger && (balance[c.id] || 0) < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-                        {ledger ? money(balance[c.id] || 0) : '—'}
-                      </td>
-                      <td className="px-3 py-3">
-                        <Badge color={st.color}>{st.label}</Badge>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex justify-center">
-                          <Link to={`/diesel/cards/${c.id}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-brand hover:bg-brand-light" title="View">
-                            <IconEye width={18} height={18} /> View
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            {cards.map((c) => (
+              <FleetCardTile
+                key={c.id}
+                card={c}
+                vehicle={c.vehicle_id ? vById.get(c.vehicle_id)?.reg_no || vById.get(c.vehicle_id)?.name : null}
+                usedL={usedLitres(c.id)}
+                balance={ledger ? balance[c.id] || 0 : null}
+                checklist={`${checklistDone(c)} / ${CARD_CHECKLIST.length}`}
+              />
+            ))}
           </div>
         )}
       </Card>
-
     </div>
   )
 }

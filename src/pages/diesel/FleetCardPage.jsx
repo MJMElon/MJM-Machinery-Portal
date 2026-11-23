@@ -10,6 +10,8 @@ import {
   inputCls,
 } from "../../components/diesel/shared.jsx";
 import { BalanceChart, DRIVER_COLORS, DriverShare } from "../../components/diesel/CardCharts.jsx";
+import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
+import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
@@ -67,6 +69,7 @@ export default function FleetCardPage({ mode }) {
   const [people, setPeople] = useState([]);
   const [data, setData] = useState({ usage: [], reloads: [] });
   const [ledger, setLedger] = useState(null); // null until the database has machinery_card_ledger
+  const [askTopup, setAskTopup] = useState(false);
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -519,6 +522,11 @@ export default function FleetCardPage({ mode }) {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
+              {card && card.card_no && !["cancelled", "inactive", "application"].includes(card.status) && (
+                <Button type="button" onClick={() => setAskTopup(true)}>
+                  Request top up
+                </Button>
+              )}
               {access.can("cards", "edit") && (
                 <Button
                   type="button"
@@ -719,7 +727,10 @@ export default function FleetCardPage({ mode }) {
 
           {form.kpdn_apply && showChecklist && checklistCard}
 
-          {/* 2. Drivers sharing the card + fuel used this year (litres) */}
+          {/* 2. This month's usage: who used the card, for which vehicle, claimed or not */}
+          {!editing && <CardMonthUsage company={company} cardId={id} />}
+
+          {/* 3. Drivers sharing the card + fuel used this year (litres) */}
           <Card className="p-5">
             <div className="grid gap-6 lg:grid-cols-2">
               <div>
@@ -1068,6 +1079,17 @@ export default function FleetCardPage({ mode }) {
         </div>
       )}
 
+      {askTopup && card && (
+        <RequestTopupModal
+          company={company}
+          cards={[card]}
+          vById={vById}
+          balance={ledger ? cardBalances(ledger) : null}
+          cardId={card.id}
+          onClose={() => setAskTopup(false)}
+          onSaved={() => navigate("/diesel/cards/topup")}
+        />
+      )}
     </form>
   );
 }
