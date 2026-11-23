@@ -87,9 +87,7 @@ export default function FleetCardManage() {
 
       <Card className="p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h3 className="font-semibold text-slate-800">
-            Fleet cards <span className="font-normal text-slate-500">· {company.name}</span>
-          </h3>
+          <h3 className="font-semibold text-slate-800">Fleet cards</h3>
           <LastImportLine imports={imports} onOpen={setShowImport} />
         </div>
         {loading ? (
@@ -100,7 +98,7 @@ export default function FleetCardManage() {
             {access.can('cards', 'add') ? ' Or start with New fleet card application.' : ''}
           </Empty>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-7">
             {cards.map((c) => (
               <FleetCardTile
                 key={c.id}

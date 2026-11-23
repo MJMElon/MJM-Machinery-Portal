@@ -155,6 +155,7 @@ export function DriverShare({ month, onMonth, canNext, quota, drivers }) {
 
   return (
     <div>
+      {onMonth && (
       <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" onClick={() => onMonth(-1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Previous month">
           ‹
@@ -170,6 +171,7 @@ export function DriverShare({ month, onMonth, canNext, quota, drivers }) {
           ›
         </button>
       </div>
+      )}
 
       <div className="flex h-5 w-full overflow-hidden rounded-full bg-slate-100" role="img" aria-label="Subsidy volume used by each driver">
         {shown.map((d) => (
@@ -187,6 +189,7 @@ export function DriverShare({ month, onMonth, canNext, quota, drivers }) {
             <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: d.color }} />
             <span className="flex-1 truncate text-slate-800">{d.name}</span>
             <span className="tabular-nums text-slate-500">{num(d.litres, 2)} L</span>
+            {d.rm != null && <span className="w-20 text-right tabular-nums text-slate-500">{money(d.rm)}</span>}
             <span className="w-12 text-right font-semibold tabular-nums text-slate-900">{Math.round(pct(d.litres))}%</span>
           </li>
         ))}
@@ -195,6 +198,7 @@ export function DriverShare({ month, onMonth, canNext, quota, drivers }) {
             <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-sm ${over > 0 ? "bg-red-500" : "bg-slate-200"}`} />
             <span className="flex-1">{over > 0 ? "Over the subsidy volume" : "Left this month"}</span>
             <span className="tabular-nums">{num(over > 0 ? over : left, 2)} L</span>
+            {drivers.some((d) => d.rm != null) && <span className="w-20" />}
             <span className="w-12 text-right font-semibold tabular-nums">{Math.round(((over > 0 ? over : left) / quota) * 100)}%</span>
           </li>
         ) : null}
