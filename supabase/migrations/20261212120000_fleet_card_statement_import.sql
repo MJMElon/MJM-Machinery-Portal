@@ -1,7 +1,7 @@
 -- =====================================================================
 -- >>> RUN THIS IN THE **MACHINERY PORTAL** DATABASE <<<
 -- >>> Supabase project qcvbzzdbbqmnrljfnxjp (shared with MachTrek)   <<<
--- Needs 20261211 (card month usage). Safe to run more than once.
+-- Needs 20261208. Includes 20261210 + 20261211 (no need to run those). Safe to run more than once.
 -- =====================================================================
 -- Daily fleet card statement import (Setel or another station portal):
 -- an AI agent (or a person, with a CSV in Fleet Card Manage) sends each
