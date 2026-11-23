@@ -11,6 +11,7 @@ import {
 } from "../../components/diesel/shared.jsx";
 import { BalanceChart } from "../../components/diesel/CardCharts.jsx";
 import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
+import { FleetCardInUse } from "../../components/diesel/FleetCardInUse.jsx";
 import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
 import {
   CARD_CHECKLIST,
@@ -249,6 +250,20 @@ export default function FleetCardPage({ mode }) {
   }
 
   if (loading) return <Loading />;
+  // A card in use (tested) has its own page, edited in place.
+  if (card && card.status !== "application")
+    return (
+      <FleetCardInUse
+        company={company}
+        access={access}
+        card={card}
+        vehicles={vehicles}
+        people={people}
+        ledger={ledger}
+        reload={load}
+        startEdit={mode === "edit"}
+      />
+    );
 
   const st = CARD_STATUS[form.status] || CARD_STATUS.application;
   const month = thisMonth();

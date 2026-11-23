@@ -77,6 +77,20 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
           <h3 className="font-semibold text-slate-800">Usage</h3>
           {nav}
           <span className="flex-1" />
+          {rows && (
+            <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+              <span>
+                Subsidy <b className="tabular-nums text-slate-800">{quota != null ? `${n2(quota)} L` : '—'}</b>
+              </span>
+              <span>
+                Used <b className="tabular-nums text-slate-800">{n2(totL)} L</b>
+              </span>
+              <span>
+                Balance{' '}
+                <b className={`tabular-nums ${quota != null && quota - totL < 0 ? 'text-red-600' : 'text-brand-dark'}`}>{quota != null ? `${n2(quota - totL)} L` : '—'}</b>
+              </span>
+            </span>
+          )}
           {rows && notClaimed > 0 && (
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">{notClaimed} not claimed yet</span>
           )}

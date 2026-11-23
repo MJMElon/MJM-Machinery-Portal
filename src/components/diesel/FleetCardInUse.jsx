@@ -1,0 +1,386 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import PageHeader from '../PageHeader.jsx'
+import { Badge, Button, Card } from '../ui.jsx'
+import { IconPencil, IconTrash } from '../icons.jsx'
+import { ErrorBox, inputCls } from './shared.jsx'
+import { MonthBars } from './CardCharts.jsx'
+import { CardMonthUsage } from './CardMonthUsage.jsx'
+import { RequestTopupModal } from './TopupRequests.jsx'
+import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, vehicleLabel } from '../../lib/diesel.js'
+import { money, num, thisMonth } from '../../lib/format.js'
+
+// A fleet card in use (tested), one page, edited in place:
+//   top     Fleet card details (Edit → fields, status incl. Inactive, Save,
+//           Delete fleet card) | Fleet card drivers (Edit → add / remove, Save),
+//           same height, the driver list scrolls
+//   middle  this month's usage (‹ › month) with subsidy / used / balance,
+//           beside the month's usage by driver
+//   bottom  usage by month Jan – Dec in litres and in RM (‹ › year) and the
+//           card balance now.
+// Editing needs Fleet Card Manage edit rights (delete: delete rights);
+// everyone else only reads.
+
+const box = `${inputCls} h-9 px-3 text-sm`
+const STATUSES = ['active', 'inactive', 'blocked', 'cancelled']
+const STATIONS = ['Petronas', 'Setel', 'Shell', 'Petron', 'Caltex', 'BHP']
+
+const detailsOf = (c) => ({
+  card_no: c.card_no || '',
+  status: c.status || 'active',
+  provider: c.provider || '',
+  vehicle_id: c.vehicle_id || '',
+  subsidy_litres: c.subsidy_litres ?? '',
+  login_id: c.login_id || '',
+  login_password: c.login_password || '',
+  notes: c.notes || ''
+})
+const driversOf = (c) => (c.driver_ids?.length ? c.driver_ids : c.driver_id ? [c.driver_id] : [])
+
+export function FleetCardInUse({ company, access, card, vehicles, people, ledger, reload, startEdit = false }) {
+  const navigate = useNavigate()
+  const canEdit = access.can('cards', 'edit')
+  const canDelete = access.can('cards', 'delete')
+  const [editDetails, setEditDetails] = useState(startEdit && canEdit)
+  const [editDrivers, setEditDrivers] = useState(false)
+  const [form, setForm] = useState(() => detailsOf(card))
+  const [drivers, setDrivers] = useState(() => driversOf(card))
+  const [vehicleQuery, setVehicleQuery] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [askTopup, setAskTopup] = useState(false)
+  const [year, setYear] = useState(new Date().getFullYear())
+
+  // a fresh copy of the card (after saving) resets the boxes
+  useEffect(() => {
+    setForm(detailsOf(card))
+    setDrivers(driversOf(card))
+  }, [card])
+
+  const vById = useMemo(() => new Map(vehicles.map((v) => [v.id, v])), [vehicles])
+  const person = useMemo(() => new Map(people.map((p) => [p.user_id, p])), [people])
+  const nameOf = (uid) => (person.get(uid) ? personLabel(person.get(uid)) : 'Unknown user')
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const st = CARD_STATUS[card.status] || CARD_STATUS.active
+  const quota = card.subsidy_litres == null ? null : Number(card.subsidy_litres)
+
+  async function run(fn) {
+    setBusy(true)
+    setError('')
+    try {
+      await fn()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const saveDetails = () =>
+    run(async () => {
+      if (!form.vehicle_id) throw new Error('Choose the vehicle.')
+      await saveCard(company.id, {
+        id: card.id,
+        card_no: form.card_no.trim() || null,
+        status: form.status,
+        provider: form.provider.trim() || null,
+        vehicle_id: form.vehicle_id,
+        subsidy_litres: form.subsidy_litres === '' ? null : Number(form.subsidy_litres),
+        login_id: form.login_id.trim() || null,
+        login_password: form.login_password.trim() || null,
+        notes: form.notes.trim() || null
+      })
+      setEditDetails(false)
+      await reload()
+    })
+  const saveDrivers = () =>
+    run(async () => {
+      await saveCard(company.id, { id: card.id, driver_ids: drivers, driver_id: drivers[0] || null })
+      setEditDrivers(false)
+      await reload()
+    })
+  const remove = () => {
+    if (!window.confirm(`Delete fleet card ${card.card_no || ''}? This cannot be undone.`)) return
+    run(async () => {
+      await deleteCard(card.id)
+      navigate('/diesel/cards', { replace: true })
+    })
+  }
+
+  // vehicle choice: search any machine; light vehicles first
+  const q = vehicleQuery.trim().toLowerCase()
+  const vehicleList = vehicles
+    .filter((v) => v.id === form.vehicle_id || !q || [v.name, v.reg_no, v.machine_type, v.brand, v.model].filter(Boolean).join(' ').toLowerCase().includes(q))
+    .sort((a, b) => Number(/light/i.test(b.machine_type || '')) - Number(/light/i.test(a.machine_type || '')) || a.name.localeCompare(b.name))
+
+  // usage by month for the year shown, and the balance now
+  const mine = (ledger || []).filter((r) => r.card_id === card.id)
+  const balanceNow = cardBalances(mine)[card.id] || 0
+  const month = thisMonth()
+  const monthRows = Array.from({ length: 12 }, (_, i) => {
+    const m = `${year}-${String(i + 1).padStart(2, '0')}`
+    const used = mine.filter((r) => r.month === m && r.kind === 'usage')
+    return {
+      month: m,
+      future: m > month,
+      litres: used.reduce((t, r) => t + Number(r.litres || 0), 0),
+      rm: used.reduce((t, r) => t + Number(r.amount || 0), 0)
+    }
+  })
+  const thisYear = new Date().getFullYear()
+  const firstYear = Math.min(thisYear, ...mine.map((r) => Number(r.month.slice(0, 4))))
+
+  const editBtn = (onClick) =>
+    canEdit && (
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+      >
+        <IconPencil width={14} height={14} /> Edit
+      </button>
+    )
+  const arrow = 'flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30'
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        backTo="/diesel/cards"
+        backLabel="Back to fleet card list"
+        title={
+          <span className="inline-flex flex-wrap items-center gap-3">
+            {card.card_no || 'Fleet card'}
+            <Badge color={st.color}>{st.label}</Badge>
+          </span>
+        }
+        right={
+          card.card_no && !['cancelled', 'inactive'].includes(card.status) ? <Button onClick={() => setAskTopup(true)}>Request top up</Button> : null
+        }
+      />
+      <ErrorBox>{error}</ErrorBox>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        {/* Fleet card details */}
+        <Card className="p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">Fleet card details</h3>
+            {!editDetails && editBtn(() => setEditDetails(true))}
+          </div>
+          {!editDetails ? (
+            <div className="grid gap-x-8 md:grid-cols-2">
+              <div>
+                <Field label="Card number">{card.card_no}</Field>
+                <Field label="Status">{st.label}</Field>
+                <Field label="Fuel station">{card.provider}</Field>
+                <Field label="Vehicle">{card.vehicle_id ? vehicleLabel(vById.get(card.vehicle_id)) : ''}</Field>
+              </div>
+              <div>
+                <Field label="Subsidy / month">{quota != null ? `${num(quota, 2)} L` : ''}</Field>
+                <Field label="Web login ID">{card.login_id}</Field>
+                <Field label="Login password">{card.login_password}</Field>
+                <Field label="Notes">{card.notes}</Field>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+                <Input label="Card number">
+                  <input value={form.card_no} onChange={set('card_no')} maxLength={40} className={box} />
+                </Input>
+                <Input label="Status">
+                  <select value={form.status} onChange={set('status')} className={box}>
+                    {STATUSES.map((k) => (
+                      <option key={k} value={k}>
+                        {CARD_STATUS[k].label}
+                      </option>
+                    ))}
+                  </select>
+                </Input>
+                <Input label="Fuel station">
+                  <input value={form.provider} onChange={set('provider')} list="fuel-stations-inuse" placeholder="Petronas / Shell / Petron" className={box} />
+                  <datalist id="fuel-stations-inuse">
+                    {STATIONS.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </Input>
+                <Input label="Subsidy / month (L)">
+                  <input type="number" min="0" step="0.01" value={form.subsidy_litres} onChange={set('subsidy_litres')} className={box} />
+                </Input>
+                <Input label="Vehicle" wide>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input type="search" value={vehicleQuery} onChange={(e) => setVehicleQuery(e.target.value)} placeholder="Search name, plate, type…" className={box} aria-label="Search vehicle" />
+                    <select value={form.vehicle_id} onChange={set('vehicle_id')} className={box} aria-label="Vehicle">
+                      <option value="">Choose vehicle…</option>
+                      {vehicleList.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {vehicleLabel(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </Input>
+                <Input label="Web login ID">
+                  <input value={form.login_id} onChange={set('login_id')} maxLength={80} autoComplete="off" className={box} />
+                </Input>
+                <Input label="Login password">
+                  <input value={form.login_password} onChange={set('login_password')} maxLength={80} autoComplete="off" className={box} />
+                </Input>
+                <Input label="Notes" wide>
+                  <input value={form.notes} onChange={set('notes')} maxLength={500} className={box} />
+                </Input>
+              </div>
+              {form.status !== card.status && form.status === 'inactive' && (
+                <p className="mt-2 text-xs text-amber-700">Inactive: the card is no longer offered on fuel claims. Its history stays.</p>
+              )}
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                {canDelete && (
+                  <button type="button" onClick={remove} disabled={busy} className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:underline disabled:opacity-50">
+                    <IconTrash width={16} height={16} /> Delete fleet card
+                  </button>
+                )}
+                <span className="flex-1" />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setForm(detailsOf(card))
+                    setEditDetails(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" disabled={busy} onClick={saveDetails}>
+                  {busy ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Fleet card drivers: as tall as the details box, the list scrolls */}
+        <Card className="relative p-4 lg:min-h-[220px]">
+          <div className="flex flex-col lg:absolute lg:inset-0 lg:p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">Fleet card drivers</h3>
+              {!editDrivers && editBtn(() => setEditDrivers(true))}
+            </div>
+            <div className="max-h-72 min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 lg:max-h-none">
+              {drivers.length === 0 && <p className="px-3 py-4 text-sm text-slate-400">No driver set.</p>}
+              <ul className="divide-y divide-slate-100">
+                {drivers.map((uid, i) => (
+                  <li key={uid} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">{i + 1}</span>
+                    <span className="flex-1 truncate text-slate-800">{nameOf(uid)}</span>
+                    {i === 0 && <span className="text-xs text-slate-500">Main driver</span>}
+                    {editDrivers && (
+                      <button
+                        type="button"
+                        onClick={() => setDrivers((d) => d.filter((x) => x !== uid))}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Remove ${nameOf(uid)}`}
+                      >
+                        <IconTrash width={15} height={15} />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {editDrivers && (
+              <div className="mt-3 space-y-2">
+                <select
+                  value=""
+                  onChange={(e) => e.target.value && setDrivers((d) => (d.includes(e.target.value) ? d : [...d, e.target.value]))}
+                  className={box}
+                  aria-label="Add driver"
+                >
+                  <option value="">+ Add driver…</option>
+                  {people
+                    .filter((p) => !drivers.includes(p.user_id))
+                    .map((p) => (
+                      <option key={p.user_id} value={p.user_id}>
+                        {personLabel(p)}
+                      </option>
+                    ))}
+                </select>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      setDrivers(driversOf(card))
+                      setEditDrivers(false)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="button" disabled={busy} onClick={saveDrivers}>
+                    {busy ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* this month's usage (with subsidy / used / balance) | usage by driver */}
+      <CardMonthUsage company={company} cardId={card.id} quota={quota} driverNames={driversOf(card).map(nameOf)} />
+
+      {/* usage by month, litres and RM, and the balance now */}
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2.5">
+          <h3 className="font-semibold text-slate-800">Fleet card usage by month</h3>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setYear((y) => y - 1)} disabled={year <= firstYear} className={arrow} aria-label="Previous year">
+              ‹
+            </button>
+            <span className="w-14 text-center text-sm font-semibold text-slate-800">{year}</span>
+            <button type="button" onClick={() => setYear((y) => y + 1)} disabled={year >= thisYear} className={arrow} aria-label="Next year">
+              ›
+            </button>
+          </div>
+          <span className="flex-1" />
+          <span className="text-sm text-slate-500">Card balance now</span>
+          <span className={`text-lg font-bold tabular-nums ${balanceNow < 0 ? 'text-red-600' : 'text-brand-dark'}`}>{ledger ? money(balanceNow) : '—'}</span>
+        </div>
+        <div className="grid gap-6 px-4 py-4 md:grid-cols-2">
+          <MonthBars title="Usage (litres)" color="#2a78d6" rows={monthRows.map((r) => ({ ...r, value: r.litres }))} fmt={(v) => `${num(v, 2)} L`} />
+          <MonthBars title="Usage (RM)" color="#1f9d55" rows={monthRows.map((r) => ({ ...r, value: r.rm }))} fmt={(v) => money(v)} />
+        </div>
+      </Card>
+
+      {askTopup && (
+        <RequestTopupModal
+          company={company}
+          cards={[card]}
+          vById={vById}
+          balance={ledger ? cardBalances(ledger) : null}
+          cardId={card.id}
+          onClose={() => setAskTopup(false)}
+          onSaved={() => navigate('/diesel/cards/topup')}
+        />
+      )}
+    </div>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-2 border-b border-slate-100 py-1.5 text-sm">
+      <span className="font-semibold text-slate-700">{label}</span>
+      <span className="break-words text-slate-800">{children || <span className="text-slate-400">—</span>}</span>
+    </div>
+  )
+}
+
+function Input({ label, wide, children }) {
+  return (
+    <label className={`block ${wide ? 'md:col-span-2' : ''}`}>
+      <span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span>
+      {children}
+    </label>
+  )
+}

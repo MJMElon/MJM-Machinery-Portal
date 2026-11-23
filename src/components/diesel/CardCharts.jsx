@@ -206,3 +206,81 @@ export function DriverShare({ month, onMonth, canNext, quota, drivers }) {
     </div>
   );
 }
+
+/**
+ * One measure month by month (Jan – Dec): bars, hover / tap a month for the value.
+ * rows: 12 × { month 'YYYY-MM', value, future }; fmt(value) → text.
+ */
+export function MonthBars({ title, rows, color, fmt }) {
+  const [hover, setHover] = useState(null);
+  const box = useRef(null);
+  const [W, setW] = useState(480);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(260, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const H = 170;
+  const padL = 38;
+  const padR = 8;
+  const padT = 12;
+  const padB = 22;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const hi = Math.max(1, ...rows.map((r) => r.value));
+  const step = niceStep(hi);
+  const top = Math.ceil(hi / step) * step;
+  const y = (v) => padT + ((top - v) / top) * innerH;
+  const slot = innerW / 12;
+  const barW = Math.max(4, Math.min(22, slot * 0.55));
+  const cx = (i) => padL + i * slot + slot / 2;
+  const ticks = [];
+  for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+  const total = rows.reduce((t, r) => t + r.value, 0);
+  const h = hover != null ? rows[hover] : null;
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
+          {title}
+        </span>
+        <span className="text-xs text-slate-500">
+          Year <b className="tabular-nums text-slate-800">{fmt(total)}</b>
+        </span>
+      </div>
+      <div className="relative" ref={box}>
+        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label={title} onMouseLeave={() => setHover(null)}>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#cbd5e1" : "#eef2f6"} strokeWidth="1" />
+              <text x={padL - 6} y={y(t) + 3.5} textAnchor="end" fontSize="10" fill="#64748b">
+                {short(t)}
+              </text>
+            </g>
+          ))}
+          {rows.map((r, i) => (
+            <g key={r.month} onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)}>
+              <rect x={padL + i * slot} y={padT} width={slot} height={innerH} fill={hover === i ? "#f1f5f9" : "transparent"} />
+              {r.value > 0 && <rect x={cx(i) - barW / 2} y={y(r.value)} width={barW} height={y(0) - y(r.value)} rx="2" fill={color} />}
+              <text x={cx(i)} y={H - 7} textAnchor="middle" fontSize="10" fill={r.future ? "#cbd5e1" : "#64748b"}>
+                {W < 400 ? MONTHS[i][0] : MONTHS[i]}
+              </text>
+            </g>
+          ))}
+        </svg>
+        {h && (
+          <div
+            className="pointer-events-none absolute top-1 z-10 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs shadow-lg"
+            style={{ left: `${Math.min(70, Math.max(0, ((cx(hover) - 50) / W) * 100))}%` }}
+          >
+            <p className="font-semibold text-slate-800">{monthLabel(h.month)}</p>
+            <p className="tabular-nums text-slate-700">{h.future ? "—" : fmt(h.value)}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
