@@ -7,7 +7,7 @@ import { ErrorBox, inputCls } from './shared.jsx'
 import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
 import { RequestTopupModal } from './TopupRequests.jsx'
-import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
+import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
 import { PasswordField, PasswordInput } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
 
@@ -357,6 +357,9 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         </Card>
       </div>
 
+      {/* automatic top-up request: Procurement sets the balance and the amount */}
+      <AutoTopupBox card={card} canSet={Boolean(access.procurement) && !card.status?.match(/inactive|cancelled/)} nameOf={nameOf} balanceNow={ledger ? balanceNow : null} onSaved={reload} />
+
       {/* this month's usage (with subsidy / used / balance) | usage by driver */}
       <CardMonthUsage company={company} cardId={card.id} quota={quota} driverNames={driversOf(card).map(nameOf)} />
 
@@ -412,5 +415,101 @@ function Input({ label, wide, children }) {
       <span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span>
       {children}
     </label>
+  )
+}
+
+// "Auto top-up request" box: when the card balance is below RM X, a top-up
+// request of RM Y is sent by itself (checked every hour, when statements come
+// in and when Fleet Card Manage opens; migration 20261220). Only Procurement
+// sets it; "Request top up" by hand stays.
+function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
+  const ready = 'auto_topup' in card // the database has the columns
+  const [on, setOn] = useState(Boolean(card.auto_topup))
+  const [below, setBelow] = useState(card.auto_topup_below ?? '')
+  const [amount, setAmount] = useState(card.auto_topup_amount ?? '')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    setOn(Boolean(card.auto_topup))
+    setBelow(card.auto_topup_below ?? '')
+    setAmount(card.auto_topup_amount ?? '')
+  }, [card.id, card.auto_topup, card.auto_topup_below, card.auto_topup_amount])
+  const dirty = on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_amount ?? '')
+  const valid = !on || (Number(below) >= 0 && below !== '' && Number(amount) > 0)
+
+  async function save() {
+    setBusy(true)
+    setMsg('')
+    try {
+      await setAutoTopup(card.id, on, below, amount)
+      await onSaved()
+      setMsg('Saved')
+    } catch (e) {
+      setMsg(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const box = `${inputCls} h-10 pl-11 text-right font-semibold tabular-nums`
+  const rm = (v, set, label) => (
+    <span className="relative block w-36">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">RM</span>
+      <input type="number" min="0" step="0.01" inputMode="decimal" value={v} onChange={(e) => set(e.target.value)} disabled={!canSet || !on || busy} aria-label={label} placeholder="0.00" className={box} />
+    </span>
+  )
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">Auto top-up request</h3>
+          <p className="mt-0.5 text-xs text-slate-500">Sends a top-up request by itself when the card balance gets low. Request top up by hand still works.</p>
+        </div>
+        <label className={`inline-flex items-center gap-2 text-sm font-semibold ${canSet ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+          <span className={on ? 'text-emerald-700' : 'text-slate-500'}>{on ? 'On' : 'Off'}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            disabled={!canSet || busy || !ready}
+            onClick={() => setOn((v) => !v)}
+            className={`relative h-6 w-11 rounded-full transition ${on ? 'bg-emerald-500' : 'bg-slate-300'} disabled:cursor-not-allowed`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+        </label>
+      </div>
+
+      {!ready ? (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Needs the SQL migration 20261220 (automatic top-up) in the database.</p>
+      ) : (
+        <>
+          <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm ${on ? 'text-slate-700' : 'text-slate-400'}`}>
+            <span>When the card balance is below</span>
+            {rm(below, setBelow, 'Balance below')}
+            <span>request a top-up of</span>
+            {rm(amount, setAmount, 'Top-up amount')}
+            {canSet && (
+              <span className="ml-auto flex items-center gap-3">
+                {msg && <span className={`text-sm ${msg === 'Saved' ? 'text-green-700' : 'text-red-600'}`}>{msg}</span>}
+                <Button size="sm" disabled={busy || !dirty || !valid} onClick={save}>
+                  {busy ? 'Saving…' : 'Save'}
+                </Button>
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {card.auto_topup
+              ? `On · requests are sent in the name of ${card.auto_topup_by ? nameOf(card.auto_topup_by) : 'Procurement'} and approved as usual${
+                  card.auto_topup_last_at ? ` · last automatic request ${new Date(card.auto_topup_last_at).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
+                }${balanceNow != null ? ` · balance now ${money(balanceNow)}` : ''}`
+              : canSet
+                ? 'Off. Switch it on, fill in both amounts and Save.'
+                : 'Off. Only Procurement can set it.'}
+          </p>
+        </>
+      )}
+    </Card>
   )
 }
