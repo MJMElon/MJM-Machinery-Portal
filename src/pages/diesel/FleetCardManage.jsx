@@ -152,9 +152,12 @@ export default function FleetCardManage() {
                 <IconConsolidate width={20} height={20} />
               </button>
             )}
-            <Button variant="secondary" onClick={() => setAsking(true)}>
-              <IconPlus width={18} height={18} /> Request top up
-            </Button>
+            {/* Only Procurement (and super admins) request top-ups */}
+            {access.procurement && (
+              <Button variant="secondary" onClick={() => setAsking(true)}>
+                <IconPlus width={18} height={18} /> Request top up
+              </Button>
+            )}
           </div>
         }
       />

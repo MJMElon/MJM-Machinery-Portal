@@ -60,7 +60,7 @@ export default function TopupPage() {
         backLabel="Back to fleet card list"
         title="Fleet card top up"
         right={
-          topups && (
+          topups && access.procurement && (
             <Button onClick={() => setAsking(true)}>
               <IconPlus width={18} height={18} /> Request top up
             </Button>

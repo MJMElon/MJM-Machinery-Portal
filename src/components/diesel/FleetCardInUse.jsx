@@ -161,7 +161,7 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         }
         right={
           <div className="flex flex-wrap gap-2">
-            {card.card_no && !['cancelled', 'inactive'].includes(card.status) && <Button onClick={() => setAskTopup(true)}>Request top up</Button>}
+            {access.procurement && card.card_no && !['cancelled', 'inactive'].includes(card.status) && <Button onClick={() => setAskTopup(true)}>Request top up</Button>}
             {canDelete && (
               <Button variant="secondary" className="text-red-600" disabled={busy} onClick={remove}>
                 <IconTrash width={18} height={18} /> Delete fleet card
