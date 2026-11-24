@@ -473,12 +473,12 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
     const w = await autoTopupStatus(card.id)
     setWhy(w)
     const tu = (n) => `TU-${String(n ?? '').padStart(4, '0')}`
-    if (made && w?.waiting) setMsg(`New request sent: ${tu(w.waiting.request_no)} · ${money(w.waiting.amount)}`)
-    else if (made) setMsg('New request sent')
+    if (made && w?.waiting) setMsg(`${tu(w.waiting.request_no)} (${money(w.waiting.amount)}) is newly created and waiting for approval`)
+    else if (made) setMsg('A new request is created and waiting for approval')
     else if (!w) setMsg('Checked')
     else if (w.card_status !== 'active') setMsg(`No request: the card is ${w.card_status}`)
     else if (w.waiting)
-      setMsg(`${tu(w.waiting.request_no)} (${money(w.waiting.amount)}) is ${w.waiting.status === 'pending' ? 'still waiting for approval' : 'approved; its top-up claim is not submitted yet'}`)
+      setMsg(`${tu(w.waiting.request_no)} (${money(w.waiting.amount)}) is ${w.waiting.status === 'pending' ? 'waiting for approval' : 'approved; its top-up claim is not submitted yet'}`)
     else if (Number(w.balance) >= Number(card.auto_topup_below)) setMsg(`No request needed: balance ${money(w.balance)} is not below the min`)
     else setMsg(`No request: ${money(card.auto_topup_amount)} would take the card above the max (balance ${money(w.balance)}, on the way ${money(w.on_way || 0)})`)
     setChecking(false)
@@ -545,7 +545,7 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
             {canSet && (
               <span className="ml-auto flex items-center gap-3">
                 {msg && (
-                  <span className={`text-sm ${msg === 'Saved' || /^New request sent|^No request needed|^Checked/.test(msg) ? 'text-green-700' : /^TU-|^No request:/.test(msg) ? 'text-amber-700' : 'text-red-600'}`}>{msg}</span>
+                  <span className={`text-sm ${msg === 'Saved' || /newly created|^A new request|^No request needed|^Checked/.test(msg) ? 'text-green-700' : /^TU-|^No request:/.test(msg) ? 'text-amber-700' : 'text-red-600'}`}>{msg}</span>
                 )}
                 {card.auto_topup && !dirty && (
                   <Button size="sm" variant="secondary" disabled={checking || busy} onClick={checkNow}>
@@ -573,7 +573,6 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
                 {reqOpts.map((id) => (
                   <option key={id} value={id}>
                     {nameOf(id)}
-                    {procs.includes(id) ? '' : ' (not Procurement any more)'}
                   </option>
                 ))}
               </select>
@@ -585,10 +584,6 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
           {!orderOk && <p className="mt-2 text-xs font-medium text-red-600">The max balance must be more than the min balance.</p>}
           {orderOk && !amountOk && <p className="mt-2 text-xs font-medium text-red-600">The top-up amount cannot be more than the max balance.</p>}
           {on && amountOk && topupAmt === '' && <p className="mt-2 text-xs font-medium text-red-600">Fill in the top-up amount to use the automatic request.</p>}
-          <p className="mt-2 text-xs text-slate-500">
-            Below the min (with Auto request on): a request for exactly the top-up amount is sent by itself. For another amount, use Request top up. No request may take the card above the max.
-            {!canSet && ' Only Procurement can change these.'}
-          </p>
         </>
       )}
     </Card>
