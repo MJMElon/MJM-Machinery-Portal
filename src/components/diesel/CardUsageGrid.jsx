@@ -143,8 +143,8 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
       wide="full"
       title={
         <span className="block">
-          <span className="block text-xs font-semibold uppercase tracking-wider text-brand">Fuel Records</span>
-          Fleet card : {title}
+          <span className="block font-display text-2xl font-extrabold tracking-tight text-slate-900">Fuel Records</span>
+          <span className="mt-0.5 block text-sm font-medium text-slate-500">Fleet card : {title}</span>
         </span>
       }
     >
