@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
-import { Button, Card } from '../../components/ui.jsx'
+import { Button, Card, Modal } from '../../components/ui.jsx'
 import { IconBell, IconClock, IconPencil, IconPlus, IconPrint, IconSend, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
@@ -39,6 +39,7 @@ export default function DieselClaims() {
   const [busyId, setBusyId] = useState(null)
   const [toReview, setToReview] = useState(0)
   const [docs, setDocs] = useState({}) // payment documents of paid claims
+  const [why, setWhy] = useState(null) // rejected claim whose reason is shown
   const [topups, setTopups] = useState([]) // my fleet card top-up requests waiting for approval
 
   const load = useCallback(async () => {
@@ -252,6 +253,23 @@ export default function DieselClaims() {
         </p>
       )}
 
+      {why && (
+        <Modal open onClose={() => setWhy(null)} title={`Claim ${claimNo(why, 0)} rejected`}>
+          <div className="space-y-3">
+            {why.reviewed_at && <p className="text-xs text-slate-500">Rejected on {day(why.reviewed_at.slice(0, 10))}</p>}
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Remark from the approver</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{why.review_note || 'No remark was given.'}</p>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="secondary" size="sm" onClick={() => setWhy(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {!loading && <FuelDashboard lines={liveLines} />}
 
       <Card className="overflow-hidden">
@@ -316,7 +334,15 @@ export default function DieselClaims() {
                       <td className="whitespace-nowrap px-3 py-3 align-middle font-semibold tabular-nums text-slate-800">{day(c.submitted_on || c.fill_date)}</td>
                       <td className="whitespace-nowrap px-3 py-3 align-middle">
                         <span className="inline-flex items-center gap-2">
-                          <StatusBadge status={c.status} />
+                          {c.status === 'rejected' ? (
+                            // click the Rejected status to read the approver's remark
+                            <button type="button" onClick={() => setWhy(c)} title="Why was it rejected?" className="inline-flex items-center gap-1 rounded-full hover:opacity-80">
+                              <StatusBadge status={c.status} />
+                              <span className="text-xs font-semibold text-red-600 underline underline-offset-2">Why?</span>
+                            </button>
+                          ) : (
+                            <StatusBadge status={c.status} />
+                          )}
                           {c.status === 'draft' && <DraftCountdown claim={c} />}
                           {c.status === 'paid' && <PaymentDocsButton docs={docs[c.id]} />}
                         </span>
