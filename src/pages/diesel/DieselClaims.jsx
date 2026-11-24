@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
+import { IconClock, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
 import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPeople, listVehicles, personLabel, removeReceipt } from '../../lib/diesel.js'
@@ -12,8 +12,15 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
 
+// A draft is kept 30 days from its last save, then deleted for good
+// (here when the claimant opens the page, and every night in the database:
+// migration 20261215).
+export const DRAFT_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+export const draftDaysLeft = (c) => DRAFT_DAYS - Math.floor((Date.now() - Date.parse(c.updated_at || c.created_at)) / DAY_MS)
+
 // Fuel Claims: a dashboard of the year (litres and RM per month) and the claim
-// list (No. · Description · Claim amount · Action), latest first — always the
+// list (No. · Date · Status · Description · amounts · Action), latest first — always the
 // person's OWN claims only. Reviewers reach other people's claims through the
 // separate "Review claims" page.
 export default function DieselClaims() {
@@ -32,8 +39,24 @@ export default function DieselClaims() {
 
   const load = useCallback(async () => {
     try {
-      const [c, p, v, cs] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
-      const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
+      let [c, p, v, cs] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
+      let ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
+      // Drafts past 30 days: deleted with their receipt photos.
+      const expired = c.filter((x) => x.status === 'draft' && draftDaysLeft(x) <= 0)
+      if (expired.length) {
+        const gone = new Set()
+        for (const x of expired) {
+          try {
+            await deleteClaim(x.id)
+            ls.filter((l) => l.claim_id === x.id).forEach((l) => removeReceipt(l.receipt_path))
+            gone.add(x.id)
+          } catch {
+            /* the nightly clean-up in the database takes it */
+          }
+        }
+        c = c.filter((x) => !gone.has(x.id) && !(x.status === 'draft' && draftDaysLeft(x) <= 0))
+        ls = ls.filter((l) => !gone.has(l.claim_id))
+      }
       setClaims(c)
       setLines(ls)
       setVehicles(v)
@@ -142,20 +165,22 @@ export default function DieselClaims() {
       />
       <ErrorBox>{error}</ErrorBox>
 
-      {!loading && <FuelDashboard lines={liveLines} title="Fuel history" />}
+      {!loading && <FuelDashboard lines={liveLines} />}
 
       <Card className="overflow-hidden">
-        <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">Claim list</h3>
+        <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">My Claims</h3>
         {loading ? (
           <Loading />
         ) : rows.length === 0 ? (
           <Empty>No claims yet. Press New claim after filling up.</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="w-72 px-5 py-2.5">No.</th>
+                  <th className="w-20 py-2.5 pl-5 pr-3">No.</th>
+                  <th className="w-32 px-3 py-2.5">Date</th>
+                  <th className="w-40 px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Description</th>
                   <th className="w-28 px-3 py-2.5 text-right">Litre</th>
                   <th className="w-40 px-3 py-2.5 text-right">Total fuel expenses</th>
@@ -171,16 +196,19 @@ export default function DieselClaims() {
                   const reload = sumUp(ls.filter(isReload))
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/60">
-                      <td className="whitespace-nowrap px-5 py-2.5 align-middle">
-                        <div className="flex items-center gap-3">
-                          <Link to={`/diesel/claims/${c.id}`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
-                            {claimNo(c, i)}
-                          </Link>
-                          <span className="text-xs text-slate-500">{day(c.submitted_on || c.fill_date)}</span>
-                          <StatusBadge status={c.status} />
-                        </div>
+                      <td className="whitespace-nowrap py-3 pl-5 pr-3 align-middle">
+                        <Link to={`/diesel/claims/${c.id}`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
+                          {claimNo(c, i)}
+                        </Link>
                       </td>
-                      <td className="px-3 py-2.5 align-middle">
+                      <td className="whitespace-nowrap px-3 py-3 align-middle tabular-nums text-slate-700">{day(c.submitted_on || c.fill_date)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 align-middle">
+                        <span className="inline-flex items-center gap-2">
+                          <StatusBadge status={c.status} />
+                          {c.status === 'draft' && <DraftCountdown claim={c} />}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 align-middle">
                         {/* Side by side when there is room; each on its own line when the column is narrow */}
                         <Link to={`/diesel/claims/${c.id}`} className="flex flex-wrap gap-x-5 gap-y-0.5 text-slate-800 hover:text-brand">
                           <span className="whitespace-nowrap text-amber-700">Cash fuel claim: {cash.n}</span>
@@ -188,10 +216,10 @@ export default function DieselClaims() {
                           {reload.n > 0 && <span className="whitespace-nowrap text-sky-700">Fleet card reload: {reload.n}</span>}
                         </Link>
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums align-middle">{num(cash.litres + sub.litres, 2)} L</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums align-middle">{money(cash.amount + sub.amount)}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(cash.amount + reload.amount)}</td>
-                      <td className="px-3 py-2.5 align-middle">
+                      <td className="px-3 py-3 text-right tabular-nums align-middle">{num(cash.litres + sub.litres, 2)} L</td>
+                      <td className="px-3 py-3 text-right tabular-nums align-middle">{money(cash.amount + sub.amount)}</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(cash.amount + reload.amount)}</td>
+                      <td className="px-3 py-3 align-middle">
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
                           <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
@@ -208,6 +236,20 @@ export default function DieselClaims() {
         )}
       </Card>
     </div>
+  )
+}
+
+/** "12 days left" next to a draft; red in the last 5 days. */
+export function DraftCountdown({ claim }) {
+  const left = Math.max(draftDaysLeft(claim), 0)
+  const label = left <= 1 ? 'Last day' : `${left} days left`
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${left <= 5 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}
+      title={`This draft is deleted in ${left} day${left === 1 ? '' : 's'}`}
+    >
+      <IconClock width={12} height={12} /> {label}
+    </span>
   )
 }
 

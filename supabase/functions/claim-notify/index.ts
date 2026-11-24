@@ -77,6 +77,8 @@ Deno.serve(async (req) => {
 
   const { data: claim } = await db.from('machinery_diesel_claims').select('*').eq('id', claimId).maybeSingle()
   if (!claim) return reply({ error: 'Claim not found' }, 404)
+  // Sample data for trying the pages out: never emailed.
+  if (String(claim.notes ?? '').startsWith('[SAMPLE]')) return reply({ sent: 0, skipped: 'sample claim' })
 
   // Which message, and is the caller the one who caused it?
   let event = ''

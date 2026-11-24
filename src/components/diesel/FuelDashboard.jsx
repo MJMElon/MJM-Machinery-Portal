@@ -61,9 +61,9 @@ export function FuelDashboard({ lines, title, compact = true }) {
     <div className="space-y-3">
       {/* Title and year sit at the left edge of the page; only the charts are narrowed and centred */}
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm font-semibold text-slate-800">
-          {title || "Fuel history"}
-        </p>
+        {title && (
+          <p className="text-sm font-semibold text-slate-800">{title}</p>
+        )}
         <div className="w-28">
           <Select
             value={year}

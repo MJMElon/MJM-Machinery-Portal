@@ -24,7 +24,7 @@ import {
 } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
-import { claimNo } from './DieselClaims.jsx'
+import { DraftCountdown, claimNo } from './DieselClaims.jsx'
 
 // One fuel claim: header, the receipt rows, totals, the receipts, and (for
 // people with the right) approve / reject / mark paid. Print opens the print
@@ -186,6 +186,7 @@ export default function ClaimView() {
               <span className="inline-flex flex-wrap items-center gap-3">
                 Fuel claim #{claimNo(claim, 0)}
                 <StatusBadge status={claim.status} />
+                {claim.status === 'draft' && <DraftCountdown claim={claim} />}
               </span>
             ) : (
               'Fuel claim'
