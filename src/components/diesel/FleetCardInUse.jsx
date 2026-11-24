@@ -444,14 +444,16 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
   const [on, setOn] = useState(Boolean(card.auto_topup))
   // Min balance (auto request below it) and Max balance (no top-up above it)
   const [below, setBelow] = useState(card.auto_topup_below ?? '')
-  const [amount, setAmount] = useState(card.auto_topup_max ?? '')
+  const [amount, setAmount] = useState(card.auto_topup_max ?? '') // Max balance
+  const [topupAmt, setTopupAmt] = useState(card.auto_topup_amount ?? '') // what each automatic request asks for (empty = up to the max)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   useEffect(() => {
     setOn(Boolean(card.auto_topup))
     setBelow(card.auto_topup_below ?? '')
     setAmount(card.auto_topup_max ?? '')
-  }, [card.id, card.auto_topup, card.auto_topup_below, card.auto_topup_max])
+    setTopupAmt(card.auto_topup_amount ?? '')
+  }, [card.id, card.auto_topup, card.auto_topup_below, card.auto_topup_max, card.auto_topup_amount])
   // Why a request was / was not sent (balance now, a request still waiting)
   const [why, setWhy] = useState(null)
   const [checking, setChecking] = useState(false)
@@ -475,16 +477,16 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
     setMsg(made ? `${made} automatic request${made === 1 ? '' : 's'} sent` : `Nothing to send${because}`)
     setChecking(false)
   }
-  const dirty = (procs != null && on && requester !== (card.auto_topup_by || '')) || on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_max ?? '')
+  const dirty = (procs != null && on && requester !== (card.auto_topup_by || '')) || on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_max ?? '') || String(topupAmt) !== String(card.auto_topup_amount ?? '')
   // Max above Min when both are filled; the automatic request needs both
   const orderOk = below === '' || amount === '' || Number(amount) > Number(below)
-  const valid = orderOk && (!on || (below !== '' && Number(below) >= 0 && Number(amount) > 0 && (procs == null || Boolean(requester))))
+  const valid = orderOk && (topupAmt === '' || Number(topupAmt) > 0) && (!on || (below !== '' && Number(below) >= 0 && Number(amount) > 0 && (procs == null || Boolean(requester))))
 
   async function save() {
     setBusy(true)
     setMsg('')
     try {
-      await setAutoTopup(card.id, on, below, amount, procs != null ? requester : null)
+      await setAutoTopup(card.id, on, below, amount, procs != null ? requester : null, topupAmt)
       await onSaved()
       setMsg('Saved')
     } catch (e) {
@@ -495,10 +497,10 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
   }
 
   const box = `${inputCls} h-10 pl-11 text-right font-semibold tabular-nums`
-  const rm = (v, set, label) => (
+  const rm = (v, set, label, hint = '0.00') => (
     <span className="relative block w-36">
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">RM</span>
-      <input type="number" min="0" step="0.01" inputMode="decimal" value={v} onChange={(e) => set(e.target.value)} disabled={!canSet || busy} aria-label={label} placeholder="0.00" className={box} />
+      <input type="number" min="0" step="0.01" inputMode="decimal" value={v} onChange={(e) => set(e.target.value)} disabled={!canSet || busy} aria-label={label} placeholder={hint} className={box} />
     </span>
   )
 
@@ -530,6 +532,8 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
             {rm(below, setBelow, 'Min balance')}
             <span className="font-semibold">Max balance</span>
             {rm(amount, setAmount, 'Max balance')}
+            <span className="font-semibold">Top-up amount</span>
+            {rm(topupAmt, setTopupAmt, 'Top-up amount', 'to max')}
             {canSet && (
               <span className="ml-auto flex items-center gap-3">
                 {msg && <span className={`text-sm ${msg === 'Saved' || /sent|Nothing to send/.test(msg) ? 'text-green-700' : 'text-red-600'}`}>{msg}</span>}
@@ -570,7 +574,7 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
           </div>
           {!orderOk && <p className="mt-2 text-xs font-medium text-red-600">The max balance must be more than the min balance.</p>}
           <p className="mt-2 text-xs text-slate-500">
-            Below the min (with Auto request on): a top-up request is sent by itself, for the amount that brings the card up to the max. A top-up request that would take the card above the max is refused.
+            Below the min (with Auto request on): a top-up request for the top-up amount is sent by itself (empty: up to the max). No request may take the card above the max.
             {!canSet && ' Only Procurement can change these.'}
           </p>
         </>

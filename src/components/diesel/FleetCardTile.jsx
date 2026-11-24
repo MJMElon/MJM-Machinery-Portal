@@ -68,7 +68,7 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to, co
               {card.auto_topup_below != null && `Min ${money(card.auto_topup_below)}`}
               {card.auto_topup_below != null && card.auto_topup_max != null && ' · '}
               {card.auto_topup_max != null && `Max ${money(card.auto_topup_max)}`}
-              {card.auto_topup ? ' · Auto' : ''}
+              {card.auto_topup ? ` · Auto${card.auto_topup_amount != null ? ` ${money(card.auto_topup_amount)}` : ''}` : ''}
             </p>
           )}
           {balance != null && (

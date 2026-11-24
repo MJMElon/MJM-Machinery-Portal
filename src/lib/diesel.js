@@ -578,12 +578,12 @@ export async function deleteCard(id) {
 // ---- automatic top-up requests (migration 20261220) ------------------------------
 /** Procurement: switch a card's automatic top-up request on / off with its amounts and the
  * requestor (the Procurement person the requests are sent as; migration 20261228). */
-export async function setAutoTopup(cardId, on, min, max, requester) {
+export async function setAutoTopup(cardId, on, min, max, requester, amount) {
   const num = (v) => (v === '' || v == null ? null : round(v, 2))
-  const args = { p_card: cardId, p_on: on, p_min: num(min), p_max: num(max), ...(requester ? { p_requester: requester } : {}) }
+  const args = { p_card: cardId, p_on: on, p_min: num(min), p_max: num(max), p_requester: requester || null, p_amount: num(amount) }
   const { error } = await supabase.rpc('machinery_set_auto_topup', args)
   if (error) {
-    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migration 20261229 (card min / max balance) first.')
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migrations 20261229 (card min / max balance) and 20261230 (top-up amount) first.')
     throw friendly(error)
   }
 }
