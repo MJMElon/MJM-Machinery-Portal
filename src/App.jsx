@@ -34,7 +34,6 @@ const FuelRecords = lazy(() => import('./pages/diesel/FuelRecords.jsx'))
 const FuelRecordMobile = lazy(() => import('./pages/diesel/FuelRecordMobile.jsx'))
 const FleetCardManage = lazy(() => import('./pages/diesel/FleetCardManage.jsx'))
 const FleetCardPage = lazy(() => import('./pages/diesel/FleetCardPage.jsx'))
-const TopupPage = lazy(() => import('./pages/diesel/TopupPage.jsx'))
 const DieselUsers = lazy(() => import('./pages/diesel/DieselUsers.jsx'))
 const WorkerFuel = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerFuel })))
 const WorkerHome = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerHome })))
@@ -93,7 +92,7 @@ export default function App() {
             <Route path="records" element={<FuelRecords />} />
             <Route path="records/mobile" element={<Navigate to="/app/fuel" replace />} />
             <Route path="cards" element={<FleetCardManage />} />
-            <Route path="cards/topup" element={<TopupPage />} />
+            <Route path="cards/topup" element={<Navigate to="/diesel/claims/review?tab=topup" replace />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
             <Route path="cards/:id/edit" element={<FleetCardPage key="edit" mode="edit" />} />

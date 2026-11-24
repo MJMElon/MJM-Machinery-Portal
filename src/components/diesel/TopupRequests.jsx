@@ -1,19 +1,149 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Badge, Button, Card, Modal } from '../ui.jsx'
 import { IconPrint } from '../icons.jsx'
 import { Empty, F, inputCls } from './shared.jsx'
-import { TOPUP_STATUS, cancelTopup, decideTopup, personLabel, requestTopup, topupDone, topupNo } from '../../lib/diesel.js'
-import { day, money, today } from '../../lib/format.js'
+import { TOPUP_STATUS, cancelTopup, cardBalances, cardLedger, decideTopup, listCardData, listVehicles, personLabel, requestTopup, topupDone, topupNo } from '../../lib/diesel.js'
+import { day, money, num, thisMonth, today } from '../../lib/format.js'
 import { printHtml } from '../../lib/printFrame.js'
 
-// Fleet card top-up requests (Fleet Card Manage).
-//   RequestTopupModal  the form: fleet card, amount, needed by, reason → Pending
+// Fleet card top-up requests.
+//   NewTopupModal      "New Top Up Request" pop-up (Fleet Card Manage): fleet
+//                      card → this month's litres used / monthly volume and
+//                      the card balance → top-up amount → Send request
+//   RequestTopupModal  the older form: fleet card, amount, needed by, reason → Pending
 //   TopupSection       the requests: "To approve" (approver), "My requests", "All";
 //                      Approve / Reject, Cancel, Mark topped up, Print approval
 // After the top-up is done the user claims the reload on a fuel claim.
 
 const cardText = (c, vById) =>
   c ? `${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${vById.get(c.vehicle_id).reg_no || vById.get(c.vehicle_id).name})` : ''}` : '—'
+
+export function NewTopupModal({ company, onClose, onSent }) {
+  const [data, setData] = useState(null) // { cards, vById, ledger }
+  const [cardId, setCardId] = useState('')
+  const [amount, setAmount] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    Promise.all([listCardData(company.id, thisMonth() + '-01'), listVehicles(company.id).catch(() => []), cardLedger(company.id).catch(() => null)])
+      .then(([d, v, lg]) => {
+        if (!live) return
+        const cards = d.cards.filter((c) => c.card_no && !['cancelled', 'inactive', 'application'].includes(c.status))
+        setData({ cards, usage: d.usage, vById: new Map(v.map((x) => [x.id, x])), ledger: lg })
+        if (cards.length === 1) setCardId(cards[0].id)
+      })
+      .catch((e) => live && setError(e.message))
+    return () => {
+      live = false
+    }
+  }, [company.id])
+
+  const month = thisMonth()
+  const card = data?.cards.find((c) => c.id === cardId)
+  // Litres used on the card this month (card balance ledger when there is one)
+  const used = !card
+    ? 0
+    : data.ledger
+      ? data.ledger.filter((r) => r.card_id === card.id && r.kind === 'usage' && r.month === month).reduce((s, r) => s + Number(r.litres || 0), 0)
+      : data.usage.filter((u) => u.card_id === card.id).reduce((s, u) => s + Number(u.litres || 0), 0)
+  const quota = card?.subsidy_litres == null ? null : Number(card.subsidy_litres)
+  const balance = card && data.ledger ? cardBalances(data.ledger)[card.id] || 0 : null
+  const pct = quota ? Math.min(100, Math.round((used / quota) * 100)) : 0
+
+  async function send(e) {
+    e.preventDefault()
+    if (!card || !(Number(amount) > 0)) return
+    setBusy(true)
+    setError('')
+    try {
+      await requestTopup(company.id, { card_id: card.id, amount })
+      onSent?.(`Top up request sent: ${card.card_no} · ${money(Number(amount))}. It is now waiting for approval.`)
+      onClose()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="New Top Up Request">
+      <form onSubmit={send} className="space-y-4">
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {!data ? (
+          <p className="py-6 text-center text-sm text-slate-400">Loading fleet cards…</p>
+        ) : data.cards.length === 0 ? (
+          <p className="text-sm text-slate-500">No active fleet card with a card number in {company.name}.</p>
+        ) : (
+          <>
+            <F label="Fleet card">
+              <select required value={cardId} onChange={(e) => setCardId(e.target.value)} className={inputCls}>
+                <option value="">Choose fleet card…</option>
+                {data.cards.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {cardText(c, data.vById)}
+                    {c.provider ? ` · ${c.provider}` : ''}
+                  </option>
+                ))}
+              </select>
+            </F>
+
+            {card && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">This month usage</p>
+                  <div className="mt-1.5 flex items-baseline justify-between gap-2 text-sm">
+                    <span className="text-slate-600">Litre used</span>
+                    <span className="font-bold tabular-nums text-slate-900">{num(used, 2)} L</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="text-slate-600">Monthly volume</span>
+                    <span className="font-bold tabular-nums text-slate-900">{quota == null ? '—' : `${num(quota, 0)} L`}</span>
+                  </div>
+                  {quota ? (
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                      <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fleet card current balance</p>
+                  <p className={`mt-2 text-2xl font-bold tabular-nums ${balance != null && balance < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                    {balance == null ? '—' : money(balance)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <span className="mb-1 block text-xs font-medium text-slate-600">Top up amount</span>
+              <div className="flex items-stretch gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">RM</span>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className={`${inputCls} h-14 pl-14 text-2xl font-bold tabular-nums`}
+                  />
+                </div>
+                <Button type="submit" className="h-14 shrink-0 px-5" disabled={busy || !card || !(Number(amount) > 0)}>
+                  {busy ? 'Sending…' : 'Send request'}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </form>
+    </Modal>
+  )
+}
 
 export function RequestTopupModal({ company, cards, vById, balance, onClose, onSaved, cardId }) {
   const usable = cards.filter((c) => c.card_no && !['cancelled', 'inactive', 'application'].includes(c.status))

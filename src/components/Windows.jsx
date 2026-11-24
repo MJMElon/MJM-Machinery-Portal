@@ -63,7 +63,8 @@ export function WindowsProvider({ children }) {
           { module: m, x: 0, y: 0, w: window.innerWidth, h: 0, min: false, max: true, phone: true, z: ++zTop.current }
         ])
       setWins((ws) => {
-        if (ws.some((w) => w.module.key === m.key)) return ws.map((w) => (w.module.key === m.key ? { ...w, z: ++zTop.current, min: false } : w))
+        // Already open: bring it to the front (and go to the page asked for, e.g. a task's tab)
+        if (ws.some((w) => w.module.key === m.key)) return ws.map((w) => (w.module.key === m.key ? { ...w, module: m, z: ++zTop.current, min: false } : w))
         const area = { w: window.innerWidth, h: window.innerHeight - TOP - BAR }
         const box = saved()[m.key]
         const n = ws.length
