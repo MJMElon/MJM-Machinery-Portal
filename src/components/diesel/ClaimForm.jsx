@@ -450,7 +450,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-1.5">
                           <label
-                            className={`relative inline-flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold ${
+                            className={`relative inline-flex h-8 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold ${
                               l.bill_to_company_id ? 'border-brand bg-brand text-white' : 'border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800'
                             }`}
                             title={l.bill_to_company_id ? `Bill to ${coName(l.bill_to_company_id)} (click to change)` : 'Bill to company: which company this fuel is charged to later'}
@@ -476,13 +476,14 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                           <button
                             type="button"
                             onClick={() => setTextOpen((o) => ({ ...o, [l.key]: !(o[l.key] ?? Boolean(l.remark)) }))}
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+                            className={`inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold ${
                               l.remark ? 'border-slate-400 bg-slate-100 text-slate-800' : 'border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800'
                             }`}
                             title={l.remark ? 'Remark text' : 'Add remark text'}
                             aria-label="Remark text"
                           >
-                            <IconNotebook width={15} height={15} />
+                            <IconNotebook width={15} height={15} className="shrink-0" />
+                            <span className="truncate">Note</span>
                           </button>
                         </div>
                         {(textOpen[l.key] ?? Boolean(l.remark)) && (

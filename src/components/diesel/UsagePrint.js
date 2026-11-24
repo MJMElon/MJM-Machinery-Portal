@@ -245,19 +245,33 @@ tr { break-inside: avoid; }
   ${body || '<p>No fuel usage for this selection.</p>'}
   <div class="tot">Total · ${all.length} receipt${all.length === 1 ? '' : 's'}<span>${fmt(sum(all, 'litres'), 2)} L</span><span>RM ${fmt(sum(all, 'amount'), 2)}</span></div>
   ${(() => {
-    // Bill to other companies: totals per company (month-end billing)
+    // Bill to other companies: per company and month (month-end billing)
     const m = new Map()
-    for (const r of all) if (r.billTo) {
-      const t = m.get(r.billTo) || { name: r.billTo, n: 0, litres: 0, amount: 0 }
-      t.n++; t.litres += r.litres; t.amount += r.amount
-      m.set(r.billTo, t)
+    for (const r of all) {
+      if (!r.billTo) continue
+      const co = m.get(r.billTo) || { name: r.billTo, months: new Map(), n: 0, litres: 0, amount: 0 }
+      const ym = r.date.slice(0, 7)
+      const mo = co.months.get(ym) || { ym, n: 0, litres: 0, amount: 0 }
+      for (const t of [co, mo]) { t.n++; t.litres += r.litres; t.amount += r.amount }
+      co.months.set(ym, mo)
+      m.set(r.billTo, co)
     }
     const list = [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
-    return list.length
-      ? `<h2>Bill to other companies</h2><table class="t"><colgroup><col /><col style="width:12%" /><col style="width:14%" /><col style="width:20%" /></colgroup>
-    <thead><tr class="h"><th>Company</th><th class="r">Receipts</th><th class="r">Litre</th><th class="r">Total amount (RM)</th></tr></thead>
-    <tbody>${list.map((t) => `<tr><td><b>${esc(t.name)}</b></td><td class="r">${t.n}</td><td class="r">${fmt(t.litres, 2)}</td><td class="r b">${fmt(t.amount, 2)}</td></tr>`).join('')}</tbody></table>`
-      : ''
+    if (!list.length) return ''
+    const mn = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-MY', { month: 'long', year: 'numeric' })
+    const rows = list
+      .map((c) => {
+        const ms = [...c.months.values()].sort((a, b) => a.ym.localeCompare(b.ym))
+        return (
+          ms.map((mo, i) => `<tr><td>${i === 0 ? `<b>${esc(c.name)}</b>` : ''}</td><td>${esc(mn(mo.ym))}</td><td class="r">${mo.n}</td><td class="r">${fmt(mo.litres, 2)}</td><td class="r b">${fmt(mo.amount, 2)}</td></tr>`).join('') +
+          (ms.length > 1 ? `<tr class="sub"><td colspan="2" class="r">${esc(c.name)} total</td><td class="r">${c.n}</td><td class="r">${fmt(c.litres, 2)}</td><td class="r">${fmt(c.amount, 2)}</td></tr>` : '')
+        )
+      })
+      .join('')
+    const g = list.reduce((t, c) => ({ n: t.n + c.n, litres: t.litres + c.litres, amount: t.amount + c.amount }), { n: 0, litres: 0, amount: 0 })
+    return `<h2>Bill to other companies · by month</h2><table class="t"><colgroup><col /><col style="width:20%" /><col style="width:11%" /><col style="width:13%" /><col style="width:18%" /></colgroup>
+    <thead><tr class="h"><th>Company</th><th>Month</th><th class="r">Receipts</th><th class="r">Litre</th><th class="r">Total amount (RM)</th></tr></thead>
+    <tbody>${rows}<tr class="sub"><td colspan="2" class="r">All companies</td><td class="r">${g.n}</td><td class="r">${fmt(g.litres, 2)}</td><td class="r">${fmt(g.amount, 2)}</td></tr></tbody></table>`
   })()}
   ${receipts
     .map(

@@ -37,8 +37,9 @@ import { day, money, num, today } from '../../lib/format.js'
 // latest data again (for when something looks out of date). Date defaults to the 1st of
 // this month – today. Print = tables (Jan – Dec litres and RM per person or
 // machine, average price per litre), see UsagePrint.js.
-// With a driver or fleet card filter every vehicle with matching receipts is
-// listed (HQ or not), plus "No vehicle recorded" for receipts without one.
+// HQ Vehicle tab: only vehicles ticked "HQ vehicle" in Machinery Profile (and
+// their receipts); with a driver or fleet card filter, the HQ vehicles with
+// matching receipts.
 // HQ vehicle data = receipts: cash and fleet-card receipts on fuel claims (not
 // rejected) plus fill-ups typed on a card.
 // Estate machine data = Estate Fuel Record: diesel
@@ -251,10 +252,11 @@ export default function DieselUsage() {
     return { value: v.id, label: vehicleLabel(v), group }
   }
   const vehicleOpts = [
-    ...generalCars.map((v) => opt(v, 'General cars')),
+    // HQ vehicles only (general cars and drivers' own cars that are ticked HQ)
+    ...generalCars.filter(isHq).map((v) => opt(v, 'General cars')),
     ...driverCarIds
       .map((id) => vById.get(id))
-      .filter((v) => v && !shownIds.has(v.id))
+      .filter((v) => v && isHq(v) && !shownIds.has(v.id))
       .sort(byReg)
       .map((v) => opt(v, "Ticked drivers' own cars")),
     ...hqVehicles.filter((v) => !isGeneral(v) && !shownIds.has(v.id)).map((v) => opt(v, 'HQ vehicles')),
@@ -314,7 +316,10 @@ export default function DieselUsage() {
   // ---- Receipts that pass the filters of the tab
   const A = draft
   const inRange = (d) => (!A.from || d >= A.from) && (!A.to || d <= A.to)
+  // HQ Vehicle tab: only receipts of vehicles ticked "HQ vehicle" in Machinery Profile
+  const hqIds = new Set(vehicles.filter(isHq).map((v) => v.id))
   const passHq = (f) =>
+    hqIds.has(f.vehicle_id) &&
     (!A.vehicleF.length || A.vehicleF.includes(f.vehicle_id)) &&
     (!A.driverF.length || A.driverF.includes(f.driver || 'none')) &&
     (!A.cardF.length || (f.source === 'cash' ? A.cardF.includes('cash') : A.cardF.includes(cardOf(f)?.id)))
@@ -327,16 +332,14 @@ export default function DieselUsage() {
   // those vehicles. Estate: by type and machine.
   const hqFiltered = A.cardF.length > 0 || A.driverF.length > 0
   const chosenCardVehicles = new Set(A.cardF.map((id) => cardById.get(id)?.vehicle_id).filter(Boolean))
-  const NO_VEHICLE = { id: '', name: 'No vehicle recorded', machine_type: '' }
   const listed =
     tab === 'hq'
       ? hqFiltered
         ? // every vehicle with matching receipts (HQ or not), the chosen cards' own vehicles, then receipts without a vehicle
           [
             ...vehicles
-              .filter((v) => (hasVehicle.has(v.id) || chosenCardVehicles.has(v.id)) && (!A.vehicleF.length || A.vehicleF.includes(v.id)))
-              .sort(byReg),
-            ...(rows.some((r) => !r.vehicle_id) && !A.vehicleF.length ? [NO_VEHICLE] : [])
+              .filter((v) => hqIds.has(v.id) && (hasVehicle.has(v.id) || chosenCardVehicles.has(v.id)) && (!A.vehicleF.length || A.vehicleF.includes(v.id)))
+              .sort(byReg)
           ]
         : hqVehicles.filter((v) => !A.vehicleF.length || A.vehicleF.includes(v.id))
       : estateMachines.filter(
@@ -959,45 +962,79 @@ function VehicleTable({ groups, total }) {
   )
 }
 
-/** Totals per Bill to company (the receipts charged to another company), for the month-end billing. */
+/** Totals per Bill to company and month (the receipts charged to another
+ * company), for the month-end billing: [{ name, months: [{ month, n, litres, amount }], n, litres, amount }] */
 function billToTotals(rows) {
   const m = new Map()
   for (const r of rows) {
     if (!r.billTo) continue
-    const t = m.get(r.billTo) || { name: r.billTo, n: 0, litres: 0, amount: 0 }
-    t.n += 1
-    t.litres += r.litres
-    t.amount += r.amount
-    m.set(r.billTo, t)
+    const co = m.get(r.billTo) || { name: r.billTo, byMonth: new Map(), n: 0, litres: 0, amount: 0 }
+    const ym = r.date.slice(0, 7)
+    const mo = co.byMonth.get(ym) || { month: ym, n: 0, litres: 0, amount: 0 }
+    for (const t of [co, mo]) {
+      t.n += 1
+      t.litres += r.litres
+      t.amount += r.amount
+    }
+    co.byMonth.set(ym, mo)
+    m.set(r.billTo, co)
   }
-  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+  return [...m.values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => ({ ...c, months: [...c.byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)) }))
 }
+const monthName = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-MY', { month: 'long', year: 'numeric' })
 function BillToSummary({ rows }) {
   const list = billToTotals(rows)
   if (!list.length) return null
   const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const grand = list.reduce((t, c) => ({ n: t.n + c.n, litres: t.litres + c.litres, amount: t.amount + c.amount }), { n: 0, litres: 0, amount: 0 })
   return (
     <div className="overflow-hidden rounded-xl border border-slate-300">
-      <p className="bg-slate-800 px-4 py-2 text-sm font-bold text-white">Bill to other companies</p>
+      <p className="bg-slate-800 px-4 py-2 text-sm font-bold text-white">Bill to other companies · by month</p>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <th className="px-4 py-1.5">Company</th>
+            <th className="px-3 py-1.5">Month</th>
             <th className="px-3 py-1.5 text-right">Receipts</th>
             <th className="px-3 py-1.5 text-right">Litre</th>
             <th className="px-4 py-1.5 text-right">Total amount (RM)</th>
           </tr>
         </thead>
-        <tbody>
-          {list.map((t) => (
-            <tr key={t.name} className="border-t border-slate-100">
-              <td className="px-4 py-2 font-semibold text-slate-800">{t.name}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{t.n}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{n2(t.litres)}</td>
-              <td className="px-4 py-2 text-right font-bold tabular-nums">{n2(t.amount)}</td>
-            </tr>
-          ))}
-        </tbody>
+        {list.map((c) => (
+          <tbody key={c.name} className="border-t border-slate-200">
+            {c.months.map((mo, i) => (
+              <tr key={mo.month} className={i ? 'border-t border-slate-100' : ''}>
+                <td className="px-4 py-2 font-semibold text-slate-800">{i === 0 ? c.name : ''}</td>
+                <td className="px-3 py-2 text-slate-700">{monthName(mo.month)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{mo.n}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{n2(mo.litres)}</td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums">{n2(mo.amount)}</td>
+              </tr>
+            ))}
+            {c.months.length > 1 && (
+              <tr className="border-t border-slate-200 bg-slate-50 font-bold">
+                <td className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500" colSpan={2}>
+                  {c.name} total
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{c.n}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{n2(c.litres)}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{n2(c.amount)}</td>
+              </tr>
+            )}
+          </tbody>
+        ))}
+        <tfoot>
+          <tr className="border-t-2 border-slate-800 bg-slate-100 font-bold">
+            <td className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-600" colSpan={2}>
+              All companies
+            </td>
+            <td className="px-3 py-2 text-right tabular-nums">{grand.n}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{n2(grand.litres)}</td>
+            <td className="px-4 py-2 text-right tabular-nums">{n2(grand.amount)}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   )
