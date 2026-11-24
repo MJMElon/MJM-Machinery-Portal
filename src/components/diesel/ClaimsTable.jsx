@@ -130,7 +130,18 @@ export function ClaimsTable({
       </div>
 
       {rows.length === 0 ? (
-        <p className="py-14 text-center text-sm text-slate-500">{empty}</p>
+        <div className="py-14 text-center text-sm text-slate-500">
+          {mode === 'all' && statusFilter ? (
+            <>
+              <p>No claims with the status {CLAIM_STATUS[statusFilter]?.label || statusFilter}.</p>
+              <button type="button" onClick={() => onStatusFilter('')} className="mt-2 font-semibold text-brand hover:underline">
+                Show all statuses
+              </button>
+            </>
+          ) : (
+            <p>{empty}</p>
+          )}
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] table-fixed text-sm">
@@ -317,22 +328,38 @@ function StatusLine({ claim, nameOf }) {
 
 /** The Status column title of All claims: click it to show only one status. */
 function StatusFilter({ value, onChange }) {
-  const [open, setOpen] = useState(false)
+  // The list floats over the page (fixed on the screen under the title), so the
+  // table's scroll box never cuts it off, however few rows there are.
+  const [pos, setPos] = useState(null) // { top, left } while open
+  const open = Boolean(pos)
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
+    const close = () => setPos(null)
     window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', close, true)
+    }
   }, [open])
   const pick = (v) => {
     onChange(v)
-    setOpen(false)
+    setPos(null)
+  }
+  const toggle = (e) => {
+    e.stopPropagation()
+    if (open) return setPos(null)
+    const r = e.currentTarget.getBoundingClientRect()
+    const w = 240
+    setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) })
   }
   return (
-    <div className="relative">
+    <div>
       <button
         type="button"
-        onClick={(e) => (e.stopPropagation(), setOpen((o) => !o))}
+        onClick={toggle}
         className={`-ml-2 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold uppercase tracking-wide hover:bg-slate-200/60 ${value ? 'text-brand' : ''}`}
         aria-expanded={open}
       >
@@ -340,7 +367,11 @@ function StatusFilter({ value, onChange }) {
         <IconChevron width={14} height={14} className={`transition ${open ? '-rotate-90' : 'rotate-90'}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-9 z-20 min-w-[230px] rounded-xl border border-slate-200 bg-white py-1 normal-case tracking-normal shadow-lg">
+        <div
+          className="fixed z-50 w-60 rounded-xl border border-slate-200 bg-white py-1 normal-case tracking-normal shadow-lg"
+          style={{ top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
           {[['', 'All statuses'], ...Object.entries(CLAIM_STATUS).filter(([k]) => k !== 'draft').map(([k, v]) => [k, v.label])].map(([k, label]) => (
             <button
               key={k || 'all'}
