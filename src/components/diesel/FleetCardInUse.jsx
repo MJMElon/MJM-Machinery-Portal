@@ -38,7 +38,7 @@ const detailsOf = (c) => ({
 })
 const driversOf = (c) => (c.driver_ids?.length ? c.driver_ids : c.driver_id ? [c.driver_id] : [])
 
-export function FleetCardInUse({ company, access, card, vehicles, people, ledger, reload, startEdit = false }) {
+export function FleetCardInUse({ company, access, card, vehicles, people, ledger, reload, startEdit = false, companyTag = null }) {
   const navigate = useNavigate()
   const canEdit = access.can('cards', 'edit')
   const canDelete = access.can('cards', 'delete')
@@ -153,6 +153,8 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         backLabel="Back to fleet card list"
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
+            {/* opened from the Consolidate view: the company short name first */}
+            {companyTag && <span className="rounded-lg bg-slate-200 px-2 py-0.5 text-base font-bold text-slate-700">{companyTag}</span>}
             {card.card_no || 'Fleet card'}
             <Badge color={st.color}>{st.label}</Badge>
           </span>

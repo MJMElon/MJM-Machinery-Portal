@@ -9,12 +9,27 @@ import { StatementImportModal } from '../../components/diesel/StatementImport.js
 import { NewTopupModal } from '../../components/diesel/TopupRequests.jsx'
 import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
 import { thisMonth } from '../../lib/format.js'
+import { useCompany } from '../../lib/CompanyContext.jsx'
+import { companyLabel } from '../../lib/companies.js'
 
 // Fleet Card Manage: every fleet card drawn as a small card (number, fuel
 // station, vehicle, status) with this month's litres against the subsidy
 // quota and the RM balance; click a card to open it. The dashed card with
 // "+" starts a new fleet card. "Request top up" opens the New Top Up Request
-// pop-up; the requests are approved in Claims Approval → Top-up requests.
+// pop-up; the requests are approved in Claims Approval → Pending approval.
+// Procurement (Fuel Manage role) also gets "Consolidate": the fleet cards of
+// every company of the same business on one page, each card with the
+// company's short name in front of its number; cards of another company
+// open read-only (?co=).
+
+const CONSOLIDATE_KEY = 'fuel.cards.consolidate'
+const readFlag = () => {
+  try {
+    return localStorage.getItem(CONSOLIDATE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 async function loadCompany(co) {
   const [d, v, lg] = await Promise.all([
@@ -35,18 +50,38 @@ export default function FleetCardManage() {
   const [asking, setAsking] = useState(false)
   const [sent, setSent] = useState('')
 
+  const { companies } = useCompany()
+  const [consolidate, setConsolidate] = useState(readFlag)
+  // Companies under the same business as this one (active, with Fuel Manage)
+  const sisters = (companies || []).filter(
+    (c) => c.id !== company.id && c.is_active !== false && c.diesel_enabled && (c.business_ids || []).some((b) => (company.business_ids || []).includes(b))
+  )
+  const sisterKey = sisters.map((c) => c.id).join(',')
+  const canConsolidate = Boolean(access.procurement) && sisters.length > 0
+  const showAll = canConsolidate && consolidate
+
   const load = useCallback(async () => {
     try {
-      const [im, g] = await Promise.all([lastImports(company.id), loadCompany(company)])
+      const list = [company, ...(showAll ? sisters : [])]
+      const [im, ...loaded] = await Promise.all([lastImports(company.id), ...list.map(loadCompany)])
       setImports(im)
-      setGroups([g])
+      setGroups(loaded)
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [company])
+  }, [company, showAll, sisterKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggle(on) {
+    setConsolidate(on)
+    try {
+      localStorage.setItem(CONSOLIDATE_KEY, on ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -76,7 +111,8 @@ export default function FleetCardManage() {
           <FleetCardTile
             key={c.id}
             card={c}
-            to={own ? `/diesel/cards/${c.id}` : `/diesel/cards/${c.id}?co=${g.company.id}`}
+            to={own ? `/diesel/cards/${c.id}${showAll ? '?cons=1' : ''}` : `/diesel/cards/${c.id}?co=${g.company.id}&cons=1`}
+            companyTag={showAll ? shortName(g.company) : null}
             vehicle={c.vehicle_id ? vById.get(c.vehicle_id)?.reg_no || vById.get(c.vehicle_id)?.name : null}
             usedL={usedLitres(c.id)}
             balance={g.ledger ? balance[c.id] || 0 : null}
@@ -89,6 +125,7 @@ export default function FleetCardManage() {
   }
 
   const mineGroup = groups.find((g) => g.company.id === company.id)
+  const others = groups.filter((g) => g.company.id !== company.id && g.cards.length)
 
   return (
     <div className="space-y-5">
@@ -121,16 +158,62 @@ export default function FleetCardManage() {
       )}
 
       <Card className="p-4 sm:p-5">
-        <h3 className="mb-4 font-semibold text-slate-800">Fleet cards</h3>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-semibold text-slate-800">Fleet cards</h3>
+          {canConsolidate && (
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 text-sm" role="group" aria-label="Which fleet cards">
+              {[
+                [false, companyLabel(company)],
+                [true, 'Consolidate']
+              ].map(([on, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => toggle(on)}
+                  aria-pressed={showAll === on}
+                  className={`rounded-lg px-3 py-1 font-medium ${showAll === on ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {loading ? (
           <Loading />
-        ) : mineGroup && (mineGroup.cards.length || canAdd) ? (
-          tiles(mineGroup, true)
         ) : (
-          <Empty>No fleet cards in {company.name}.</Empty>
+          <div className="space-y-6">
+            {mineGroup && (mineGroup.cards.length || canAdd) ? (
+              <section>
+                {showAll && <GroupTitle company={mineGroup.company} count={mineGroup.cards.length} />}
+                {tiles(mineGroup, true)}
+              </section>
+            ) : (
+              <Empty>No fleet cards in {company.name}.</Empty>
+            )}
+            {showAll &&
+              others.map((g) => (
+                <section key={g.company.id}>
+                  <GroupTitle company={g.company} count={g.cards.length} />
+                  {tiles(g, false)}
+                </section>
+              ))}
+            {showAll && others.length === 0 && <p className="text-sm text-slate-400">No fleet cards you can see in the other companies of this business.</p>}
+          </div>
         )}
       </Card>
     </div>
+  )
+}
+
+const shortName = (c) => c.short_name || c.code || c.name
+
+function GroupTitle({ company, count }) {
+  return (
+    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <span className="mr-1.5 rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">{shortName(company)}</span>
+      {company.name} <span className="font-normal normal-case tracking-normal text-slate-400">· {count} card{count === 1 ? '' : 's'}</span>
+    </p>
   )
 }
 
