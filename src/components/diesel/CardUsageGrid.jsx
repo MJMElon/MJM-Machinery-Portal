@@ -9,7 +9,7 @@ import { monthLabel, thisMonth } from '../../lib/format.js'
 // A box is green when its fill-ups come from fuel claims, orange when added by
 // hand or from the Fuel Station Portal (the AI agent's daily import), i.e. not
 // claimed (a day with both is orange).
-// Two columns per driver: Litre and RM. Edit (usage: add): every box can be
+// Days 1–31 left to right, two rows per driver: Litre and RM. Edit (usage: add): every box can be
 // typed into (litre and RM, both needed), one Save for the month; a box from a
 // claim or the Fuel Station Portal stays locked (click it to add beside it);
 // a fill-up added by hand can be changed or cleared (clearing removes it).
@@ -19,6 +19,8 @@ export const ORIGIN = {
   portal: { tag: 'P', label: 'Fuel Station Portal', cls: 'bg-sky-100 text-sky-800' },
   manual: { tag: 'M', label: 'Added by hand', cls: 'bg-slate-200 text-slate-700' }
 }
+// day boxes (narrow): up to 2 decimals without trailing zeros (86, 90.3, 76.33)
+const n1 = (v) => String(Math.round(Number(v || 0) * 100) / 100)
 const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const shift = (month, d) => {
   const [y, m] = month.split('-').map(Number)
@@ -132,10 +134,20 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
     setError('')
     setEditing(false)
   }
-  const inp = 'block h-[15px] w-full min-w-0 rounded-sm border border-slate-300 bg-white px-1 py-0 text-right text-[11px] leading-none tabular-nums outline-none focus:border-brand focus:ring-1 focus:ring-brand/30'
+  const inp = 'block h-5 w-full min-w-0 rounded-sm border border-slate-300 bg-white px-0.5 py-0 text-center text-[11px] leading-none tabular-nums outline-none focus:border-brand focus:ring-1 focus:ring-brand/30'
 
   return (
-    <Modal open onClose={onClose} wide="xl" title={`Fleet card : ${title}`}>
+    <Modal
+      open
+      onClose={onClose}
+      wide="full"
+      title={
+        <span className="block">
+          <span className="block text-xs font-semibold uppercase tracking-wider text-brand">Fuel Records</span>
+          Fleet card : {title}
+        </span>
+      }
+    >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <button type="button" disabled={editing} onClick={() => setMonth((m) => shift(m, -1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30" aria-label="Previous month">
           ‹
@@ -190,83 +202,97 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
       ) : rows === null ? (
         <p className="py-10 text-center text-sm text-slate-500">Run the Fuel SQL migration 20261212 (fleet card statement) to see the usage here.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          {/* compact rows: the whole month (28–31 days) shows without scrolling; two columns per driver */}
-          <table className="w-full border-collapse text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+        <div className="overflow-x-auto rounded-xl border border-slate-300">
+          {/* days 1–31 left to right; each driver has a Litre row and an RM row */}
+          <table className="w-full table-fixed border-collapse text-[11px]">
+            <colgroup>
+              <col style={{ width: '8.5rem' }} />
+              <col style={{ width: '2.5rem' }} />
+              {Array.from({ length: days }, (_, i) => (
+                <col key={i} />
+              ))}
+              <col style={{ width: '4.25rem' }} />
+            </colgroup>
+            <thead className="bg-slate-100 text-slate-600">
               <tr className="font-semibold">
-                <th rowSpan={2} className="sticky left-0 z-20 w-12 border-b border-slate-200 bg-slate-50 px-2 py-1 text-left uppercase tracking-wide">
-                  Date
-                </th>
-                {cols.map((c) => (
-                  <th key={c.key} colSpan={2} className="border-b border-l border-slate-200 px-2 py-1 text-center text-slate-700">
-                    {c.name}
+                <th className="sticky left-0 z-20 border border-slate-300 bg-slate-100 px-2 py-1 text-center">Driver</th>
+                <th className="border border-slate-300 px-1 py-1 text-center" />
+                {Array.from({ length: days }, (_, i) => i + 1).map((d) => (
+                  <th key={d} className={`border border-slate-300 px-0 py-1 text-center tabular-nums ${dateOf(d) > today ? 'text-slate-300' : ''}`}>
+                    {d}
                   </th>
                 ))}
-                <th colSpan={2} className="border-b border-l border-slate-200 px-2 py-1 text-center uppercase tracking-wide">
-                  Total
-                </th>
-              </tr>
-              <tr className="text-[10px] font-semibold uppercase tracking-wide">
-                {[...cols, { key: '__total' }].map((c) => [
-                  <th key={`${c.key}-l`} className="w-[4.5rem] border-b border-l border-slate-200 px-2 py-0.5 text-right">
-                    Litre
-                  </th>,
-                  <th key={`${c.key}-rm`} className="w-[4.5rem] border-b border-slate-200 px-2 py-0.5 text-right">
-                    RM
-                  </th>
-                ])}
+                <th className="border border-slate-300 px-1 py-1 text-center">Total</th>
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
-                const date = dateOf(d)
-                const future = date > today
-                const dayRows = list.filter((r) => r.date === date)
-                return (
-                  <tr key={d} className={future ? 'text-slate-300' : ''}>
-                    <td className="sticky left-0 z-[1] border-b border-slate-100 bg-white px-2 py-px font-semibold tabular-nums text-slate-700">{d}</td>
-                    {cols.map((c) => {
-                      const rs = inCell(date, c)
-                      const k = key(date, c)
-                      const bad = incomplete.has(k)
-                      if (editing && !future && editable(rs))
-                        return [
-                          <td key={`${c.key}-l`} className={`border-b border-l border-slate-100 px-1 py-0 ${bad ? 'bg-red-50' : tone(rs)}`}>
-                            <input inputMode="decimal" aria-label={`${c.name} ${d} litre`} value={valueOf(date, c, rs, 'l')} onChange={(e) => setVal(date, c, 'l', e.target.value)} className={`${inp} ${bad ? '!border-red-500 !bg-red-50' : ''}`} />
-                          </td>,
-                          <td key={`${c.key}-rm`} className={`border-b border-slate-100 px-1 py-0 ${bad ? 'bg-red-50' : tone(rs)}`}>
-                            <input inputMode="decimal" aria-label={`${c.name} ${d} RM`} value={valueOf(date, c, rs, 'rm')} onChange={(e) => setVal(date, c, 'rm', e.target.value)} className={`${inp} ${bad ? '!border-red-500 !bg-red-50' : ''}`} />
+              {cols.map((c) =>
+                ['l', 'rm'].map((f) => {
+                  const mine = list.filter((r) => colKey(r) === c.key)
+                  return (
+                    <tr key={`${c.key}-${f}`} className={f === 'rm' ? 'border-b-2 border-slate-300' : ''}>
+                      {f === 'l' && (
+                        <th rowSpan={2} className="sticky left-0 z-10 border border-slate-300 bg-white px-2 py-1 text-center align-middle text-xs font-semibold text-slate-800">
+                          {c.name}
+                        </th>
+                      )}
+                      <td className="border border-slate-300 bg-slate-50 px-1 py-0.5 text-center text-[10px] font-semibold uppercase text-slate-500">{f === 'l' ? 'Litre' : 'RM'}</td>
+                      {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
+                        const date = dateOf(d)
+                        const future = date > today
+                        const rs = inCell(date, c)
+                        const k = key(date, c)
+                        const bad = incomplete.has(k)
+                        if (editing && !future && editable(rs))
+                          return (
+                            <td key={d} className={`border border-slate-300 px-px py-px ${bad ? 'bg-red-50' : tone(rs)}`}>
+                              <input
+                                inputMode="decimal"
+                                aria-label={`${c.name} ${d} ${f === 'l' ? 'litre' : 'RM'}`}
+                                value={valueOf(date, c, rs, f)}
+                                onChange={(e) => setVal(date, c, f, e.target.value)}
+                                className={`${inp} ${bad ? '!border-red-500 !bg-red-50' : ''}`}
+                              />
+                            </td>
+                          )
+                        const lock = editing && !future && rs.length > 0 ? () => setCell({ date, col: c }) : undefined
+                        return (
+                          <td
+                            key={d}
+                            onClick={lock}
+                            title={lock ? 'From a claim or the Fuel Station Portal: click to add beside it' : undefined}
+                            className={`border border-slate-300 px-0 py-0.5 text-center tabular-nums ${tone(rs)} ${f === 'l' ? 'font-semibold text-slate-900' : 'text-slate-600'} ${lock ? 'cursor-pointer' : ''}`}
+                          >
+                            {rs.length ? (f === 'l' ? n1(sumL(rs)) : n1(sumRM(rs))) : ''}
                           </td>
-                        ]
-                      const lock = editing && !future && rs.length > 0 ? () => setCell({ date, col: c }) : undefined
-                      return [
-                        <td key={`${c.key}-l`} onClick={lock} className={`border-b border-l border-slate-100 px-2 py-px text-right tabular-nums ${tone(rs)} ${lock ? 'cursor-pointer' : ''}`} title={lock ? 'From a claim or the Fuel Station Portal: click to add beside it' : undefined}>
-                          {rs.length ? <b className="font-semibold text-slate-900">{n2(sumL(rs))}</b> : ''}
-                        </td>,
-                        <td key={`${c.key}-rm`} onClick={lock} className={`border-b border-slate-100 px-2 py-px text-right tabular-nums text-slate-600 ${tone(rs)} ${lock ? 'cursor-pointer' : ''}`}>
-                          {rs.length ? n2(sumRM(rs)) : ''}
-                        </td>
-                      ]
-                    })}
-                    <td className="border-b border-l border-slate-100 px-2 py-px text-right font-semibold tabular-nums text-slate-700">{dayRows.length ? n2(sumL(dayRows)) : ''}</td>
-                    <td className="border-b border-slate-100 px-2 py-px text-right tabular-nums text-slate-600">{dayRows.length ? n2(sumRM(dayRows)) : ''}</td>
-                  </tr>
-                )
-              })}
+                        )
+                      })}
+                      <td className="border border-slate-300 bg-slate-50 px-1 py-0.5 text-center font-bold tabular-nums">{f === 'l' ? n2(sumL(mine)) : n2(sumRM(mine))}</td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
-            <tfoot className="bg-slate-50 font-bold">
-              <tr>
-                <td className="sticky left-0 border-t-2 border-slate-200 bg-slate-50 px-2 py-1 uppercase tracking-wide text-slate-500">Total</td>
-                {[...cols.map((c) => list.filter((r) => colKey(r) === c.key)), list].map((rs, i) => [
-                  <td key={`${i}-l`} className="border-l border-t-2 border-slate-200 px-2 py-1 text-right tabular-nums">
-                    {n2(sumL(rs))}
-                  </td>,
-                  <td key={`${i}-rm`} className="border-t-2 border-slate-200 px-2 py-1 text-right tabular-nums text-slate-700">
-                    {n2(sumRM(rs))}
-                  </td>
-                ])}
-              </tr>
+            <tfoot className="bg-slate-100 font-bold">
+              {['l', 'rm'].map((f) => (
+                <tr key={f}>
+                  {f === 'l' && (
+                    <th rowSpan={2} className="sticky left-0 border border-slate-300 bg-slate-100 px-2 py-1 text-center uppercase tracking-wide text-slate-600">
+                      Total
+                    </th>
+                  )}
+                  <td className="border border-slate-300 px-1 py-0.5 text-center text-[10px] uppercase text-slate-500">{f === 'l' ? 'Litre' : 'RM'}</td>
+                  {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
+                    const rs = list.filter((r) => r.date === dateOf(d))
+                    return (
+                      <td key={d} className="border border-slate-300 px-0 py-0.5 text-center tabular-nums">
+                        {rs.length ? (f === 'l' ? n1(sumL(rs)) : n1(sumRM(rs))) : ''}
+                      </td>
+                    )
+                  })}
+                  <td className="border border-slate-300 px-1 py-0.5 text-center tabular-nums">{f === 'l' ? n2(sumL(list)) : n2(sumRM(list))}</td>
+                </tr>
+              ))}
             </tfoot>
           </table>
         </div>
