@@ -28,8 +28,9 @@ export function MyFleetCards({ company }) {
         <Card key={c.id} className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 px-4 py-2.5">
             <h3 className="font-semibold text-slate-800">My fleet card</h3>
-            <span className="font-bold tracking-wide text-brand-dark">{c.card_no}</span>
-            {c.vehicle && <span className="text-sm text-slate-500">({c.vehicle})</span>}
+            {/* vehicle reg no. first, then the fleet card number in grey */}
+            {c.vehicle && <span className="font-bold tracking-wide text-brand-dark">{c.vehicle}</span>}
+            <span className={c.vehicle ? 'text-sm text-slate-500' : 'font-bold tracking-wide text-brand-dark'}>{c.card_no}</span>
             {c.provider && <span className="text-sm text-slate-500">· {c.provider}</span>}
             {c.status !== 'active' && (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-amber-800">{c.status}</span>
