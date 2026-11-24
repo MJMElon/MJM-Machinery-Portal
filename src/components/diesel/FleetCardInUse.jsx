@@ -450,23 +450,13 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
     setMsg('')
     const made = await autoTopupCheck(card.company_id)
     await onSaved()
-    setWhy(await autoTopupStatus(card.id))
-    setMsg(made ? `${made} automatic request${made === 1 ? '' : 's'} sent` : 'Checked: nothing to send')
+    const w = await autoTopupStatus(card.id)
+    setWhy(w)
+    // nothing sent: say why, briefly, next to the button
+    const because = !w ? '' : w.card_status !== 'active' ? ` (card is ${w.card_status})` : w.waiting ? ` (TU-${String(w.waiting.request_no).padStart(4, '0')} is ${w.waiting.status === 'pending' ? 'waiting for approval' : 'approved, top-up claim not submitted'})` : Number(w.balance) >= Number(card.auto_topup_below) ? ` (balance ${money(w.balance)})` : ''
+    setMsg(made ? `${made} automatic request${made === 1 ? '' : 's'} sent` : `Nothing to send${because}`)
     setChecking(false)
   }
-  const waitText = (w) =>
-    `TU-${String(w.request_no ?? '').padStart(4, '0')} (${money(w.amount)}) is ${
-      w.status === 'pending' ? 'waiting for approval' : w.claim_status === 'draft' || !w.claim_status ? 'approved, and its top-up claim is not submitted yet' : 'approved, and its top-up claim is not paid yet'
-    }`
-  const reason = !why
-    ? ''
-    : why.card_status !== 'active'
-      ? `No automatic request: the card is ${why.card_status}.`
-      : why.waiting
-        ? `No new request while ${waitText(why.waiting)}.`
-        : Number(why.balance) < Number(card.auto_topup_below)
-          ? `Balance ${money(why.balance)} is below ${money(card.auto_topup_below)}: press Check now to send the request.`
-          : `Balance ${money(why.balance)}: a request goes out when it is below ${money(card.auto_topup_below)}.`
   const dirty = on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_amount ?? '')
   const valid = !on || (Number(below) >= 0 && below !== '' && Number(amount) > 0)
 
@@ -522,7 +512,7 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
             {rm(amount, setAmount, 'Top-up amount')}
             {canSet && (
               <span className="ml-auto flex items-center gap-3">
-                {msg && <span className={`text-sm ${msg === 'Saved' || /sent|Checked/.test(msg) ? 'text-green-700' : 'text-red-600'}`}>{msg}</span>}
+                {msg && <span className={`text-sm ${msg === 'Saved' || /sent|Nothing to send/.test(msg) ? 'text-green-700' : 'text-red-600'}`}>{msg}</span>}
                 {card.auto_topup && !dirty && (
                   <Button size="sm" variant="secondary" disabled={checking || busy} onClick={checkNow}>
                     {checking ? 'Checking…' : 'Check now'}
@@ -534,16 +524,7 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
               </span>
             )}
           </div>
-          <p className="mt-2 text-xs text-slate-500">
-            {card.auto_topup
-              ? `On · requests are sent in the name of ${card.auto_topup_by ? nameOf(card.auto_topup_by) : 'Procurement'} and approved as usual${
-                  card.auto_topup_last_at ? ` · last automatic request ${new Date(card.auto_topup_last_at).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
-                }`
-              : canSet
-                ? 'Off. Switch it on, fill in both amounts and Save.'
-                : 'Off. Only Procurement can set it.'}
-          </p>
-          {reason && <p className={`mt-1 text-xs font-medium ${why?.waiting || why?.card_status !== 'active' ? 'text-amber-700' : 'text-slate-600'}`}>{reason}</p>}
+          {!card.auto_topup && <p className="mt-2 text-xs text-slate-500">{canSet ? 'Off. Switch it on, fill in both amounts and Save.' : 'Off. Only Procurement can set it.'}</p>}
         </>
       )}
     </Card>
