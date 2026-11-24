@@ -26,10 +26,12 @@ import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { DraftCountdown, claimNo } from './DieselClaims.jsx'
 
-// One fuel claim: header, the receipt rows, totals, the receipts, and (for
-// people with the right) approve / reject / mark paid. Print opens the print
-// dialog in place with the claim form (cash receipts only); ?print=1 does so
-// as soon as the claim has loaded.
+// One fuel claim: title (claim no., created date, status), the receipt rows
+// and the totals. Top right: the claimant gets Print / Submit / Edit / Delete;
+// an approver or accountant looking at someone else's claim gets only the
+// review buttons there (Approve / Reject, Mark paid, …). Print opens the
+// print dialog in place with the claim form (cash receipts only); ?print=1
+// does so as soon as the claim has loaded.
 export default function ClaimView() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
@@ -89,13 +91,12 @@ export default function ClaimView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, claim, params])
   const canEdit = claim && own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'edit')
-  const canDelete = claim && ((own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'delete')) || isSuperAdmin)
+  const canDelete = claim && own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'delete')
   const canSubmit = claim && own && claim.status === 'draft' && access.can('claims', 'edit')
   // Approve / reject: an approver named for this claimant. Mark paid: an
   // accountant, on approved claims. Nobody approves their own claim.
   const canApprove = claim && !own && access.approves(claim.claimant_id)
   const canPay = claim && access.pay && (!own || isSuperAdmin)
-  const canReview = canApprove || canPay
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
   const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
   const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)
@@ -130,61 +131,50 @@ export default function ClaimView() {
   const box = 'flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm text-slate-800'
   const cell = `${box} h-9`
   const tall = `${box} h-[78px] items-start py-2 leading-snug`
-  const showApproval = access.admin || access.pay
-
-  const approval = !claim ? null : !canReview ? (
-    <p className="text-xs text-slate-500">{own ? 'Your own claim' : claim.status === 'paid' ? 'Paid' : 'Not your approvee'}</p>
-  ) : claim.status === 'pending' ? (
-    canApprove ? (
-      <div className="flex flex-col gap-2">
-        <Button size="sm" disabled={busy} onClick={() => review('approved')}>
-          <IconCheck width={16} height={16} /> Approve
-        </Button>
-        <Button size="sm" variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
-          <IconX width={16} height={16} /> Reject
-        </Button>
-      </div>
-    ) : (
-      <p className="text-xs text-slate-500">Waiting for approval</p>
-    )
+  // Someone else's claim: only the review buttons (approver: approve / reject; accountant: mark paid).
+  const reviewButtons = !claim || own ? null : claim.status === 'pending' && canApprove ? (
+    <>
+      <Button disabled={busy} onClick={() => review('approved')}>
+        <IconCheck width={18} height={18} /> Approve
+      </Button>
+      <Button variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
+        <IconX width={18} height={18} /> Reject
+      </Button>
+    </>
   ) : claim.status === 'approved' ? (
-    <div className="flex flex-col gap-2">
+    <>
       {canPay && (
-        <Button size="sm" disabled={busy} onClick={() => review('paid')}>
+        <Button disabled={busy} onClick={() => review('paid')}>
           Mark paid
         </Button>
       )}
       {canApprove && (
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
+        <Button variant="secondary" disabled={busy} onClick={() => review('pending')}>
           Back to pending
         </Button>
       )}
-    </div>
+    </>
   ) : claim.status === 'rejected' && canApprove ? (
-    <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending', null)}>
+    <Button variant="secondary" disabled={busy} onClick={() => review('pending', null)}>
       Back to pending
     </Button>
   ) : claim.status === 'paid' && canPay ? (
-    <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold text-brand-dark">Paid</p>
-      <Button size="sm" variant="ghost" disabled={busy} onClick={() => window.confirm('Undo paid? The claim goes back to Approved.') && review('approved')}>
-        Undo paid
-      </Button>
-    </div>
-  ) : (
-    <p className="text-xs text-slate-500">{claim.status === 'paid' ? 'Paid' : '—'}</p>
-  )
+    <Button variant="secondary" disabled={busy} onClick={() => window.confirm('Undo paid? The claim goes back to Approved.') && review('approved')}>
+      Undo paid
+    </Button>
+  ) : null
 
   return (
     <div className="space-y-4">
       <div>
         <PageHeader
           backTo={params.get('from') === 'review' ? '/diesel/claims/review' : '/diesel/claims'}
-          backLabel={params.get('from') === 'review' ? 'Back to review' : 'Back to claim list'}
+          backLabel={params.get('from') === 'review' ? 'Back to review' : 'Back to My Claims'}
           title={
             claim ? (
-              <span className="inline-flex flex-wrap items-center gap-3">
+              <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
                 Fuel claim #{claimNo(claim, 0)}
+                <span className="text-sm font-normal text-slate-500">Created on {day(claim.submitted_on || claim.fill_date)}</span>
                 <StatusBadge status={claim.status} />
                 {claim.status === 'draft' && <DraftCountdown claim={claim} />}
               </span>
@@ -193,7 +183,10 @@ export default function ClaimView() {
             )
           }
           right={
-            claim && (
+            claim &&
+            (!own ? (
+              reviewButtons && <div className="flex flex-wrap gap-2">{reviewButtons}</div>
+            ) : (
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" disabled={busy} onClick={print}>
                   <IconPrint width={18} height={18} /> Print
@@ -223,7 +216,7 @@ export default function ClaimView() {
                   </Button>
                 )}
               </div>
-            )
+            ))
           }
         />
         <ErrorBox>{error}</ErrorBox>
@@ -232,14 +225,8 @@ export default function ClaimView() {
       {claim && (
         <>
           <Card className="overflow-hidden">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-sm text-slate-600">
-              <span>Created date: <b className="text-slate-800">{day(claim.submitted_on || claim.fill_date)}</b></span>
-              <span>Total amount: <b className="text-slate-800">{money(total)}</b></span>
-              <span>Payable amount: <b className="text-brand-dark">{money(payable)}</b></span>
-              <span>Total litres: <b className="text-slate-800">{num(litres, 2)} L</b></span>
-            </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-t border-slate-200 text-sm">
+              <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <th className="w-10 px-3 py-2.5">#</th>
@@ -252,7 +239,6 @@ export default function ClaimView() {
                     <th className="w-40 px-2 py-2.5">Payment method</th>
                     <th className="w-44 px-2 py-2.5">Remark</th>
                     <th className="w-40 px-2 py-2.5">Attachment</th>
-                    {showApproval && <th className="w-36 px-2 py-2.5">Approval</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -303,9 +289,11 @@ export default function ClaimView() {
                       <td className="px-2 py-3">
                         <div className="space-y-1.5">
                           <div className={cell}>{l.payment === 'fleet_card' ? 'Fleet card' : 'Cash'}</div>
-                          <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${isReload(l) ? 'bg-sky-50 text-sky-700' : l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                            {isReload(l) ? 'Card top-up · paid back' : l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
-                          </p>
+                          {!isReload(l) && (
+                            <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                              {l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-3">
@@ -329,23 +317,17 @@ export default function ClaimView() {
                           <div className={`${tall} justify-center text-xs text-red-500`}>No receipt</div>
                         )}
                       </td>
-                      {showApproval && i === 0 && (
-                        <td className="px-2 py-3" rowSpan={lines.length}>
-                          {approval}
-                        </td>
-                      )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/60 text-sm font-semibold text-slate-800">
-                    <td className="px-3 py-2.5" colSpan={4}>
-                      Total
-                    </td>
+                    <td className="px-3 py-2.5" colSpan={3} />
+                    <td className="px-2 py-2.5 text-right">Total :</td>
                     <td className="px-2 py-2.5 text-right">{num(litres, 2)} L</td>
                     <td className="px-2 py-2.5 text-right">{money(total)}</td>
                     <td className="px-2 py-2.5 text-right text-brand-dark">{money(payable)}</td>
-                    <td colSpan={showApproval ? 4 : 3} />
+                    <td colSpan={3} />
                   </tr>
                 </tfoot>
               </table>
