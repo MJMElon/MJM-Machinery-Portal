@@ -190,6 +190,16 @@ export function notifyClaim(id) {
   supabase.functions.invoke('claim-notify', { body: { claim_id: id } }).catch(() => {})
 }
 
+/** The claimant's bell: remind the approvers of a pending claim (once a day). Returns 'sent' / 'already' / 'none' / 'off'. */
+export async function remindApprovers(id) {
+  const { data, error } = await supabase.functions.invoke('claim-notify', { body: { claim_id: id, remind: true } })
+  if (error) throw new Error('Could not send the reminder. Please try again.')
+  if (data?.skipped === 'already sent') return 'already'
+  if (String(data?.skipped || '').startsWith('email not set up')) return 'off'
+  if (data?.error) throw new Error(data.error)
+  return data?.sent > 0 ? 'sent' : 'none'
+}
+
 // ---- claim lines (one per receipt) ----------------------------------------------
 
 const round = (v, dp) => Math.round(Number(v) * 10 ** dp) / 10 ** dp
