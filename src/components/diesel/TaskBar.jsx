@@ -71,10 +71,11 @@ export function TaskBar({ company, access }) {
           {task.text}
         </p>
       </div>
-      <button type="button" onClick={() => open(task.open)} className="group inline-flex shrink-0 items-center gap-0.5 rounded-lg px-1.5 py-1 text-sm font-semibold text-slate-800 hover:text-amber-800">
+      <button type="button" onClick={() => open(task.open)} className="group inline-flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-semibold leading-5 text-slate-800 hover:text-amber-800">
         <span className="hidden underline-offset-4 group-hover:underline sm:inline">Continue to the page</span>
         <span className="underline-offset-4 group-hover:underline sm:hidden">Continue</span>
-        <IconChevron width={16} height={16} className="transition-transform group-hover:translate-x-0.5" />
+        {/* the arrow sits on the middle of the small letters, as thick as the text */}
+        <IconChevron width={14} height={14} strokeWidth={2.6} className="translate-y-[1.5px] transition-transform group-hover:translate-x-0.5" />
       </button>
       {tasks.length > 1 && (
         <div className="flex shrink-0 items-center gap-0.5">
