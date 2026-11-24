@@ -157,7 +157,7 @@ export function Modal({ open, onClose, title, children, wide = false }) {
       <div
         className={cx(
           'relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl',
-          wide ? 'max-w-2xl sm:p-6' : 'max-w-app'
+          wide === 'xl' ? 'max-w-6xl sm:p-6' : wide ? 'max-w-2xl sm:p-6' : 'max-w-app'
         )}
         onClick={(e) => e.stopPropagation()}
       >

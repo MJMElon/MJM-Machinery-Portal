@@ -362,7 +362,17 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
       <AutoTopupBox card={card} canSet={Boolean(access.procurement) && !card.status?.match(/inactive|cancelled/)} nameOf={nameOf} balanceNow={ledger ? balanceNow : null} onSaved={reload} />
 
       {/* this month's usage (with subsidy / used / balance) | usage by driver */}
-      <CardMonthUsage company={company} cardId={card.id} quota={quota} driverNames={driversOf(card).map(nameOf)} />
+      <CardMonthUsage
+        company={company}
+        cardId={card.id}
+        card={card}
+        title={`${card.card_no || 'Fleet card'}${card.vehicle_id && vById.get(card.vehicle_id) ? ` (${vById.get(card.vehicle_id).reg_no || vById.get(card.vehicle_id).name})` : ''}`}
+        drivers={driversOf(card).map((id) => ({ id, name: nameOf(id) }))}
+        canAdd={access.can('usage', 'add')}
+        canDelete={access.can('usage', 'delete')}
+        quota={quota}
+        driverNames={driversOf(card).map(nameOf)}
+      />
 
       {/* usage by month, litres and RM, and the balance now */}
       <Card className="overflow-hidden">
