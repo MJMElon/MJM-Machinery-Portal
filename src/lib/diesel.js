@@ -679,6 +679,12 @@ export async function addReload(companyId, row) {
   if (error) throw friendly(error)
 }
 
+/** Change a fill-up added by hand (litres, RM). */
+export async function updateUsage(id, patch) {
+  const { error } = await supabase.from(DIESEL.usage).update(patch).eq('id', id)
+  if (error) throw friendly(error)
+}
+
 export async function addUsage(companyId, row) {
   const { error } = await supabase.from(DIESEL.usage).insert({ company_id: companyId, ...row })
   if (error) throw friendly(error)
