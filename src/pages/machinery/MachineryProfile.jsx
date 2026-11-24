@@ -12,8 +12,8 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 // the vehicles for claims, fleet cards and fill-ups. Each row opens a full
 // profile page (particulars, insurance / road tax / Puspakom, photos, files,
 // drivers). Rows marked "general use" are offered to everyone in fuel claims.
-// On top: a summary (status counts and a count per type, each type clickable
-// as a filter), then tabs Active / Inactive / Insurance only / KPDN subsidy,
+// On top: a big count per type for the tab below (each clickable as a
+// filter), then tabs Active / Inactive / Insurance only / KPDN subsidy,
 // and filters by location, type and brand next to the search.
 
 // Type and brand are typed freely (and imported from Excel), so they are
@@ -156,38 +156,25 @@ export default function MachineryProfile() {
       />
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
-      {!loading && rows.length > 0 && (
-        <Card className="p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <Figure label="Total" value={rows.length} />
-            <Figure label="Active" value={countTab('active')} tone="green" onClick={() => setTab('active')} on={tab === 'active'} />
-            <Figure label="Inactive" value={countTab('inactive')} tone="red" onClick={() => setTab('inactive')} on={tab === 'inactive'} />
-            <Figure label="Insurance only" value={countTab('insurance_only')} tone="sky" onClick={() => setTab('insurance_only')} on={tab === 'insurance_only'} />
-            <Figure label="KPDN subsidy" value={countTab('kpdn')} tone="emerald" onClick={() => setTab('kpdn')} on={tab === 'kpdn'} />
-          </div>
-          {byType.length > 0 && (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By type · {TABS[tab].label}</p>
-              <div className="flex flex-wrap gap-2">
-                {byType.map(([k, n]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setTypeF(typeF === k ? '' : k)}
-                    aria-pressed={typeF === k}
-                    title={typeF === k ? 'Show all types' : `Show only ${nice(k)}`}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm transition ${
-                      typeF === k ? 'border-brand bg-brand text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-brand hover:text-brand'
-                    }`}
-                  >
-                    <span className="font-medium">{nice(k)}</span>
-                    <span className={`rounded-full px-1.5 text-xs font-bold tabular-nums ${typeF === k ? 'bg-white/25' : 'bg-slate-100 text-slate-700'}`}>{n}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
+      {/* Summary: how many of each type, in the tab below (click a type to show only it) */}
+      {!loading && byType.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {byType.map(([k, n]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTypeF(typeF === k ? '' : k)}
+              aria-pressed={typeF === k}
+              title={typeF === k ? 'Show all types' : `Show only ${nice(k)}`}
+              className={`rounded-2xl border-2 p-4 text-left shadow-sm transition ${
+                typeF === k ? 'border-brand bg-brand-light/60' : 'border-transparent bg-white hover:border-brand/40'
+              }`}
+            >
+              <span className="block font-display text-4xl font-extrabold tabular-nums text-slate-900">{n}</span>
+              <span className="mt-1 block text-sm font-semibold leading-tight text-slate-600">{nice(k)}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       <Card className="overflow-hidden">
@@ -347,29 +334,6 @@ export default function MachineryProfile() {
         )}
       </Card>
     </div>
-  )
-}
-
-const TONE = {
-  green: 'text-green-700',
-  red: 'text-red-600',
-  sky: 'text-sky-700',
-  emerald: 'text-emerald-700'
-}
-// One figure of the summary; a status figure also switches to its tab.
-function Figure({ label, value, tone, onClick, on }) {
-  const body = (
-    <>
-      <span className="block text-xs text-slate-500">{label}</span>
-      <span className={`mt-0.5 block font-display text-2xl font-extrabold tabular-nums ${TONE[tone] || 'text-slate-900'}`}>{value}</span>
-    </>
-  )
-  const cls = 'rounded-xl border px-3 py-2 text-left'
-  if (!onClick) return <div className={`${cls} border-slate-200 bg-slate-50`}>{body}</div>
-  return (
-    <button type="button" onClick={onClick} aria-pressed={on} className={`${cls} transition ${on ? 'border-brand bg-brand-light/50' : 'border-slate-200 bg-white hover:border-brand'}`}>
-      {body}
-    </button>
   )
 }
 
