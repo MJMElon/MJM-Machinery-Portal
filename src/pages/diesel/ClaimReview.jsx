@@ -152,10 +152,10 @@ export default function ClaimReview() {
                 key={k}
                 type="button"
                 onClick={() => setTab(k)}
-                className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold ${tab === k ? 'bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}
+                className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold ${tab === k ? 'fx-tab-on bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}
               >
                 {label}
-                {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
+                {tab === k && <span className="fx-line absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
               </button>
             ))}
           </div>

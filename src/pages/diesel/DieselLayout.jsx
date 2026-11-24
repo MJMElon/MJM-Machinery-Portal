@@ -52,6 +52,12 @@ export default function DieselLayout() {
   const access = useDieselAccess(current?.diesel_enabled ? current.id : null)
   const landing = Boolean(useMatch({ path: '/diesel', end: true }))
   const back = () => navigate('/')
+  // Fuel Manage theme (index.css .fuel-theme): dark buttons, glowing tabs.
+  // On <html> so pop-ups (rendered outside this page) get it too.
+  useEffect(() => {
+    document.documentElement.classList.add('fuel-theme')
+    return () => document.documentElement.classList.remove('fuel-theme')
+  }, [])
 
   // Opened straight on a module (e.g. the Fuel Claims icon in MJM Intranet
   // links to #/diesel/claims): show the Fuel Manage page with that module in

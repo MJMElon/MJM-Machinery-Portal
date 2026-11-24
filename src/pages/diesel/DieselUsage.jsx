@@ -568,10 +568,10 @@ export default function DieselUsage() {
                   type="button"
                   onClick={() => setTab(k)}
                   data-noprint={tab === k ? undefined : ''}
-                  className={`relative px-6 py-3 text-sm font-bold first:rounded-tl-2xl ${tab === k ? 'bg-white text-brand' : 'bg-slate-50/60 text-slate-600 hover:bg-white/60'}`}
+                  className={`relative px-6 py-3 text-sm font-bold first:rounded-tl-2xl ${tab === k ? 'fx-tab-on bg-white text-brand' : 'bg-slate-50/60 text-slate-600 hover:bg-white/60'}`}
                 >
                   {label}
-                  {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
+                  {tab === k && <span className="fx-line absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
                 </button>
               ))}
               <span className="flex-1 rounded-tr-2xl bg-slate-50/60" />
@@ -596,7 +596,7 @@ export default function DieselUsage() {
                 disabled={searching}
                 title="Search (load the latest data again)"
                 aria-label="Search"
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1f2933] text-white shadow-sm hover:bg-[#0f172a] disabled:opacity-60"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white shadow-sm disabled:opacity-60"
               >
                 <IconSearch width={17} height={17} className={searching ? 'animate-pulse' : ''} />
               </button>
