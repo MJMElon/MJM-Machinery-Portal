@@ -9,7 +9,7 @@ import { printHtml } from '../../lib/printFrame.js'
 
 // Fleet card top-up requests.
 //   NewTopupModal      "New Top Up Request" pop-up (Fleet Card Manage): tick one
-//                      or more fleet cards (the list floats over the window) →
+//                      or more fleet cards (a fixed-size window; the list opens over it) →
 //                      one row per card: litres used / monthly volume, balance,
 //                      top-up amount → Send request (one request per card). With Consolidate on,
 //                      the cards of the other companies are in the list too.
@@ -109,8 +109,9 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
     ? data.cards.map((c) => ({ value: c.id, label: label(c), group: many ? c.company.name : '' })).sort((a, b) => (many ? a.group.localeCompare(b.group) : 0))
     : []
   return (
-    <Modal open onClose={onClose} title="New Top Up Request">
-      <form onSubmit={send} className="space-y-4">
+    <Modal open onClose={onClose} title="New Top Up Request" wide>
+      {/* A fixed-size window: ticking cards or opening the list never changes its size; the card rows scroll inside */}
+      <form onSubmit={send} className="flex h-[min(30rem,70dvh)] flex-col gap-4">
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         {!data ? (
           <p className="py-6 text-center text-sm text-slate-400">Loading fleet cards…</p>
@@ -122,7 +123,6 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
               label="Fleet card (tick one or more)"
               allLabel="Choose fleet cards…"
               clearLabel="Clear"
-              float
               searchable={opts.length > 5}
               searchPlaceholder="Search card no. or vehicle…"
               options={opts}
@@ -133,8 +133,8 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
             {chosen.length > 0 ? (
               <>
                 {/* one row per ticked card: usage, balance and its own amount */}
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_8.5rem] gap-2 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200">
+                  <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_8.5rem] gap-2 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     <span>Fleet card</span>
                     <span className="text-right">Used / volume</span>
                     <span className="text-right">Balance</span>
@@ -170,12 +170,12 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
                       </div>
                     )
                   })}
-                  <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <span />
                     <span className="font-bold tabular-nums text-slate-900">Total {money(total)}</span>
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex shrink-0 justify-end">
                   <Button type="submit" className="h-12 px-5" disabled={busy || !ready}>
                     {busy ? 'Sending…' : chosen.length === 1 ? 'Send request' : `Send ${chosen.length} requests`}
                   </Button>
