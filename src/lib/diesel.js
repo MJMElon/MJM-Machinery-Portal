@@ -589,6 +589,11 @@ export async function setAutoTopup(cardId, on, below, amount) {
     throw friendly(error)
   }
 }
+/** Why a card's automatic top-up request was / was not sent: { balance, card_status, waiting }; null before migration 20261226. */
+export async function autoTopupStatus(cardId) {
+  const { data, error } = await supabase.rpc('machinery_auto_topup_status', { p_card: cardId })
+  return error ? null : data
+}
 /** Check the cards of a company and send the automatic top-up requests that are due (quietly). */
 export function autoTopupCheck(companyId) {
   return supabase.rpc('machinery_auto_topup_check', { p_company: companyId }).then(({ data }) => data || 0, () => 0)
