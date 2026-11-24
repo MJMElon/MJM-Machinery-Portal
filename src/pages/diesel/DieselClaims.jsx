@@ -363,7 +363,7 @@ export default function DieselClaims() {
                           <ActionButton onClick={c.status === 'pending' ? () => remind(c) : null} label="Remind approver to approve" Icon={IconBell} disabled={busyId === c.id} />
                           <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
                           <ActionButton onClick={c.status === 'draft' && canEdit(c) ? () => submit(c) : null} label="Submit claim" Icon={IconSend} disabled={busyId === c.id} />
-                          <ActionButton onClick={c.status !== 'draft' ? () => print(c) : null} label="Print" Icon={IconPrint} disabled={busyId === c.id} />
+                          <ActionButton onClick={!['draft', 'rejected'].includes(c.status) ? () => print(c) : null} label="Print" Icon={IconPrint} disabled={busyId === c.id} />
                           <ActionButton onClick={canDelete(c) ? () => remove(c) : null} label="Delete" Icon={IconTrash} danger disabled={busyId === c.id} />
                         </div>
                       </td>

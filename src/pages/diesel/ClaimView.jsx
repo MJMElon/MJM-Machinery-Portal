@@ -95,7 +95,7 @@ export default function ClaimView() {
     act(() => printClaim({ company, claim, lines, vehicles, cards, claimantName }))
 
   useEffect(() => {
-    if (!loading && claim && params.get('print') === '1' && claim.status !== 'draft' && !printedOnLoad.current) {
+    if (!loading && claim && params.get('print') === '1' && !['draft', 'rejected'].includes(claim.status) && !printedOnLoad.current) {
       printedOnLoad.current = true
       print()
     }
@@ -219,8 +219,8 @@ export default function ClaimView() {
               reviewButtons && <div className="flex flex-wrap gap-2">{reviewButtons}</div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {/* a draft is not printed: only a submitted claim */}
-                {claim.status !== 'draft' && (
+                {/* a draft or a rejected claim is not printed */}
+                {!['draft', 'rejected'].includes(claim.status) && (
                   <Button variant="secondary" disabled={busy} onClick={print}>
                     <IconPrint width={18} height={18} /> Print
                   </Button>

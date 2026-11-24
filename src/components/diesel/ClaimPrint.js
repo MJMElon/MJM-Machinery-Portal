@@ -1,4 +1,4 @@
-import { receiptUrl, vehicleLabel } from '../../lib/diesel.js'
+import { listPeople, personLabel, receiptUrl, vehicleLabel } from '../../lib/diesel.js'
 import { day } from '../../lib/format.js'
 import { printHtml } from '../../lib/printFrame.js'
 
@@ -62,11 +62,12 @@ table { border-collapse: collapse; font-size: 11px; }
 .sum .box .r { text-align: right; font-variant-numeric: tabular-nums; }
 .notes { margin-top: 10px; color: #374151; }
 .sign { width: 100%; margin-top: 40px; break-inside: avoid; }
-.sign td { width: 33.33%; padding: 0 14px 0 0; vertical-align: top; }
+.sign td { width: 50%; padding: 0 24px 0 0; vertical-align: top; }
 .sign .label { font-weight: 700; }
 .sign .space { height: 46px; }
 .sign .line { width: 85%; border-bottom: 1px solid #111827; padding: 0 2px 3px; min-height: 14px; }
 .sign .role { padding-top: 4px; }
+.sign .date { padding-top: 2px; color: #374151; }
 .receipts { break-before: page; }
 .receipts h2 { font-size: 11px; font-weight: 700; margin: 0 0 8px; letter-spacing: .04em; text-transform: uppercase; color: ${GREEN}; }
 .receipts table { width: 100%; }
@@ -76,7 +77,8 @@ table { border-collapse: collapse; font-size: 11px; }
 `
 
 /** The claim form as a complete HTML document (string). */
-export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, images = {} }) {
+export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, approverName = '', images = {} }) {
+  const approved = ['approved', 'paid'].includes(claim.status) && Boolean(claim.reviewed_at)
   const vById = new Map((vehicles || []).map((v) => [v.id, v]))
   const cById = new Map((cards || []).map((c) => [c.id, c]))
   const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
@@ -164,10 +166,11 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
   </td></tr></table>
   ${claim.notes ? `<div class="notes">Notes: ${esc(claim.notes)}</div>` : ''}
   <table class="sign">
-    <tr><td class="label">Prepared By:</td><td class="label">Verified By:</td><td class="label">Approved By:</td></tr>
-    <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
-    <tr><td><div class="line">${esc(claimantName)}</div></td><td><div class="line"></div></td><td><div class="line"></div></td></tr>
-    <tr><td class="role">Claimant</td><td class="role">Account Department</td><td class="role">Department Head</td></tr>
+    <tr><td class="label">Prepared By:</td><td class="label">Approved By:</td></tr>
+    <tr><td class="space"></td><td class="space"></td></tr>
+    <tr><td><div class="line">${esc(claimantName)}</div></td><td><div class="line">${esc(approverName)}</div></td></tr>
+    <tr><td class="role">Claimant</td><td class="role">Department Head</td></tr>
+    <tr><td class="date">Submitted: ${esc(day(claim.submitted_on || claim.fill_date))}</td><td class="date">Date approved: ${approved ? esc(day(claim.reviewed_at.slice(0, 10))) : ''}</td></tr>
   </table>
   ${
     receiptRows.length
@@ -196,6 +199,13 @@ export async function printClaim({ company, claim, lines, vehicles, cards, claim
       }
     })
   )
-  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, images })
+  // The approver (Department Head) once the claim is approved: name from the people list
+  let approverName = ''
+  if (['approved', 'paid'].includes(claim.status) && claim.reviewed_by) {
+    const people = await listPeople(company.id).catch(() => [])
+    const p = people.find((x) => x.user_id === claim.reviewed_by)
+    approverName = p ? personLabel(p) : ''
+  }
+  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, approverName, images })
   return printHtml(html)
 }
