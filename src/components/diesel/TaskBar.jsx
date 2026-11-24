@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Button } from '../ui.jsx'
 import { IconBell, IconChevron } from '../icons.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useWindows } from '../Windows.jsx'
@@ -61,9 +60,7 @@ export function TaskBar({ company, access }) {
   const step = (d) => setI((x) => (x + d + tasks.length) % tasks.length)
 
   return (
-    <div className="relative mx-auto mb-3 flex max-w-3xl items-center gap-3 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 via-yellow-50 to-white py-2.5 pl-5 pr-3 shadow-sm">
-      {/* gold light down the left edge */}
-      <span className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-amber-300 via-yellow-400 to-amber-500 shadow-[0_0_10px_rgba(251,191,36,0.7)]" aria-hidden="true" />
+    <div className="relative mx-auto mb-3 flex max-w-3xl items-center gap-3 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 via-yellow-50 to-white py-2.5 pl-4 pr-3 shadow-sm">
       <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200">
         <IconBell width={18} height={18} />
         <span className={`absolute right-0.5 top-0.5 h-2 w-2 rounded-full ring-2 ring-amber-50 ${dot}`} aria-hidden="true" />
@@ -74,11 +71,11 @@ export function TaskBar({ company, access }) {
           {task.text}
         </p>
       </div>
-      <Button size="sm" onClick={() => open(task.open)} className="shrink-0">
-        <span className="hidden sm:inline">Continue to the page</span>
-        <span className="sm:hidden">Continue</span>
-        <IconChevron width={16} height={16} />
-      </Button>
+      <button type="button" onClick={() => open(task.open)} className="group inline-flex shrink-0 items-center gap-0.5 rounded-lg px-1.5 py-1 text-sm font-semibold text-slate-800 hover:text-amber-800">
+        <span className="hidden underline-offset-4 group-hover:underline sm:inline">Continue to the page</span>
+        <span className="underline-offset-4 group-hover:underline sm:hidden">Continue</span>
+        <IconChevron width={16} height={16} className="transition-transform group-hover:translate-x-0.5" />
+      </button>
       {tasks.length > 1 && (
         <div className="flex shrink-0 items-center gap-0.5">
           <button type="button" onClick={() => step(-1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-800/70 hover:bg-amber-100" aria-label="Previous task">

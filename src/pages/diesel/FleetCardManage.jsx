@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconPlus } from '../../components/icons.jsx'
+import { IconConsolidate, IconPlus } from '../../components/icons.jsx'
 import { FleetCardTile } from '../../components/diesel/FleetCardTile.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
 import { StatementImportModal } from '../../components/diesel/StatementImport.jsx'
@@ -10,7 +10,6 @@ import { NewTopupModal } from '../../components/diesel/TopupRequests.jsx'
 import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
 import { thisMonth } from '../../lib/format.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
-import { companyLabel } from '../../lib/companies.js'
 
 // Fleet Card Manage: every fleet card drawn as a small card (number, fuel
 // station, vehicle, status) with this month's litres against the subsidy
@@ -137,6 +136,19 @@ export default function FleetCardManage() {
                 Import statement
               </Button>
             )}
+            {/* Consolidate: an icon button that shows the fleet cards of every company of this business too */}
+            {canConsolidate && (
+              <button
+                type="button"
+                onClick={() => toggle(!showAll)}
+                aria-pressed={showAll}
+                title={showAll ? 'Consolidate is on: fleet cards of every company. Click to show this company only' : 'Consolidate: show the fleet cards of every company'}
+                aria-label="Consolidate"
+                className={`flex h-12 w-12 items-center justify-center rounded-xl border ${showAll ? 'border-brand bg-brand text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+              >
+                <IconConsolidate width={20} height={20} />
+              </button>
+            )}
             <Button variant="secondary" onClick={() => setAsking(true)}>
               <IconPlus width={18} height={18} /> Request top up
             </Button>
@@ -160,24 +172,6 @@ export default function FleetCardManage() {
       <Card className="p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold text-slate-800">Fleet cards</h3>
-          {canConsolidate && (
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 text-sm" role="group" aria-label="Which fleet cards">
-              {[
-                [false, companyLabel(company)],
-                [true, 'Consolidate']
-              ].map(([on, label]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => toggle(on)}
-                  aria-pressed={showAll === on}
-                  className={`rounded-lg px-3 py-1 font-medium ${showAll === on ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
         {loading ? (
           <Loading />
@@ -185,7 +179,7 @@ export default function FleetCardManage() {
           <div className="space-y-6">
             {mineGroup && (mineGroup.cards.length || canAdd) ? (
               <section>
-                {showAll && <GroupTitle company={mineGroup.company} count={mineGroup.cards.length} />}
+                {showAll && <GroupTitle company={mineGroup.company} />}
                 {tiles(mineGroup, true)}
               </section>
             ) : (
@@ -194,7 +188,7 @@ export default function FleetCardManage() {
             {showAll &&
               others.map((g) => (
                 <section key={g.company.id}>
-                  <GroupTitle company={g.company} count={g.cards.length} />
+                  <GroupTitle company={g.company} />
                   {tiles(g, false)}
                 </section>
               ))}
@@ -208,13 +202,9 @@ export default function FleetCardManage() {
 
 const shortName = (c) => c.short_name || c.code || c.name
 
-function GroupTitle({ company, count }) {
-  return (
-    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-      <span className="mr-1.5 rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">{shortName(company)}</span>
-      {company.name} <span className="font-normal normal-case tracking-normal text-slate-400">· {count} card{count === 1 ? '' : 's'}</span>
-    </p>
-  )
+// Consolidate view: just the company name above its cards.
+function GroupTitle({ company }) {
+  return <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{company.name}</p>
 }
 
 // A dashed, see-through card with "+": starts a new fleet card.
