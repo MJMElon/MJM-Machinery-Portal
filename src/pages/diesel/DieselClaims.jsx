@@ -201,7 +201,7 @@ export default function DieselClaims() {
                           {claimNo(c, i)}
                         </Link>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 align-middle tabular-nums text-slate-700">{day(c.submitted_on || c.fill_date)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 align-middle font-semibold tabular-nums text-slate-800">{day(c.submitted_on || c.fill_date)}</td>
                       <td className="whitespace-nowrap px-3 py-3 align-middle">
                         <span className="inline-flex items-center gap-2">
                           <StatusBadge status={c.status} />

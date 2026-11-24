@@ -6,7 +6,7 @@ import { isReload, openReceipt, receiptUrls } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
 
 // Pending approval: one row per claim waiting for me.
-//   ☐ | Claimant | Submitted | Claim amount | Receipts (small pictures) | ✓ / ✗
+//   ☐ | Claim No. | Submitted | Claimant | Claim amount | Receipts (small pictures) | ✓ / ✗
 // Click a receipt picture to see it big and move through the claim's receipts
 // with ‹ › (or the arrow keys). Tick rows (or tick all, then untick some) and
 // "Approve all selected"; with nothing ticked, "Approve all" approves every
@@ -87,8 +87,9 @@ export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy,
               <th className="w-10 py-2.5 pl-5">
                 <input type="checkbox" checked={allTicked} onChange={tickAll} className="h-4 w-4 rounded border-slate-300" aria-label="Tick all" />
               </th>
-              <th className="px-3 py-2.5">Claimant</th>
+              <th className="w-24 px-3 py-2.5">Claim No.</th>
               <th className="w-32 px-3 py-2.5">Submitted</th>
+              <th className="px-3 py-2.5">Claimant</th>
               <th className="w-36 px-3 py-2.5 text-right">Claim amount</th>
               <th className="px-3 py-2.5">Receipts</th>
               <th className="w-36 px-3 py-2.5 text-center">Action</th>
@@ -105,12 +106,12 @@ export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy,
                     <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} className="h-4 w-4 rounded border-slate-300" aria-label={`Tick ${claimNo(c, 0)}`} />
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className="block font-semibold text-slate-800">{nameOf(c.claimant_id)}</span>
-                    <Link to={`/diesel/claims/${c.id}?from=review`} className="text-xs tabular-nums text-slate-500 hover:text-brand">
-                      Claim {claimNo(c, 0)}
+                    <Link to={`/diesel/claims/${c.id}?from=review`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
+                      {claimNo(c, 0)}
                     </Link>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-700">{day(c.submitted_on || c.fill_date)}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-semibold tabular-nums text-slate-800">{day(c.submitted_on || c.fill_date)}</td>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">{nameOf(c.claimant_id)}</td>
                   <td className="px-3 py-2.5 text-right">
                     <span className="block font-semibold tabular-nums text-slate-900">{money(payableOf(c))}</span>
                     {litres > 0 && <span className="text-xs tabular-nums text-slate-500">{num(litres, 2)} L</span>}
