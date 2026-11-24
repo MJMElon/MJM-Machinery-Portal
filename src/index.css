@@ -11,13 +11,13 @@
 }
 
 /* ---- Fuel Manage theme: the intranet's dark slate instead of blue, with a
-   light glow (electric cyan) on hover and on the chosen tab. */
+   silver / warm yellow light on hover and on the chosen tab. */
 :root.fuel-theme {
   --brand: 31 41 51; /* #1f2933, the intranet frame */
   --brand-dark: 15 23 42;
   --brand-light: 241 245 249;
-  --fx-glow: 34 211 238; /* cyan-400 */
-  --fx-glow-2: 129 140 248; /* indigo-400 */
+  --fx-glow: 251 191 36; /* warm yellow light (amber-400) */
+  --fx-glow-2: 203 213 225; /* silver (slate-300) */
 }
 /* neutral grey page with a faint grid instead of the blue tint */
 .fuel-theme body {
@@ -27,32 +27,19 @@
     linear-gradient(90deg, rgb(15 23 42 / 0.035) 1px, transparent 1px);
   background-size: 24px 24px;
 }
-/* dark buttons: a soft top-lit gradient, a thin light edge, glow on hover */
+/* dark buttons: flat, one black; on hover a little lighter with a soft silver glow */
 .fuel-theme button.bg-brand,
 .fuel-theme a.bg-brand,
 .fuel-theme label.bg-brand {
-  background-image: linear-gradient(180deg, #3b4754 0%, #1f2933 48%, #0f172a 100%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    0 1px 2px rgb(15 23 42 / 0.35),
-    0 0 0 1px rgb(15 23 42 / 0.6);
-  transition: box-shadow 0.2s ease, transform 0.15s ease, filter 0.2s ease;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 .fuel-theme button.bg-brand:not(:disabled):hover,
 .fuel-theme a.bg-brand:hover,
 .fuel-theme label.bg-brand:hover {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.2),
-    0 0 0 1px rgb(var(--fx-glow) / 0.55),
-    0 0 14px rgb(var(--fx-glow) / 0.45),
-    0 4px 14px rgb(15 23 42 / 0.3);
-  filter: brightness(1.08);
-}
-.fuel-theme button.bg-brand:not(:disabled):active {
-  transform: translateY(1px);
+  background-color: #334155;
+  box-shadow: 0 0 0 1px rgb(var(--fx-glow-2) / 0.6), 0 0 12px rgb(var(--fx-glow) / 0.35);
 }
 .fuel-theme button.bg-brand:disabled {
-  background-image: none;
   box-shadow: none;
 }
 .fuel-theme .focus\:ring-brand\/40:focus,
@@ -68,7 +55,7 @@
 }
 .fuel-theme .fx-line {
   height: 2px;
-  background-image: linear-gradient(90deg, rgb(var(--fx-glow-2)), rgb(var(--fx-glow)), #e0f2fe, rgb(var(--fx-glow)), rgb(var(--fx-glow-2)));
+  background-image: linear-gradient(90deg, rgb(var(--fx-glow-2)), rgb(var(--fx-glow)), #fff7d6, rgb(var(--fx-glow)), rgb(var(--fx-glow-2)));
   background-size: 200% 100%;
   box-shadow:
     0 0 6px rgb(var(--fx-glow) / 0.9),
