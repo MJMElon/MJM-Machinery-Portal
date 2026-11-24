@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react'
 import { Badge, Button, Card, Modal } from '../ui.jsx'
 import { IconPrint } from '../icons.jsx'
 import { Empty, F, inputCls } from './shared.jsx'
+import { MultiPick } from './MultiPick.jsx'
 import { TOPUP_STATUS, cancelTopup, cardBalances, cardLedger, decideTopup, listCardData, listVehicles, personLabel, requestTopup, topupDone, topupNo } from '../../lib/diesel.js'
 import { day, money, num, thisMonth, today } from '../../lib/format.js'
 import { printHtml } from '../../lib/printFrame.js'
 
 // Fleet card top-up requests.
-//   NewTopupModal      "New Top Up Request" pop-up (Fleet Card Manage): fleet
-//                      card → this month's litres used / monthly volume and
-//                      the card balance → top-up amount → Send request
+//   NewTopupModal      "New Top Up Request" pop-up (Fleet Card Manage): tick one
+//                      or more fleet cards → this month's litres used / monthly
+//                      volume and the card balance → top-up amount per card →
+//                      Send request (one request per card). With Consolidate on,
+//                      the cards of the other companies are in the list too.
 //   RequestTopupModal  the older form: fleet card, amount, needed by, reason → Pending
 //   TopupSection       the requests: "To approve" (approver), "My requests", "All";
 //                      Approve / Reject, Cancel, Mark topped up, Print approval
@@ -18,54 +21,119 @@ import { printHtml } from '../../lib/printFrame.js'
 const cardText = (c, vById) =>
   c ? `${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${vById.get(c.vehicle_id).reg_no || vById.get(c.vehicle_id).name})` : ''}` : '—'
 
-export function NewTopupModal({ company, onClose, onSent }) {
-  const [data, setData] = useState(null) // { cards, vById, ledger }
-  const [cardId, setCardId] = useState('')
-  const [amount, setAmount] = useState('')
+// companies: the companies whose cards can be ticked (Consolidate: this
+// company and its sister companies); default just `company`.
+export function NewTopupModal({ company, companies, onClose, onSent }) {
+  const list = companies?.length ? companies : [company]
+  const many = list.length > 1
+  const listKey = list.map((c) => c.id).join(',')
+  const [data, setData] = useState(null) // { cards (with company), vById, usage, ledgers }
+  const [ids, setIds] = useState([])
+  const [amounts, setAmounts] = useState({}) // card id → RM
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let live = true
-    Promise.all([listCardData(company.id, thisMonth() + '-01'), listVehicles(company.id).catch(() => []), cardLedger(company.id).catch(() => null)])
-      .then(([d, v, lg]) => {
+    Promise.all(
+      list.map((co) =>
+        Promise.all([listCardData(co.id, thisMonth() + '-01'), listVehicles(co.id).catch(() => []), cardLedger(co.id).catch(() => null)]).then(([d, v, lg]) => ({ co, d, v, lg }))
+      )
+    )
+      .then((rows) => {
         if (!live) return
-        const cards = d.cards.filter((c) => c.card_no && !['cancelled', 'inactive', 'application'].includes(c.status))
-        setData({ cards, usage: d.usage, vById: new Map(v.map((x) => [x.id, x])), ledger: lg })
-        if (cards.length === 1) setCardId(cards[0].id)
+        const cards = rows.flatMap(({ co, d }) => d.cards.filter((c) => c.card_no && !['cancelled', 'inactive', 'application'].includes(c.status)).map((c) => ({ ...c, company: co })))
+        const ledgers = new Map(rows.map(({ co, lg }) => [co.id, lg]))
+        setData({ cards, usage: rows.flatMap(({ d }) => d.usage), vById: new Map(rows.flatMap(({ v }) => v.map((x) => [x.id, x]))), ledgers, balances: new Map(rows.map(({ co, lg }) => [co.id, lg ? cardBalances(lg) : null])) })
+        if (cards.length === 1) setIds([cards[0].id])
       })
       .catch((e) => live && setError(e.message))
     return () => {
       live = false
     }
-  }, [company.id])
+  }, [listKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const month = thisMonth()
-  const card = data?.cards.find((c) => c.id === cardId)
-  // Litres used on the card this month (card balance ledger when there is one)
-  const used = !card
-    ? 0
-    : data.ledger
-      ? data.ledger.filter((r) => r.card_id === card.id && r.kind === 'usage' && r.month === month).reduce((s, r) => s + Number(r.litres || 0), 0)
+  const short = (co) => co.short_name || co.code || co.name
+  const label = (c) => `${many ? `${short(c.company)} · ` : ''}${cardText(c, data.vById)}${c.provider ? ` · ${c.provider}` : ''}`
+  const chosen = data ? ids.map((id) => data.cards.find((c) => c.id === id)).filter(Boolean) : []
+  // Litres used on a card this month (card balance ledger when there is one), quota and balance
+  const infoOf = (card) => {
+    const lg = data.ledgers.get(card.company.id)
+    const used = lg
+      ? lg.filter((r) => r.card_id === card.id && r.kind === 'usage' && r.month === month).reduce((s, r) => s + Number(r.litres || 0), 0)
       : data.usage.filter((u) => u.card_id === card.id).reduce((s, u) => s + Number(u.litres || 0), 0)
-  const quota = card?.subsidy_litres == null ? null : Number(card.subsidy_litres)
-  const balance = card && data.ledger ? cardBalances(data.ledger)[card.id] || 0 : null
-  const pct = quota ? Math.min(100, Math.round((used / quota) * 100)) : 0
+    const quota = card.subsidy_litres == null ? null : Number(card.subsidy_litres)
+    const bal = data.balances.get(card.company.id)
+    return { used, quota, balance: bal ? bal[card.id] || 0 : null, pct: quota ? Math.min(100, Math.round((used / quota) * 100)) : 0 }
+  }
+  const amt = (id) => Number(amounts[id] || 0)
+  const ready = chosen.length > 0 && chosen.every((c) => amt(c.id) > 0)
+  const total = chosen.reduce((s, c) => s + amt(c.id), 0)
+  const setAmt = (id, v) => setAmounts((a) => ({ ...a, [id]: v }))
 
   async function send(e) {
     e.preventDefault()
-    if (!card || !(Number(amount) > 0)) return
+    if (!ready) return
     setBusy(true)
     setError('')
-    try {
-      await requestTopup(company.id, { card_id: card.id, amount })
-      onSent?.(`Top up request sent: ${card.card_no} · ${money(Number(amount))}. It is now waiting for approval.`)
-      onClose()
-    } catch (err) {
-      setError(err.message)
-      setBusy(false)
+    // one request per card; the ones that fail stay ticked so they can be sent again
+    const failed = []
+    const done = []
+    for (const c of chosen) {
+      try {
+        await requestTopup(c.company.id, { card_id: c.id, amount: amounts[c.id] })
+        done.push(c)
+      } catch (err) {
+        failed.push(`${c.card_no}: ${err.message}`)
+      }
     }
+    if (!failed.length) {
+      onSent?.(
+        done.length === 1
+          ? `Top up request sent: ${done[0].card_no} · ${money(amt(done[0].id))}. It is now waiting for approval.`
+          : `${done.length} top up requests sent (${done.map((c) => c.card_no).join(', ')}) · total ${money(total)}. They are now waiting for approval.`
+      )
+      onClose()
+      return
+    }
+    if (done.length) {
+      setIds((x) => x.filter((id) => !done.some((c) => c.id === id)))
+      onSent?.(`${done.length} top up request${done.length === 1 ? '' : 's'} sent (${done.map((c) => c.card_no).join(', ')}).`)
+    }
+    setError(`Not sent: ${failed.join(' · ')}`)
+    setBusy(false)
   }
+
+  const opts = data
+    ? data.cards.map((c) => ({ value: c.id, label: label(c), group: many ? c.company.name : '' })).sort((a, b) => (many ? a.group.localeCompare(b.group) : 0))
+    : []
+  const usageBox = (card, info) => (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">This month usage</p>
+        <div className="mt-1.5 flex items-baseline justify-between gap-2 text-sm">
+          <span className="text-slate-600">Litre used</span>
+          <span className="font-bold tabular-nums text-slate-900">{num(info.used, 2)} L</span>
+        </div>
+        <div className="flex items-baseline justify-between gap-2 text-sm">
+          <span className="text-slate-600">Monthly volume</span>
+          <span className="font-bold tabular-nums text-slate-900">{info.quota == null ? '—' : `${num(info.quota, 0)} L`}</span>
+        </div>
+        {info.quota ? (
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className={`h-full rounded-full ${info.pct >= 90 ? 'bg-red-500' : info.pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${info.pct}%` }} />
+          </div>
+        ) : null}
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fleet card current balance</p>
+        <p className={`mt-2 text-2xl font-bold tabular-nums ${info.balance != null && info.balance < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+          {info.balance == null ? '—' : money(info.balance)}
+        </p>
+      </div>
+    </div>
+  )
 
   return (
     <Modal open onClose={onClose} title="New Top Up Request">
@@ -74,70 +142,101 @@ export function NewTopupModal({ company, onClose, onSent }) {
         {!data ? (
           <p className="py-6 text-center text-sm text-slate-400">Loading fleet cards…</p>
         ) : data.cards.length === 0 ? (
-          <p className="text-sm text-slate-500">No active fleet card with a card number in {company.name}.</p>
+          <p className="text-sm text-slate-500">No active fleet card with a card number in {many ? 'these companies' : company.name}.</p>
         ) : (
           <>
-            <F label="Fleet card">
-              <select required value={cardId} onChange={(e) => setCardId(e.target.value)} className={inputCls}>
-                <option value="">Choose fleet card…</option>
-                {data.cards.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {cardText(c, data.vById)}
-                    {c.provider ? ` · ${c.provider}` : ''}
-                  </option>
-                ))}
-              </select>
-            </F>
+            <MultiPick
+              label="Fleet card (tick one or more)"
+              allLabel="Choose fleet cards…"
+              clearLabel="Clear"
+              inline
+              searchable={opts.length > 5}
+              searchPlaceholder="Search card no. or vehicle…"
+              options={opts}
+              value={ids}
+              onChange={setIds}
+            />
 
-            {card && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">This month usage</p>
-                  <div className="mt-1.5 flex items-baseline justify-between gap-2 text-sm">
-                    <span className="text-slate-600">Litre used</span>
-                    <span className="font-bold tabular-nums text-slate-900">{num(used, 2)} L</span>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-2 text-sm">
-                    <span className="text-slate-600">Monthly volume</span>
-                    <span className="font-bold tabular-nums text-slate-900">{quota == null ? '—' : `${num(quota, 0)} L`}</span>
-                  </div>
-                  {quota ? (
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                      <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
+            {chosen.length === 1 ? (
+              <>
+                {usageBox(chosen[0], infoOf(chosen[0]))}
+                <div>
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Top up amount</span>
+                  <div className="flex items-stretch gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">RM</span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        required
+                        inputMode="decimal"
+                        value={amounts[chosen[0].id] ?? ''}
+                        onChange={(e) => setAmt(chosen[0].id, e.target.value)}
+                        placeholder="0.00"
+                        className={`${inputCls} h-14 pl-14 text-2xl font-bold tabular-nums`}
+                      />
                     </div>
-                  ) : null}
+                    <Button type="submit" className="h-14 shrink-0 px-5" disabled={busy || !ready}>
+                      {busy ? 'Sending…' : 'Send request'}
+                    </Button>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fleet card current balance</p>
-                  <p className={`mt-2 text-2xl font-bold tabular-nums ${balance != null && balance < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-                    {balance == null ? '—' : money(balance)}
-                  </p>
+              </>
+            ) : chosen.length > 1 ? (
+              <>
+                {/* one row per ticked card: usage, balance and its own amount */}
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_8.5rem] gap-2 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <span>Fleet card</span>
+                    <span className="text-right">Used / volume</span>
+                    <span className="text-right">Balance</span>
+                    <span className="text-right">Top up (RM)</span>
+                  </div>
+                  {chosen.map((c) => {
+                    const info = infoOf(c)
+                    return (
+                      <div key={c.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_8.5rem] items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm">
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-slate-800">{cardText(c, data.vById)}</span>
+                          {many && <span className="block truncate text-[11px] text-slate-500">{c.company.name}</span>}
+                        </span>
+                        <span className="text-right tabular-nums text-slate-600">
+                          {num(info.used, 0)}
+                          {info.quota != null ? ` / ${num(info.quota, 0)}` : ''} L
+                        </span>
+                        <span className={`text-right font-semibold tabular-nums ${info.balance != null && info.balance < 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                          {info.balance == null ? '—' : money(info.balance)}
+                        </span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          required
+                          inputMode="decimal"
+                          value={amounts[c.id] ?? ''}
+                          onChange={(e) => setAmt(c.id, e.target.value)}
+                          placeholder="0.00"
+                          aria-label={`Top up amount for ${c.card_no}`}
+                          className={`${inputCls} h-9 text-right font-semibold tabular-nums`}
+                        />
+                      </div>
+                    )
+                  })}
+                  <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <span className="font-semibold text-slate-600">
+                      {chosen.length} cards · one request each
+                    </span>
+                    <span className="font-bold tabular-nums text-slate-900">Total {money(total)}</span>
+                  </div>
                 </div>
-              </div>
-            )}
-
-            <div>
-              <span className="mb-1 block text-xs font-medium text-slate-600">Top up amount</span>
-              <div className="flex items-stretch gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">RM</span>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    className={`${inputCls} h-14 pl-14 text-2xl font-bold tabular-nums`}
-                  />
+                <div className="flex justify-end">
+                  <Button type="submit" className="h-12 px-5" disabled={busy || !ready}>
+                    {busy ? 'Sending…' : `Send ${chosen.length} requests`}
+                  </Button>
                 </div>
-                <Button type="submit" className="h-14 shrink-0 px-5" disabled={busy || !card || !(Number(amount) > 0)}>
-                  {busy ? 'Sending…' : 'Send request'}
-                </Button>
-              </div>
-            </div>
+              </>
+            ) : null}
           </>
         )}
       </form>

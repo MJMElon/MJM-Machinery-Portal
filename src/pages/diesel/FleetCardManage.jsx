@@ -167,6 +167,7 @@ export default function FleetCardManage() {
       {asking && (
         <NewTopupModal
           company={company}
+          companies={showAll ? [company, ...sisters] : null}
           onClose={() => setAsking(false)}
           onSent={(msg) => {
             setSent(msg)

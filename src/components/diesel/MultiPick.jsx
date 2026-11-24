@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from 'react'
 // head: a column title that opens the list (in a table header). The list is
 // placed on the screen (fixed) so the table's scroll box does not cut it off.
 // searchable: always show the search box at the top (else only for long lists).
-export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left', searchable = false, searchPlaceholder = 'Search…' }) {
+// inline: the list opens in the page flow (pushes what is below down), for pop-ups that scroll.
+export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left', searchable = false, searchPlaceholder = 'Search…', clearLabel = 'Clear (show all)', inline = false }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [pos, setPos] = useState(null)
@@ -104,7 +105,7 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
 
       {open && (
         <div
-          className={`z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-left font-normal normal-case tracking-normal shadow-xl ${head ? 'fixed' : 'absolute left-0 right-0 top-full mt-1 min-w-[16rem]'}`}
+          className={`z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-left font-normal normal-case tracking-normal shadow-xl ${head ? 'fixed' : inline ? 'relative mt-1' : 'absolute left-0 right-0 top-full mt-1 min-w-[16rem]'}`}
           style={head && pos ? { top: pos.top, left: pos.left, width: pos.width } : undefined}
         >
           {(searchable || options.length > 8) && (
@@ -124,7 +125,7 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
               Tick all{needle ? ' shown' : ''}
             </button>
             <button type="button" onClick={() => onChange([])} className="text-xs font-medium text-slate-500 hover:underline">
-              Clear (show all)
+              {clearLabel}
             </button>
           </div>
           <div className="max-h-72 overflow-y-auto py-1">
