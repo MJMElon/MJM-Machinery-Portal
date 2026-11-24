@@ -3,12 +3,13 @@ import { Button, Card } from '../ui.jsx'
 import { IconChevron } from '../icons.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useWindows } from '../Windows.jsx'
-import { DieselClaimsIcon, FleetCardIcon } from '../AppIcons.jsx'
-import { listClaims, listTopups, myFuelTasks } from '../../lib/diesel.js'
+import { DieselClaimsIcon } from '../AppIcons.jsx'
+import { listClaims, myFuelTasks } from '../../lib/diesel.js'
 
 // Fuel Manage main page → one row under the dashboard with the signed-in
 // person's pending tasks, most important first; < > steps through them and
-// the button opens the page where the task is done (in its window).
+// the button opens the page where the task is done (in its window). Shown:
+// fuel claims waiting for my approval, and my fleet card fill-ups not claimed.
 // To add a reminder: push one more { key, rank, text, button, open } below.
 // Lower rank = shown first.
 const REVIEW = { key: 'diesel-claims-review', label: 'Claims Approval', Icon: DieselClaimsIcon }
@@ -24,36 +25,18 @@ export function TaskBar({ company, access }) {
     if (!user) return
     let live = true
     const approver = isSuperAdmin || access.admin
-    const accountant = isSuperAdmin || access.pay
-    const topupRole = isSuperAdmin || access.topupApprover || access.can('topup', 'process')
-    Promise.all([
-      approver || accountant ? listClaims(company.id).catch(() => []) : [],
-      listClaims(company.id, { mine: user.id }).catch(() => []),
-      topupRole ? listTopups(company.id).catch(() => null) : null,
-      myFuelTasks(company.id)
-    ]).then(([all, mine, topups, db]) => {
+    // Only two reminders: claims waiting for my approval, and my fleet card
+    // fill-ups (from the station statement) not put on a fuel claim yet.
+    Promise.all([approver ? listClaims(company.id).catch(() => []) : [], myFuelTasks(company.id)]).then(([all, db]) => {
       if (!live) return
       const t = []
       const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
-      const notMine = (id) => id !== user.id
-      const topupApprove = (topups || []).filter((r) => r.status === 'pending' && notMine(r.requested_by) && access.approvesTopup?.(r.requested_by)).length
-      if (topupApprove)
-        t.push({ key: 'topup-approve', rank: 1, tone: 'amber', text: `${plural(topupApprove, 'top up request', 'top up requests')} waiting for your approval`, button: 'Approve', open: { ...REVIEW, path: '/diesel/claims/review?tab=topup' } })
-      const topupDo = access.can('topup', 'process') ? (topups || []).filter((r) => r.status === 'approved').length : 0
-      if (topupDo)
-        t.push({ key: 'topup-do', rank: 2, tone: 'blue', text: `${plural(topupDo, 'approved top up', 'approved top ups')} to top up`, button: 'Top up', open: { ...REVIEW, path: '/diesel/claims/review?tab=topup' } })
-      const claimApprove = approver ? all.filter((c) => c.status === 'pending' && notMine(c.claimant_id) && access.approves(c.claimant_id)).length : 0
+      const claimApprove = approver ? all.filter((c) => c.status === 'pending' && c.claimant_id !== user.id && access.approves(c.claimant_id)).length : 0
       if (claimApprove)
-        t.push({ key: 'claim-approve', rank: 3, tone: 'amber', text: `${plural(claimApprove, 'fuel claim', 'fuel claims')} waiting for your approval`, button: 'Approve', open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
-      const claimPay = accountant ? all.filter((c) => c.status === 'approved' && (notMine(c.claimant_id) || isSuperAdmin)).length : 0
-      if (claimPay)
-        t.push({ key: 'claim-pay', rank: 4, tone: 'green', text: `${plural(claimPay, 'approved claim', 'approved claims')} to pay`, button: 'Pay', open: { ...REVIEW, path: '/diesel/claims/review?tab=topay' } })
+        t.push({ key: 'claim-approve', rank: 1, tone: 'amber', text: `${plural(claimApprove, 'fuel claim', 'fuel claims')} waiting for your approval`, button: 'Approve', open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
       const unclaimed = Number(db.unclaimed_fills || 0)
       if (unclaimed)
-        t.push({ key: 'unclaimed', rank: 5, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} not claimed yet`, button: 'New claim', open: { ...CLAIMS, path: '/diesel/claims/new' } })
-      const drafts = mine.filter((c) => c.status === 'draft').length
-      if (drafts)
-        t.push({ key: 'drafts', rank: 6, tone: 'slate', text: `${plural(drafts, 'draft claim', 'draft claims')} not submitted yet`, button: 'Open', open: { ...CLAIMS, path: '/diesel/claims' } })
+        t.push({ key: 'unclaimed', rank: 2, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} not claimed yet: upload the receipt`, button: 'New claim', open: { ...CLAIMS, path: '/diesel/claims/new' } })
       setTasks(t.sort((a, b) => a.rank - b.rank))
       setI(0)
     })
