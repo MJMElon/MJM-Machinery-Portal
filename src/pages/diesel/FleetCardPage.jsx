@@ -516,7 +516,7 @@ export default function FleetCardPage({ mode }) {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {card && card.card_no && !["cancelled", "inactive", "application"].includes(card.status) && (
+              {access.procurement && card && card.card_no && !["cancelled", "inactive", "application"].includes(card.status) && (
                 <Button type="button" onClick={() => setAskTopup(true)}>
                   Request top up
                 </Button>
