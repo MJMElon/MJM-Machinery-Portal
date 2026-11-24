@@ -3,12 +3,14 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { Card } from '../../components/ui.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
 import { decideTopup, isReload, listCardData, listClaimLines, listClaims, listPaymentDocs, listPeople, listTopups, listVehicles, personLabel, reviewClaim, topupNo } from '../../lib/diesel.js'
+import { money } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
 import { RejectModal } from './ClaimView.jsx'
 import { ClaimsTable } from '../../components/diesel/ClaimsTable.jsx'
 import { MarkPaidModal } from '../../components/diesel/PaymentDocs.jsx'
 import { IconBack } from '../../components/icons.jsx'
+import { useNotice } from '../../components/Notice.jsx'
 
 // Claims Approval (& Payment for accountants), in tabs:
 //   Pending approval  everything waiting for my approval: fuel claims of the
@@ -120,6 +122,30 @@ export default function ClaimReview() {
   const all = sorted.filter((c) => (!status || c.status === status) && (!t || nameOf(c.claimant_id).toLowerCase().includes(t) || claimNo(c, 0).includes(t)))
   const rows = tab === 'pending' ? pending : tab === 'topay' ? toPay : all
 
+  // Small notice at the top right after approve / reject / mark paid (counts down, then goes)
+  const [notice, notify] = useNotice()
+  function announce(list, nextStatus) {
+    const word = { approved: 'approved', rejected: 'rejected', paid: 'marked paid', pending: 'back to pending' }[nextStatus] || 'saved'
+    const tone = nextStatus === 'rejected' ? 'red' : nextStatus === 'paid' ? 'blue' : 'green'
+    const tops = list.filter((c) => c.kind === 'topup')
+    const claimsDone = list.filter((c) => c.kind !== 'topup')
+    if (list.length === 1) {
+      const c = list[0]
+      if (c.kind === 'topup')
+        return notify(
+          `Top-up request ${noOf(c, 0)} ${word}`,
+          nextStatus === 'approved' ? `A draft top-up claim is now in ${nameOf(c.claimant_id)}'s My Claims.` : `${nameOf(c.claimant_id)} · ${money(c.amount)}`,
+          tone
+        )
+      return notify(`Claim ${noOf(c, 0)} ${word}`, `${nameOf(c.claimant_id)} · ${money(payableOf(c))}`, tone)
+    }
+    const parts = [
+      claimsDone.length && `${claimsDone.length} claim${claimsDone.length === 1 ? '' : 's'}`,
+      tops.length && `${tops.length} top-up request${tops.length === 1 ? '' : 's'}`
+    ].filter(Boolean)
+    notify(`${parts.join(' and ')} ${word}`, `Total ${money(list.reduce((t, c) => t + payableOf(c), 0))}`, tone)
+  }
+
   async function act(list, nextStatus, note) {
     setBusy(true)
     setError('')
@@ -127,6 +153,7 @@ export default function ClaimReview() {
       for (const c of list)
         if (c.kind === 'topup') await decideTopup(c.topup.id, nextStatus === 'approved', note)
         else await reviewClaim(c.id, nextStatus, note ?? c.review_note)
+      announce(list, nextStatus)
       await load()
     } catch (e) {
       setError(e.message)
@@ -163,6 +190,7 @@ export default function ClaimReview() {
         <h2 className="text-center font-display text-2xl font-bold tracking-tight text-slate-900">{accountant ? 'Claims Approval & Payment' : 'Claims Approval'}</h2>
         <span />
       </div>
+      {notice}
       <ErrorBox>{error}</ErrorBox>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-2 pt-2">
