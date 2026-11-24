@@ -13,7 +13,7 @@ import {
 import { BalanceChart } from "../../components/diesel/CardCharts.jsx";
 import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
 import { FleetCardInUse } from "../../components/diesel/FleetCardInUse.jsx";
-import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
+import { NewTopupModal } from "../../components/diesel/TopupRequests.jsx";
 import { PasswordField, PasswordInput } from "../../components/diesel/CardPassword.jsx";
 import {
   CARD_CHECKLIST,
@@ -77,6 +77,7 @@ export default function FleetCardPage({ mode }) {
   const [people, setPeople] = useState([]);
   const [ledger, setLedger] = useState(null); // null until the database has machinery_card_ledger
   const [askTopup, setAskTopup] = useState(false);
+  const [topupSent, setTopupSent] = useState("");
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -564,6 +565,7 @@ export default function FleetCardPage({ mode }) {
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {topupSent && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-800">{topupSent}</p>}
 
       {inUse ? (
         <div className="space-y-4">
@@ -1062,14 +1064,11 @@ export default function FleetCardPage({ mode }) {
       )}
 
       {askTopup && card && (
-        <RequestTopupModal
+        <NewTopupModal
           company={company}
-          cards={[card]}
-          vById={vById}
-          balance={ledger ? cardBalances(ledger) : null}
-          cardId={card.id}
+          preselect={[card.id]}
           onClose={() => setAskTopup(false)}
-          onSaved={() => navigate("/diesel/cards/topup")}
+          onSent={(msg) => setTopupSent(msg)}
         />
       )}
     </form>

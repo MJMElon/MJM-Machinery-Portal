@@ -13,7 +13,7 @@ import { printHtml } from '../../lib/printFrame.js'
 //                      one row per card: litres used / monthly volume, balance,
 //                      top-up amount → Send request (one request per card). With Consolidate on,
 //                      the cards of the other companies are in the list too.
-//   RequestTopupModal  the older form: fleet card, amount, needed by, reason → Pending
+//   RequestTopupModal  the older form (Top up page only); the fleet card pages use NewTopupModal
 //   TopupSection       the requests: "To approve" (approver), "My requests", "All";
 //                      Approve / Reject, Cancel, Mark topped up, Print approval
 // After the top-up is done the user claims the reload on a fuel claim.
@@ -23,12 +23,13 @@ const cardText = (c, vById) =>
 
 // companies: the companies whose cards can be ticked (Consolidate: this
 // company and its sister companies); default just `company`.
-export function NewTopupModal({ company, companies, onClose, onSent }) {
+// preselect: card ids ticked when it opens (e.g. Request top up on a fleet card page).
+export function NewTopupModal({ company, companies, preselect, onClose, onSent }) {
   const list = companies?.length ? companies : [company]
   const many = list.length > 1
   const listKey = list.map((c) => c.id).join(',')
   const [data, setData] = useState(null) // { cards (with company), vById, usage, ledgers }
-  const [ids, setIds] = useState([])
+  const [ids, setIds] = useState(preselect || [])
   const [amounts, setAmounts] = useState({}) // card id → RM
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -45,7 +46,8 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
         const cards = rows.flatMap(({ co, d }) => d.cards.filter((c) => c.card_no && !['cancelled', 'inactive', 'application'].includes(c.status)).map((c) => ({ ...c, company: co })))
         const ledgers = new Map(rows.map(({ co, lg }) => [co.id, lg]))
         setData({ cards, usage: rows.flatMap(({ d }) => d.usage), vById: new Map(rows.flatMap(({ v }) => v.map((x) => [x.id, x]))), ledgers, balances: new Map(rows.map(({ co, lg }) => [co.id, lg ? cardBalances(lg) : null])) })
-        if (cards.length === 1) setIds([cards[0].id])
+        if (preselect?.length) setIds((x) => x.filter((id) => cards.some((c) => c.id === id)))
+        else if (cards.length === 1) setIds([cards[0].id])
       })
       .catch((e) => live && setError(e.message))
     return () => {

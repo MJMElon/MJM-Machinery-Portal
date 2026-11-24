@@ -6,7 +6,7 @@ import { IconPencil, IconTrash } from '../icons.jsx'
 import { ErrorBox, inputCls } from './shared.jsx'
 import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
-import { RequestTopupModal } from './TopupRequests.jsx'
+import { NewTopupModal } from './TopupRequests.jsx'
 import { CARD_STATUS, cardBalances, autoTopupCheck, autoTopupStatus, procurementPeople, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
 import { PasswordField, PasswordInput } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
@@ -53,6 +53,7 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const hasPw = Boolean(card.login_password_set || card.login_password)
   const [error, setError] = useState('')
   const [askTopup, setAskTopup] = useState(false)
+  const [topupSent, setTopupSent] = useState('')
   const [year, setYear] = useState(new Date().getFullYear())
 
   // a fresh copy of the card (after saving) resets the boxes
@@ -172,6 +173,7 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {topupSent && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-800">{topupSent}</p>}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Fleet card details */}
@@ -387,14 +389,15 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
       </Card>
 
       {askTopup && (
-        <RequestTopupModal
+        // same New Top Up Request window as on Fleet Card Manage, with this card ticked
+        <NewTopupModal
           company={company}
-          cards={[card]}
-          vById={vById}
-          balance={ledger ? cardBalances(ledger) : null}
-          cardId={card.id}
+          preselect={[card.id]}
           onClose={() => setAskTopup(false)}
-          onSaved={() => navigate('/diesel/cards/topup')}
+          onSent={(msg) => {
+            setTopupSent(msg)
+            reload?.()
+          }}
         />
       )}
     </div>
