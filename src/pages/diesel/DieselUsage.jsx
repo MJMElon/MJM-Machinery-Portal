@@ -396,10 +396,12 @@ export default function DieselUsage() {
           `Diesel issued, from Estate Fuel Record · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
-  // Table view: every receipt in the filters, grouped by fleet card (HQ:
-  // which driver used the card for which vehicle, litres, RM and the remark,
-  // e.g. the other company to charge at month end), cash claims last.
+  // Table view. HQ: by vehicle (reg no. once as the title), each vehicle with
+  // a Fleet card section, then a Cash claim section: receipt date, receipt
+  // no., litre, RM/L, total amount and the remark (the receipt's own remark,
+  // e.g. the other company to charge, then company · claim no. · claimant).
   // Estate: every diesel record, grouped by machine type.
+  const coShort = company.short_name || company.code || company.name
   const detailGroups = (() => {
     const groups = new Map()
     const add = (key, title, order, row) => {
@@ -428,9 +430,14 @@ export default function DieselUsage() {
           claimNo: f.claimNo || '',
           card: f.source === 'cash' ? 'Cash' : c ? `Fleet card ${c.card_no}` : 'Fleet card'
         }
-        if (f.source === 'cash') add('cash', 'Cash claims (no fleet card)', 'z', row)
-        else if (c) add(c.id, `Fleet card ${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${regOf(vById.get(c.vehicle_id))})` : ''}`, `a${c.card_no}`, row)
-        else add('nocard', 'Fleet card (card not found)', 'y', row)
+        row.cardNo = c?.card_no || ''
+        row.from = f.fromClaim ? [coShort, f.claimNo ? `Claim ${f.claimNo}` : '', row.who].filter(Boolean).join(' · ') : f.driver ? row.who : ''
+        // one group per vehicle and kind: fleet card first, then cash
+        const vk = f.vehicle_id || ''
+        const vOrder = v ? `a${regOf(v)}` : 'zz'
+        add(`${vk}|${f.source}`, f.source === 'cash' ? 'Cash claim' : 'Fleet card', `${vOrder}|${f.source === 'card' ? 'a' : 'b'}`, row)
+        groups.get(`${vk}|${f.source}`).vehicle = { key: vk, title: v ? regOf(v) : 'No vehicle recorded', name: v && v.reg_no && v.reg_no !== v.name ? v.name : '', general: Boolean(v?.general_use) }
+        groups.get(`${vk}|${f.source}`).kind = f.source
       } else {
         const v = vById.get(f.vehicle_id)
         if (v && !listed.some((x) => x.id === v.id)) continue
@@ -447,9 +454,17 @@ export default function DieselUsage() {
         })
       }
     }
-    return [...groups.values()]
+    const out = [...groups.values()]
       .sort((a, b) => a.order.localeCompare(b.order))
       .map((g) => ({ ...g, rows: g.rows.sort((a, b) => a.date.localeCompare(b.date) || a.who.localeCompare(b.who)) }))
+    // HQ: the vehicle title only above its first section; the fleet card section names the card(s)
+    if (tab === 'hq')
+      out.forEach((g, i) => {
+        g.first = i === 0 || out[i - 1].vehicle?.key !== g.vehicle?.key
+        const nos = [...new Set(g.rows.map((r) => r.cardNo).filter(Boolean))]
+        if (g.kind === 'card' && nos.length) g.title = `Fleet card ${nos.join(', ')}`
+      })
+    return out
   })()
   const detailTotal = detailGroups.reduce((t, g) => ({ litres: t.litres + g.rows.reduce((s, r) => s + r.litres, 0), amount: t.amount + g.rows.reduce((s, r) => s + r.amount, 0), n: t.n + g.rows.length }), { litres: 0, amount: 0, n: 0 })
 
@@ -601,12 +616,20 @@ export default function DieselUsage() {
                 <IconSearch width={17} height={17} className={searching ? 'animate-pulse' : ''} />
               </button>
               {view !== 'table' && tab === 'hq' && <span className="ml-2">{F.card('Fleet card')}</span>}
+              {/* HQ table view is by vehicle: its filters sit here */}
+              {view === 'table' && tab === 'hq' && (
+                <span className="ml-2 flex flex-wrap items-center gap-3">
+                  {F.card()}
+                  {F.driver()}
+                  {F.vehicle()}
+                </span>
+              )}
               {view !== 'table' && tab !== 'hq' && locations.length > 0 && <span className="ml-2">{F.loc()}</span>}
               {tab === 'hq' && !cardOpts.some((o) => o.value !== 'cash') && <span className="text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</span>}
             </div>
 
             {view === 'table' ? (
-              <DetailTable groups={detailGroups} total={detailTotal} hq={tab === 'hq'} F={F} />
+              tab === 'hq' ? <VehicleTable groups={detailGroups} total={detailTotal} /> : <DetailTable groups={detailGroups} total={detailTotal} hq={false} F={F} />
             ) : (
             <>
             <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-2 text-[11px] text-slate-600">
@@ -833,6 +856,96 @@ function DetailTable({ groups, total, hq, F }) {
           </tfoot>
         )}
       </table>
+    </div>
+  )
+}
+
+// HQ table view: per vehicle (title once), a Fleet card section then a Cash
+// claim section, each with its receipts and a subtotal; the total at the end.
+// Columns: Receipt date, Receipt no., Litre, RM/L, Total amount, Remark.
+function VehicleTable({ groups, total }) {
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const perL = (r) => (r.litres > 0 ? (r.amount / r.litres).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '—')
+  const sum = (rows, k) => rows.reduce((s, r) => s + r[k], 0)
+  const head = (
+    <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <th className="px-4 py-1.5">Receipt date</th>
+      <th className="px-3 py-1.5">Receipt no.</th>
+      <th className="px-3 py-1.5 text-right">Litre</th>
+      <th className="px-3 py-1.5 text-right">RM/L</th>
+      <th className="px-3 py-1.5 text-right">Total amount (RM)</th>
+      <th className="px-3 py-1.5">Remark</th>
+    </tr>
+  )
+  const cols = (
+    <colgroup>
+      {[13, 13, 11, 10, 14].map((w, i) => (
+        <col key={i} style={{ width: `${w}%` }} />
+      ))}
+      <col />
+    </colgroup>
+  )
+  if (!groups.length) return <Empty>No fuel usage for this filter.</Empty>
+  return (
+    <div className="space-y-4 p-4">
+      {groups.map((g) => (
+        <div key={g.key}>
+          {g.first && (
+            <h3 className="mb-2 mt-2 flex items-baseline gap-2 border-b-2 border-slate-800 pb-1 first:mt-0">
+              <span className="font-display text-lg font-bold tracking-wide text-slate-900">{g.vehicle.title}</span>
+              {g.vehicle.name && <span className="text-sm text-slate-500">{g.vehicle.name}</span>}
+              {g.vehicle.general && <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">general</span>}
+            </h3>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[820px] table-fixed text-sm">
+              {cols}
+              <thead>
+                <tr className={g.kind === 'cash' ? 'bg-amber-50' : 'bg-sky-50'}>
+                  <th colSpan={6} className={`px-4 py-2 text-left text-sm font-bold ${g.kind === 'cash' ? 'text-amber-900' : 'text-sky-900'}`}>
+                    {g.title}
+                    <span className="ml-2 text-xs font-medium opacity-70">
+                      {g.rows.length} {g.rows.length === 1 ? 'receipt' : 'receipts'}
+                    </span>
+                  </th>
+                </tr>
+                {head}
+              </thead>
+              <tbody>
+                {g.rows.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100 align-top">
+                    <td className="whitespace-nowrap px-4 py-2 text-slate-700">{day(r.date)}</td>
+                    <td className="break-words px-3 py-2 text-slate-600">{r.receipt || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{n2(r.litres)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{perL(r)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{n2(r.amount)}</td>
+                    <td className="break-words px-3 py-2">
+                      {r.remark && <span className="block text-slate-800">{r.remark}</span>}
+                      {r.from && <span className="block text-xs text-slate-500">{r.from}</span>}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-slate-200 bg-slate-50/70 font-semibold">
+                  <td colSpan={2} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
+                    Subtotal
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n2(sum(g.rows, 'litres'))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">{sum(g.rows, 'litres') > 0 ? perL({ litres: sum(g.rows, 'litres'), amount: sum(g.rows, 'amount') }) : '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n2(sum(g.rows, 'amount'))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold">
+        <span className="text-xs uppercase tracking-wide text-slate-600">
+          Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
+        </span>
+        <span className="tabular-nums">{n2(total.litres)} L</span>
+        <span className="tabular-nums">RM {n2(total.amount)}</span>
+      </div>
     </div>
   )
 }

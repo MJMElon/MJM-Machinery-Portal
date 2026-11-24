@@ -96,6 +96,7 @@ export const printUsageTable = (opts) => printHtml(usageTableHtml(opts))
  * receipts: [{ url, pdf, date, who, vehicle, receipt, litres, amount, card, claimNo, claimedOn }]
  */
 export function usageDetailHtml({ title, lines = [], hq, groups, receipts = [] }) {
+  if (hq) return usageVehicleHtml({ title, lines, groups, receipts })
   const dd = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '')
   const sum = (rows, k) => rows.reduce((t, r) => t + (r[k] || 0), 0)
   const all = groups.flatMap((g) => g.rows)
@@ -173,3 +174,88 @@ tr { break-inside: avoid; }
 }
 
 export const printUsageDetail = (opts) => printHtml(usageDetailHtml(opts))
+
+// HQ table view printout: per vehicle (reg no. once), a Fleet card section then
+// a Cash claim section — receipt date, receipt no., litre, RM/L, total amount,
+// remark (own remark, then company · claim no. · claimant) — with subtotals;
+// then the claimed receipts, one per page (same as the other printout).
+function usageVehicleHtml({ title, lines, groups, receipts }) {
+  const dd = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '')
+  const sum = (rows, k) => rows.reduce((t, r) => t + (r[k] || 0), 0)
+  const perL = (l, a) => (l > 0 ? (a / l).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '–')
+  const all = groups.flatMap((g) => g.rows)
+  const cols = '<colgroup><col style="width:12%" /><col style="width:13%" /><col style="width:10%" /><col style="width:9%" /><col style="width:13%" /><col /></colgroup>'
+  const head = '<tr class="h"><th>Receipt date</th><th>Receipt no.</th><th class="r">Litre</th><th class="r">RM/L</th><th class="r">Total amount (RM)</th><th>Remark</th></tr>'
+  const body = groups
+    .map(
+      (g) => `${g.first ? `<h2>${esc(g.vehicle?.title || '')}${g.vehicle?.name ? ` <span>${esc(g.vehicle.name)}</span>` : ''}</h2>` : ''}
+  <table class="t ${g.kind === 'cash' ? 'cash' : 'card'}">${cols}
+    <thead><tr class="sec"><th colspan="6">${esc(g.title)} <span>· ${g.rows.length} receipt${g.rows.length === 1 ? '' : 's'}</span></th></tr>${head}</thead>
+    <tbody>${g.rows
+      .map(
+        (r) =>
+          `<tr><td>${esc(dd(r.date))}</td><td>${esc(r.receipt || '–')}</td><td class="r">${fmt(r.litres, 2)}</td><td class="r">${perL(r.litres, r.amount)}</td><td class="r b">${fmt(r.amount, 2)}</td><td>${r.remark ? `${esc(r.remark)}<br />` : ''}${r.from ? `<i>${esc(r.from)}</i>` : ''}</td></tr>`
+      )
+      .join('')}
+    <tr class="sub"><td colspan="2" class="r">Subtotal</td><td class="r">${fmt(sum(g.rows, 'litres'), 2)}</td><td class="r">${perL(sum(g.rows, 'litres'), sum(g.rows, 'amount'))}</td><td class="r">${fmt(sum(g.rows, 'amount'), 2)}</td><td></td></tr></tbody>
+  </table>`
+    )
+    .join('')
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<title>${esc(title)}</title>
+<style>
+@page { size: A4 portrait; margin: 0; }
+html, body { margin: 0; padding: 0; background: #fff; color: #111827; }
+body { font: 9px/1.4 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { width: 100%; border-collapse: collapse; }
+.page > thead td, .page > tfoot td { height: 10mm; padding: 0; }
+.page > tbody > tr > td { padding: 0 9mm; vertical-align: top; }
+.head { padding-bottom: 6px; border-bottom: 2px solid ${GREEN}; margin-bottom: 6px; }
+.head h1 { margin: 0; font-size: 15px; color: ${GREEN}; }
+.head p { margin: 2px 0 0; color: #475569; }
+h2 { font-size: 12px; margin: 12px 0 4px; padding-bottom: 2px; border-bottom: 1.5px solid #111827; break-after: avoid; }
+h2 span { font-size: 9px; font-weight: 500; color: #6b7280; }
+.t { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 6px; }
+.t th, .t td { padding: 3px 4px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.t tr.sec th { font-size: 10px; padding: 4px; }
+.t tr.sec th span { font-weight: 500; color: #4b5563; }
+.t.card tr.sec th { background: #e0f2fe; color: #0c4a6e; }
+.t.cash tr.sec th { background: #fef3c7; color: #78350f; }
+.t tr.h th { font-weight: 600; color: #475569; border-bottom: 1px solid #cbd5e1; }
+.t td { border-bottom: 1px solid #e5e7eb; }
+.t .r { text-align: right; font-variant-numeric: tabular-nums; }
+.t .b { font-weight: 700; }
+.t i { color: #6b7280; font-style: normal; }
+.t tr.sub td { font-weight: 700; background: #f8fafc; border-bottom: 1.5px solid #cbd5e1; }
+.tot { margin-top: 8px; padding: 5px 8px; background: #f1f5f9; border-top: 2px solid ${GREEN}; font-weight: 700; text-align: right; }
+.tot span { margin-left: 18px; }
+tr { break-inside: avoid; }
+.rc { break-before: page; page-break-before: always; text-align: center; }
+.rc .no { text-align: left; font-size: 10px; font-weight: 700; color: ${GREEN}; margin: 0 0 6px; }
+.rc .no span { font-weight: 500; color: #6b7280; }
+.rc img { display: block; margin: 0 auto; max-width: 100%; max-height: 228mm; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; }
+.rc .nophoto { margin: 40mm auto; width: 70%; padding: 18px; border: 1.5px dashed #cbd5e1; border-radius: 8px; color: #6b7280; font-size: 11px; }
+.rc .cap { margin: 8px auto 0; display: inline-block; text-align: left; border-top: 2px solid ${GREEN}; padding-top: 5px; font-size: 11px; }
+.rc .cap b { color: ${GREEN}; }
+.rc .cap p { margin: 2px 0 0; color: #374151; font-size: 10px; }
+</style></head><body>
+<table class="page"><thead><tr><td></td></tr></thead><tfoot><tr><td></td></tr></tfoot><tbody><tr><td>
+  <div class="head"><h1>${esc(title)}</h1>${lines.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('')}</div>
+  ${body || '<p>No fuel usage for this selection.</p>'}
+  <div class="tot">Total · ${all.length} receipt${all.length === 1 ? '' : 's'}<span>${fmt(sum(all, 'litres'), 2)} L</span><span>RM ${fmt(sum(all, 'amount'), 2)}</span></div>
+  ${receipts
+    .map(
+      (r, i) => `<div class="rc">
+    <p class="no">Receipt ${i + 1} of ${receipts.length} <span>· ${esc(dd(r.date))}${r.receipt ? ` · No. ${esc(r.receipt)}` : ''}</span></p>
+    ${r.url ? `<img src="${esc(r.url)}" alt="Receipt ${i + 1}" />` : r.pdf ? `<div class="nophoto">This receipt is a PDF file: open it from the claim to see it.</div>` : ''}
+    <div class="cap">
+      Claimed by <b>${esc(r.who)}</b> on <b>${esc(dd(r.claimedOn))}</b>${r.claimNo ? ` · Claim ${esc(r.claimNo)}` : ''}
+      <p>Filled ${esc(dd(r.date))} · ${esc(r.vehicle)} · ${fmt(r.litres, 2)} L · RM ${fmt(r.amount, 2)} · ${esc(r.card)}</p>
+    </div>
+  </div>`
+    )
+    .join('')}
+</td></tr></tbody></table>
+</body></html>`
+}
