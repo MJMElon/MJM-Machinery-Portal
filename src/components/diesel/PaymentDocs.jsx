@@ -87,6 +87,7 @@ function DocsModal({ docs, onClose }) {
  */
 export function MarkPaidModal({ claims, payableOf, claimNo, nameOf, onPaid, onClose }) {
   const [files, setFiles] = useState([])
+  const [over, setOver] = useState(false) // a file is dragged over the drop area
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const input = useRef(null)
@@ -127,20 +128,32 @@ export function MarkPaidModal({ claims, payableOf, claimNo, nameOf, onPaid, onCl
       </div>
 
       <p className="mb-2 text-sm font-semibold text-slate-700">Payment documents</p>
-      <button
-        type="button"
+      {/* a drop area (not a <button>: some browsers do not let files drop on a button) */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => input.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), input.current?.click())}
+        onDragEnter={(e) => (e.preventDefault(), setOver(true))}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+          setOver(true)
+        }}
+        onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget) && setOver(false)}
         onDrop={(e) => {
           e.preventDefault()
+          setOver(false)
           add(e.dataTransfer.files)
         }}
-        className="flex w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500 hover:border-brand hover:text-brand"
+        className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-sm transition ${
+          over ? 'border-brand bg-brand-light text-brand' : 'border-slate-300 bg-white text-slate-500 hover:border-brand hover:text-brand'
+        }`}
       >
         <IconPaperclip width={22} height={22} />
-        <span className="font-semibold">Attach bank slip / payment proof</span>
-        <span className="text-xs text-slate-400">Pictures or PDF, up to 5 files</span>
-      </button>
+        <span className="font-semibold">{over ? 'Drop the files here' : 'Drag & drop the bank slip / payment proof here'}</span>
+        <span className="text-xs text-slate-400">or click to choose · pictures or PDF, up to 5 files</span>
+      </div>
       <input ref={input} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => (add(e.target.files), (e.target.value = ''))} />
 
       {files.length > 0 && (
