@@ -52,7 +52,7 @@ export default function ClaimView() {
 
   const load = useCallback(async () => {
     try {
-      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), access.viewAll || access.admin || access.pay ? listPeople(company.id).catch(() => []) : [], listClaimCards(company.id).catch(() => [])])
+      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), listPeople(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
       if (!c) throw new Error('Claim not found (or you have no access to it).')
       setClaim(c)
       setLines(ls)
@@ -68,7 +68,7 @@ export default function ClaimView() {
     } finally {
       setLoading(false)
     }
-  }, [id, company.id, access.viewAll, access.admin, access.pay])
+  }, [id, company.id])
 
   useEffect(() => {
     load()
@@ -169,14 +169,21 @@ export default function ClaimView() {
       <div>
         <PageHeader
           backTo={params.get('from') === 'review' ? '/diesel/claims/review' : '/diesel/claims'}
-          backLabel={params.get('from') === 'review' ? 'Back to review' : 'Back to My Claims'}
+          backLabel={params.get('from') === 'review' ? 'Back to Claims Approval' : 'Back to My Claims'}
           title={
             claim ? (
+              <span className="block">
+                {!own && (
+                  <span className="mb-1 block text-sm font-medium text-slate-500">
+                    Claimant : <b className="font-semibold text-slate-800">{claimantName || 'Unknown user'}</b>
+                  </span>
+                )}
               <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
                 Fuel claim #{claimNo(claim, 0)}
                 <span className="text-sm font-normal text-slate-500">Created on {day(claim.submitted_on || claim.fill_date)}</span>
                 <StatusBadge status={claim.status} />
                 {claim.status === 'draft' && <DraftCountdown claim={claim} />}
+              </span>
               </span>
             ) : (
               'Fuel claim'

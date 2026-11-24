@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../ui.jsx'
-import { IconCheck, IconChevron, IconEye, IconX } from '../icons.jsx'
+import { IconChevron, IconCheck, IconEye, IconRefresh, IconX } from '../icons.jsx'
 import { isReload, openReceipt, receiptUrls } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
 
 // Pending approval: one row per claim waiting for me.
 //   ☐ | Claim No. | Submitted | Claimant | Claim amount | Receipts (small pictures) | ✓ / ✗
 // Click a receipt picture to see it big and move through the claim's receipts
-// with ‹ › (or the arrow keys). Tick rows (or tick all, then untick some) and
-// "Approve all selected"; with nothing ticked, "Approve all" approves every
-// claim in the list.
+// with ‹ › (or the arrow keys). Toolbar on top (as in a mail inbox): tick all,
+// refresh, and ⋮ with "Approve all" — or "Approve all selected" once rows are
+// ticked.
 
 const isPdf = (p) => /\.pdf$/i.test(p || '')
 
-export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy, onApprove, onReject }) {
+export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy, onApprove, onReject, onRefresh }) {
   const [picked, setPicked] = useState(() => new Set())
   const [urls, setUrls] = useState({})
   const [viewing, setViewing] = useState(null) // { claim, index }
@@ -55,44 +55,49 @@ export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy,
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-2.5 text-sm">
-        {chosen.length > 0 ? (
-          <>
-            <span className="font-semibold text-slate-800">
-              {chosen.length} selected · {money(total(chosen))}
-            </span>
-            <Button size="sm" disabled={busy} onClick={() => approve(chosen)}>
-              <IconCheck width={16} height={16} /> Approve all selected
-            </Button>
-            <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => setPicked(new Set())}>
-              Clear
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="text-slate-500">
-              {rows.length} claim{rows.length === 1 ? '' : 's'} waiting · {money(total(rows))}
-            </span>
-            <Button size="sm" disabled={busy} onClick={() => approve(rows)}>
-              <IconCheck width={16} height={16} /> Approve all
-            </Button>
-          </>
-        )}
+      {/* Toolbar: tick all · refresh · ⋮ (Approve all / Approve all selected) */}
+      <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-2">
+        <label className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full hover:bg-slate-100" title={allTicked ? 'Untick all' : 'Tick all'}>
+          <input
+            type="checkbox"
+            checked={allTicked}
+            ref={(el) => el && (el.indeterminate = chosen.length > 0 && !allTicked)}
+            onChange={tickAll}
+            className="h-4 w-4 cursor-pointer rounded border-slate-400"
+            aria-label="Tick all"
+          />
+        </label>
+        <button type="button" onClick={onRefresh} disabled={busy} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 disabled:opacity-40" title="Refresh" aria-label="Refresh">
+          <IconRefresh width={18} height={18} />
+        </button>
+        <MoreMenu
+          disabled={busy || rows.length === 0}
+          label={chosen.length ? `Approve all selected (${chosen.length})` : 'Approve all'}
+          onPick={() => approve(chosen.length ? chosen : rows)}
+        />
+        {chosen.length > 0 && <span className="ml-2 text-xs font-medium text-slate-500">{chosen.length} selected</span>}
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[900px] table-fixed text-sm">
+          <colgroup>
+            <col style={{ width: 52 }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '14%' }} />
+            <col />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '24%' }} />
+            <col style={{ width: 150 }} />
+          </colgroup>
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th className="w-10 py-2.5 pl-5">
-                <input type="checkbox" checked={allTicked} onChange={tickAll} className="h-4 w-4 rounded border-slate-300" aria-label="Tick all" />
-              </th>
-              <th className="w-24 px-3 py-2.5">Claim No.</th>
-              <th className="w-32 px-3 py-2.5">Submitted</th>
+            <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="py-2.5" />
+              <th className="px-3 py-2.5">Claim No.</th>
+              <th className="px-3 py-2.5">Submitted</th>
               <th className="px-3 py-2.5">Claimant</th>
-              <th className="w-36 px-3 py-2.5 text-right">Claim amount</th>
+              <th className="px-3 py-2.5 text-right">Claim amount</th>
               <th className="px-3 py-2.5">Receipts</th>
-              <th className="w-36 px-3 py-2.5 text-center">Action</th>
+              <th className="px-3 py-2.5 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -101,8 +106,8 @@ export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy,
               const litres = ls.reduce((s, l) => s + Number(l.litres || 0), 0)
               const pics = receiptsOf(c)
               return (
-                <tr key={c.id} className={`align-middle hover:bg-slate-50/60 ${picked.has(c.id) ? 'bg-brand-light/30' : ''}`}>
-                  <td className="py-2.5 pl-5">
+                <tr key={c.id} className={`h-16 align-middle hover:bg-slate-50/60 ${picked.has(c.id) ? 'bg-brand-light/30' : ''}`}>
+                  <td className="py-3 text-center">
                     <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} className="h-4 w-4 rounded border-slate-300" aria-label={`Tick ${claimNo(c, 0)}`} />
                   </td>
                   <td className="px-3 py-2.5">
@@ -111,7 +116,7 @@ export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy,
                     </Link>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold tabular-nums text-slate-800">{day(c.submitted_on || c.fill_date)}</td>
-                  <td className="px-3 py-2.5 font-medium text-slate-800">{nameOf(c.claimant_id)}</td>
+                  <td className="truncate px-3 py-2.5 font-medium text-slate-800">{nameOf(c.claimant_id)}</td>
                   <td className="px-3 py-2.5 text-right">
                     <span className="block font-semibold tabular-nums text-slate-900">{money(payableOf(c))}</span>
                     {litres > 0 && <span className="text-xs tabular-nums text-slate-500">{num(litres, 2)} L</span>}
@@ -185,6 +190,50 @@ export function PendingClaims({ rows, linesOf, nameOf, claimNo, payableOf, busy,
         />
       )}
     </>
+  )
+}
+
+/** ⋮ button with one action under it. */
+function MoreMenu({ label, onPick, disabled }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [open])
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={(e) => (e.stopPropagation(), setOpen((o) => !o))}
+        className={`flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 disabled:opacity-40 ${open ? 'bg-slate-200' : ''}`}
+        title="More"
+        aria-label="More"
+        aria-expanded={open}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="5" r="1.9" />
+          <circle cx="12" cy="12" r="1.9" />
+          <circle cx="12" cy="19" r="1.9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-10 z-20 min-w-[220px] rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onPick()
+            }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <IconCheck width={16} height={16} className="text-green-600" /> {label}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

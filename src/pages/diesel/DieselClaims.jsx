@@ -22,7 +22,7 @@ export const draftDaysLeft = (c) => DRAFT_DAYS - Math.floor((Date.now() - Date.p
 // Fuel Claims: a dashboard of the year (litres and RM per month) and the claim
 // list (No. · Date · Status · Description · amounts · Action), latest first — always the
 // person's OWN claims only. Reviewers reach other people's claims through the
-// separate "Review claims" page.
+// separate "Claims Approval" page.
 export default function DieselClaims() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
@@ -75,7 +75,7 @@ export default function DieselClaims() {
     load()
   }, [load])
 
-  // Number on the Review claims button: waiting for my approval + approved waiting for payment (accountant)
+  // Number on the Claims Approval button: waiting for my approval + approved waiting for payment (accountant)
   const approver = isSuperAdmin || access.admin
   const accountant = isSuperAdmin || access.pay
   useEffect(() => {
@@ -151,7 +151,7 @@ export default function DieselClaims() {
           <div className="flex flex-wrap gap-2">
             {(access.admin || access.pay || access.viewAll) && (
               <Button variant="secondary" onClick={() => navigate('/diesel/claims/review')}>
-                Review claims
+                Claims Approval
                 {toReview > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{toReview}</span>}
               </Button>
             )}
