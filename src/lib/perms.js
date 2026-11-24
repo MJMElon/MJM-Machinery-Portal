@@ -141,22 +141,22 @@ export const ROLE_MODEL = [
 ]
 
 export const approveFor = (perms) => (Array.isArray(perms?.approve_for) ? perms.approve_for : [])
-// Fleet card top-up requests: perms.topup = ['approve'] and perms.topup_approve_for = [user ids] (none = everyone)
+// Fleet card top-up requests: perms.topup = ['approve'] and perms.topup_approve_for = [user ids].
+// Only the people named: an 'approve' tick with nobody named approves nobody (super admins: everyone).
 export const topupApproveFor = (perms) => (Array.isArray(perms?.topup_approve_for) ? perms.topup_approve_for : [])
 /** May the signed-in user approve / reject top-up requests of this person? */
 export const canApproveTopup = (perms, isSuper, requesterId) => {
   if (isSuper) return true
   if (!has(perms, 'topup', 'approve')) return false
-  const list = topupApproveFor(perms)
-  return list.length === 0 || list.includes(requesterId)
+  return topupApproveFor(perms).includes(requesterId)
 }
 
-/** May the signed-in user approve / reject claims of this claimant? (approver named for them, or approve-all) */
+/** May the signed-in user approve / reject claims of this claimant? Only when named as their approver
+ * (Fuel Manage → User setting); super admins approve everyone. */
 export const canApproveClaimant = (perms, isSuper, claimantId) => {
   if (isSuper) return true
   if (!has(perms, 'claims', 'approve')) return false
-  const list = approveFor(perms)
-  return list.length === 0 || list.includes(claimantId)
+  return approveFor(perms).includes(claimantId)
 }
 
 /** May the signed-in user open this claimant's claims for review? Approver of that person, or accountant. */

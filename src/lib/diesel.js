@@ -1,5 +1,5 @@
 import { supabase, DIESEL } from './supabase.js'
-import { FUEL_SECTIONS, usePerms } from './perms.js'
+import { FUEL_SECTIONS, topupApproveFor, usePerms } from './perms.js'
 
 // Diesel Manage: vehicles, cash fuel claims (receipt photos), fleet cards
 // (reloads + card fill-ups), reports and user access — all per company.
@@ -50,7 +50,8 @@ export function useDieselAccess(companyId) {
     error: p.error,
     can: p.can,
     use: p.any(FUEL_SECTIONS),
-    admin: p.can('claims', 'approve'),
+    // Approver = named as the approver of somebody in User setting (a bare 'approve' tick is not enough)
+    admin: p.super || (p.can('claims', 'approve') && p.approveFor.length > 0),
     pay: p.can('claims', 'pay'),
     claim: p.can('claims', 'add'),
     report: p.can('report', 'view') || p.can('claims', 'view_all'),
@@ -60,7 +61,7 @@ export function useDieselAccess(companyId) {
     fuelAdmin: p.adminOf('fuel'),
     approveFor: p.approveFor,
     approvesTopup: p.approvesTopup,
-    topupApprover: p.can('topup', 'approve'),
+    topupApprover: p.super || (p.can('topup', 'approve') && topupApproveFor(p.perms).length > 0),
     // Procurement role: may see fleet card web login passwords (eye button)
     procurement: p.fuelRole === 'procurement'
   }
