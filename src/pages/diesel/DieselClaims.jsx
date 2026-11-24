@@ -336,9 +336,8 @@ export default function DieselClaims() {
                         <span className="inline-flex items-center gap-2">
                           {c.status === 'rejected' ? (
                             // click the Rejected status to read the approver's remark
-                            <button type="button" onClick={() => setWhy(c)} title="Why was it rejected?" className="inline-flex items-center gap-1 rounded-full hover:opacity-80">
+                            <button type="button" onClick={() => setWhy(c)} title="Click to see why it was rejected" className="cursor-pointer rounded-full hover:opacity-80">
                               <StatusBadge status={c.status} />
-                              <span className="text-xs font-semibold text-red-600 underline underline-offset-2">Why?</span>
                             </button>
                           ) : (
                             <StatusBadge status={c.status} />
