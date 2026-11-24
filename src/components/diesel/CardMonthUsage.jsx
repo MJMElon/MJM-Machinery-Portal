@@ -9,8 +9,8 @@ import { cardMonthUsage } from '../../lib/diesel.js'
 import { day, monthLabel, thisMonth } from '../../lib/format.js'
 
 // Left: a fleet card's usage in one month (‹ › to change month), week by
-// week (Week 1 = 1–7, 2 = 8–14, 3 = 15–21, 4 = 22–28, 5 = 29–end): each
-// driver's litres and the week's total. View (top right) opens the date ×
+// week side by side (Week 1 = 1–7, 2 = 8–14, 3 = 15–21, 4 = 22–28, 5 =
+// 29–end): each driver with their litres, the week's total at the bottom. View (top right) opens the date ×
 // driver grid (CardUsageGrid.jsx), where fill-ups can also be added by hand.
 // Right: the same month's total by driver, the subsidy volume = 100%.
 export function CardMonthUsage({ company, cardId, card, title, drivers: cardDrivers = [], canAdd = false, canDelete = false, refresh, quota, driverNames = [] }) {
@@ -135,64 +135,44 @@ export function CardMonthUsage({ company, cardId, card, title, drivers: cardDriv
         ) : list.length === 0 ? (
           <Empty>No usage on this card in {monthLabel(month)}.</Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="w-40 px-4 py-2">Week</th>
-                  <th className="px-2 py-2">Driver</th>
-                  <th className="w-32 px-4 py-2 text-right">Litres</th>
-                </tr>
-              </thead>
+          <div className="p-3">
+            {/* one column per week: each driver's litres, the week total at the bottom */}
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}>
               {weeks.map((w) => (
-                <tbody key={w.n} className="border-b border-slate-200">
-                  {w.drivers.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-2 align-top font-semibold text-slate-700">
-                        Week {w.n}
-                        <span className="block text-xs font-normal text-slate-400">{w.range}</span>
-                      </td>
-                      <td className="px-2 py-2 text-slate-400">No usage</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-400">—</td>
-                    </tr>
-                  ) : (
-                    w.drivers.map((d, i) => (
-                      <tr key={d.name}>
-                        {i === 0 && (
-                          <td rowSpan={w.drivers.length + 1} className="px-4 py-2 align-top font-semibold text-slate-700">
-                            Week {w.n}
-                            <span className="block text-xs font-normal text-slate-400">{w.range}</span>
-                          </td>
-                        )}
-                        <td className="px-2 py-1.5 text-slate-800">
-                          {d.name}
-                          {d.flag && (
-                            <span className="ml-1.5 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800" title="A claim amount differs from the Fuel Station Portal">
-                              !
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-1.5 text-right tabular-nums">{n2(d.litres)}</td>
-                      </tr>
-                    ))
-                  )}
-                  {w.drivers.length > 0 && (
-                    <tr className="bg-slate-50/80 font-semibold">
-                      <td className="px-2 py-1.5 text-xs uppercase tracking-wide text-slate-500">Week {w.n} total</td>
-                      <td className="px-4 py-1.5 text-right tabular-nums text-slate-900">{n2(w.total)}</td>
-                    </tr>
-                  )}
-                </tbody>
+                <div key={w.n} className="flex min-w-0 flex-col rounded-xl border border-slate-200">
+                  <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                    <p className="text-xs font-bold text-slate-800">Week {w.n}</p>
+                    <p className="text-[11px] text-slate-400">{w.range}</p>
+                  </div>
+                  <div className="flex-1 space-y-1 px-2.5 py-2 text-xs">
+                    {w.drivers.length === 0 ? (
+                      <p className="text-slate-400">No usage</p>
+                    ) : (
+                      w.drivers.map((d) => (
+                        <div key={d.name} className="flex items-baseline justify-between gap-2">
+                          <span className="min-w-0 truncate text-slate-700" title={d.name}>
+                            {d.name}
+                            {d.flag && (
+                              <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800" title="A claim amount differs from the Fuel Station Portal">
+                                !
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 tabular-nums font-medium text-slate-900">{n2(d.litres)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 border-t border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold">
+                    <span className="text-slate-500">Total</span>
+                    <span className="tabular-nums text-slate-900">{w.drivers.length ? `${n2(w.total)} L` : '—'}</span>
+                  </div>
+                </div>
               ))}
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-                  <td colSpan={2} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
-                    {monthLabel(month)} total
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{n2(totL)}</td>
-                </tr>
-              </tfoot>
-            </table>
+            </div>
+            <p className="mt-2 text-right text-sm font-semibold text-slate-700">
+              {monthLabel(month)} total <span className="ml-2 tabular-nums text-slate-900">{n2(totL)} L</span>
+            </p>
           </div>
         )}
       </Card>
