@@ -106,34 +106,41 @@ function Meter({ quota, used, month }) {
   )
 }
 
+// Last purchases: Date, Driver, Litre (the vehicle is in the card heading).
+// The headings stay when there is no purchase yet.
 function Recent({ rows }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Last purchases on this card</p>
-      {rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">No purchase yet.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-              <th className="py-1.5 pr-2 font-medium">Date</th>
-              <th className="py-1.5 pr-2 font-medium">Driver</th>
-              <th className="py-1.5 pr-2 font-medium">Vehicle</th>
-              <th className="py-1.5 text-right font-medium">Litres</th>
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Last purchases on this card
+        <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">(Data Linked from Fuel Station Portal)</span>
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+            <th className="py-1.5 pr-2 font-medium">Date</th>
+            <th className="py-1.5 pr-2 font-medium">Driver</th>
+            <th className="py-1.5 text-right font-medium">Litre</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={3} className="py-6 text-center text-sm text-slate-400">
+                No purchase yet.
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((r, i) => (
+          ) : (
+            rows.map((r, i) => (
               <tr key={i}>
                 <td className="whitespace-nowrap py-1.5 pr-2 text-slate-600">{day(r.fill_date)}</td>
                 <td className="py-1.5 pr-2 text-slate-800">{r.driver || '—'}</td>
-                <td className="py-1.5 pr-2 text-slate-600">{r.vehicle || '—'}</td>
                 <td className="py-1.5 text-right font-semibold tabular-nums">{num(r.litres, 2)} L</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }
