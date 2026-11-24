@@ -90,26 +90,28 @@ export default function DieselClaims() {
     load()
   }, [load])
 
-  // Number on the Claims Approval button: waiting for my approval + approved waiting for payment (accountant)
+  // Number on the Claims Approval button: only what is in its Pending approval
+  // tab (same rules): claims waiting for my approval + top-up requests waiting
+  // for my approval. Approved claims waiting for payment are not counted.
   const approver = isSuperAdmin || access.admin
   const accountant = isSuperAdmin || access.pay
+  const topupApprover = isSuperAdmin || Boolean(access.topupApprover)
   useEffect(() => {
-    if (!approver && !accountant) return
+    if (!approver && !topupApprover) return setToReview(0)
     let active = true
-    listClaims(company.id)
-      .then((all) => {
-        if (!active) return
-        const mine = (c) => c.claimant_id === user.id
-        setToReview(
-          all.filter((c) => (approver && c.status === 'pending' && !mine(c) && access.approves(c.claimant_id)) || (accountant && c.status === 'approved' && (!mine(c) || isSuperAdmin))).length
-        )
-      })
-      .catch(() => {})
+    Promise.all([approver ? listClaims(company.id).catch(() => []) : [], topupApprover ? listTopups(company.id).catch(() => null) : null]).then(([all, tops]) => {
+      if (!active) return
+      const claimsWaiting = all.filter((c) => c.status === 'pending' && c.claimant_id !== user.id && access.approves(c.claimant_id)).length
+      const topupsWaiting = (tops || []).filter(
+        (r) => r.status === 'pending' && (r.requested_by !== user.id || isSuperAdmin) && (isSuperAdmin || access.approvesTopup?.(r.requested_by))
+      ).length
+      setToReview(claimsWaiting + topupsWaiting)
+    })
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [company.id, user.id, approver, accountant])
+  }, [company.id, user.id, approver, topupApprover])
 
   const person = new Map(people.map((p) => [p.user_id, p]))
   // Cash (claimable) receipts and subsidised fleet-card receipts, summed up.
