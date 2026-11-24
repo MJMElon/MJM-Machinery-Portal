@@ -91,21 +91,25 @@ export const printUsageTable = (opts) => printHtml(usageTableHtml(opts))
  * or machine type), with subtotals and the total. Then, when `receipts` is
  * given, every claimed receipt by date, one per page: the photo and under it
  * "Claimed by <name> on <date>".
- * groups: [{ title, rows: [{ date, who, vehicle, receipt?, litres, amount, remark }] }]
+ * groups: [{ title, rows: [{ type, date, who, vehicle, claimNo?, litres, amount, remark }] }]
+ * Receipts with nothing attached are left out by the caller (no empty pages).
  * receipts: [{ url, pdf, date, who, vehicle, receipt, litres, amount, card, claimNo, claimedOn }]
  */
 export function usageDetailHtml({ title, lines = [], hq, groups, receipts = [] }) {
   const dd = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '')
   const sum = (rows, k) => rows.reduce((t, r) => t + (r[k] || 0), 0)
   const all = groups.flatMap((g) => g.rows)
-  const span = hq ? 4 : 3
+  const span = hq ? 5 : 4
+  const cols = hq ? 8 : 7
+  // Type first and narrow; every other column the same width
+  const even = `${(90 / (cols - 1)).toFixed(3)}%`
   const body = groups
     .map(
       (g) => `
-    <tr class="grp"><td colspan="${hq ? 7 : 6}">${esc(g.title)} <span>· ${g.rows.length} receipt${g.rows.length === 1 ? '' : 's'}</span></td></tr>
+    <tr class="grp"><td colspan="${cols}">${esc(g.title)} <span>· ${g.rows.length} receipt${g.rows.length === 1 ? '' : 's'}</span></td></tr>
     ${g.rows
       .map(
-        (r) => `<tr><td>${esc(dd(r.date))}</td><td>${esc(r.who)}</td><td>${esc(r.vehicle)}${r.general ? ' <i>(general)</i>' : ''}</td>${hq ? `<td>${esc(r.receipt || '–')}</td>` : ''}<td class="r">${fmt(r.litres, 2)}</td><td class="r">${fmt(r.amount, 2)}</td><td class="rm">${esc(r.remark || '')}</td></tr>`
+        (r) => `<tr><td>${esc(r.type || '')}</td><td>${esc(dd(r.date))}</td><td>${esc(r.who)}</td><td>${esc(r.vehicle)}${r.general ? ' <i>(general)</i>' : ''}</td>${hq ? `<td>${esc(r.claimNo || '–')}</td>` : ''}<td class="r">${fmt(r.litres, 2)}</td><td class="r">${fmt(r.amount, 2)}</td><td class="rm">${esc(r.remark || '')}</td></tr>`
       )
       .join('')}
     <tr class="sub"><td colspan="${span}" class="r">Subtotal</td><td class="r">${fmt(sum(g.rows, 'litres'), 2)}</td><td class="r">${fmt(sum(g.rows, 'amount'), 2)}</td><td></td></tr>`
@@ -124,7 +128,8 @@ body { font: 9px/1.4 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -w
 .head { padding-bottom: 6px; border-bottom: 2px solid ${GREEN}; margin-bottom: 8px; }
 .head h1 { margin: 0; font-size: 15px; color: ${GREEN}; }
 .head p { margin: 2px 0 0; color: #475569; }
-.t { width: 100%; border-collapse: collapse; }
+.t { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.t td { overflow-wrap: anywhere; }
 .t th { background: ${GREEN}; color: #fff; font-weight: 600; padding: 4px; text-align: left; }
 .t th.r, .t td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .t td { padding: 3.5px 4px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
@@ -146,16 +151,16 @@ tr { break-inside: avoid; }
 <table class="page"><thead><tr><td></td></tr></thead><tfoot><tr><td></td></tr></tfoot><tbody><tr><td>
   <div class="head"><h1>${esc(title)}</h1>${lines.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('')}</div>
   <table class="t">
-    <colgroup><col style="width:10%" /><col style="width:${hq ? 17 : 24}%" /><col style="width:${hq ? 13 : 16}%" />${hq ? '<col style="width:12%" />' : ''}<col style="width:9%" /><col style="width:11%" /><col /></colgroup>
-    <thead><tr><th>Date</th><th>${hq ? 'Driver' : 'Machine'}</th><th>${hq ? 'Vehicle' : 'Location'}</th>${hq ? '<th>Receipt no.</th>' : ''}<th class="r">Litres</th><th class="r">Amount (RM)</th><th>Remark</th></tr></thead>
-    <tbody>${body || `<tr><td colspan="${hq ? 7 : 6}">No fuel usage for this selection.</td></tr>`}</tbody>
+    <colgroup><col style="width:10%" />${Array.from({ length: cols - 1 }, () => `<col style="width:${even}" />`).join('')}</colgroup>
+    <thead><tr><th>Type</th><th>Date</th><th>${hq ? 'Driver' : 'Machine'}</th><th>${hq ? 'Vehicle' : 'Location'}</th>${hq ? '<th>Claim no.</th>' : ''}<th class="r">Litres</th><th class="r">Amount (RM)</th><th>Remark</th></tr></thead>
+    <tbody>${body || `<tr><td colspan="${cols}">No fuel usage for this selection.</td></tr>`}</tbody>
     <tfoot><tr><td colspan="${span}" class="r">Total · ${all.length} receipt${all.length === 1 ? '' : 's'}</td><td class="r">${fmt(sum(all, 'litres'), 2)}</td><td class="r">${fmt(sum(all, 'amount'), 2)}</td><td></td></tr></tfoot>
   </table>
   ${receipts
     .map(
       (r, i) => `<div class="rc">
     <p class="no">Receipt ${i + 1} of ${receipts.length} <span>· ${esc(dd(r.date))}${r.receipt ? ` · No. ${esc(r.receipt)}` : ''}</span></p>
-    ${r.url ? `<img src="${esc(r.url)}" alt="Receipt ${i + 1}" />` : `<div class="nophoto">${r.pdf ? 'This receipt is a PDF file: open it from the claim to see it.' : 'No receipt photo attached.'}</div>`}
+    ${r.url ? `<img src="${esc(r.url)}" alt="Receipt ${i + 1}" />` : r.pdf ? `<div class="nophoto">This receipt is a PDF file: open it from the claim to see it.</div>` : ''}
     <div class="cap">
       Claimed by <b>${esc(r.who)}</b> on <b>${esc(dd(r.claimedOn))}</b>${r.claimNo ? ` · Claim ${esc(r.claimNo)}` : ''}
       <p>Filled ${esc(dd(r.date))} · ${esc(r.vehicle)} · ${fmt(r.litres, 2)} L · RM ${fmt(r.amount, 2)} · ${esc(r.card)}</p>
