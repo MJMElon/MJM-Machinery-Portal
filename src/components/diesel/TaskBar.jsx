@@ -44,7 +44,7 @@ export function TaskBar({ company, access }) {
         t.push({ key: 'claim-approve', rank: 1, tone: 'amber', text: `${what.join(' and ')} waiting for your approval`, open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
       const unclaimed = Number(db.unclaimed_fills || 0)
       if (unclaimed)
-        t.push({ key: 'unclaimed', rank: 2, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} not claimed yet: upload the receipt`, open: { ...CLAIMS, path: '/diesel/claims/new' } })
+        t.push({ key: 'unclaimed', rank: 2, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} in the Fuel Station Portal not claimed yet: submit a claim with the receipt`, open: { ...CLAIMS, path: '/diesel/claims/new' } })
       setTasks(t.sort((a, b) => a.rank - b.rank))
       setI(0)
     })
