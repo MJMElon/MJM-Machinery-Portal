@@ -14,7 +14,7 @@ import { BalanceChart } from "../../components/diesel/CardCharts.jsx";
 import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
 import { FleetCardInUse } from "../../components/diesel/FleetCardInUse.jsx";
 import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
-import { PasswordField } from "../../components/diesel/CardPassword.jsx";
+import { PasswordField, PasswordInput } from "../../components/diesel/CardPassword.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
@@ -679,8 +679,7 @@ export default function FleetCardPage({ mode }) {
                     />
                   </Row>
                   <Row label="Login password" ro={ro} show={<PasswordField cardId={id} has={Boolean(card?.login_password_set || card?.login_password)} canSee={access.procurement} />}>
-                    <input
-                      type="password"
+                    <PasswordInput
                       value={form.login_password}
                       onChange={set("login_password")}
                       maxLength={80}
@@ -938,8 +937,7 @@ export default function FleetCardPage({ mode }) {
                   />
                 </Row>
                 <Row label="Login Password" ro={ro} show={<PasswordField cardId={id} has={Boolean(card?.login_password_set || card?.login_password)} canSee={access.procurement} />}>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={form.login_password}
                     onChange={set("login_password")}
                     maxLength={80}

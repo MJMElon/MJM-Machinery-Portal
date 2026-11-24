@@ -8,7 +8,7 @@ import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
 import { RequestTopupModal } from './TopupRequests.jsx'
 import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
-import { PasswordField } from './CardPassword.jsx'
+import { PasswordField, PasswordInput } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
 
 // A fleet card in use (tested), one page, edited in place:
@@ -239,8 +239,7 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                   <input value={form.login_id} onChange={set('login_id')} maxLength={80} autoComplete="off" className={box} />
                 </Input>
                 <Input label="Login password">
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={form.login_password}
                     onChange={(e) => {
                       setClearPw(false)
