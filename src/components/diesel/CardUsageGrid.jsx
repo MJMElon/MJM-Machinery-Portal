@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Modal } from '../ui.jsx'
 import { IconPencil, IconTrash } from '../icons.jsx'
-import { addUsage, cardMonthUsage, deleteCardRecord } from '../../lib/diesel.js'
+import { addUsage, cardMonthUsage, deleteCardRecord, updateUsage } from '../../lib/diesel.js'
 import { monthLabel, thisMonth } from '../../lib/format.js'
 
 // Fleet card usage by date and driver (the card page → Usage → View):
@@ -9,9 +9,10 @@ import { monthLabel, thisMonth } from '../../lib/format.js'
 // A box is green when its fill-ups come from fuel claims, orange when added by
 // hand or from the Fuel Station Portal (the AI agent's daily import), i.e. not
 // claimed (a day with both is orange).
-// Edit (usage: add): click a cell to add a fill-up by hand; a fill-up added by
-// hand can be removed again (usage: delete); claims and the Fuel Station
-// Portal stay as they are.
+// Two columns per driver: Litre and RM. Edit (usage: add): every box can be
+// typed into (litre and RM, both needed), one Save for the month; a box from a
+// claim or the Fuel Station Portal stays locked (click it to add beside it);
+// a fill-up added by hand can be changed or cleared (clearing removes it).
 
 export const ORIGIN = {
   claim: { tag: 'C', label: 'Fuel claim', cls: 'bg-emerald-100 text-emerald-800' },
@@ -32,7 +33,10 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
   const [month, setMonth] = useState(startMonth || thisMonth())
   const [rows, setRows] = useState(undefined)
   const [editing, setEditing] = useState(false)
-  const [cell, setCell] = useState(null) // { date, col } being edited
+  const [draft, setDraft] = useState({}) // 'date|col' → { l, rm } typed in Edit
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [cell, setCell] = useState(null) // a locked box (claim / portal) clicked in Edit: add beside it
   const [tick, setTick] = useState(0)
   useEffect(() => {
     let live = true
@@ -56,22 +60,91 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
   const dateOf = (d) => `${month}-${String(d).padStart(2, '0')}`
   const inCell = (date, col) => list.filter((r) => r.date === date && colKey(r) === col.key)
-  const sum = (rs) => rs.reduce((s, r) => s + Number(r.litres || 0), 0)
+  const sumL = (rs) => rs.reduce((s, r) => s + Number(r.litres || 0), 0)
+  const sumRM = (rs) => rs.reduce((s, r) => s + Number(r.amount || 0), 0)
   const today = new Date().toISOString().slice(0, 10)
   // green = all from fuel claims; orange = added by hand / from the Fuel Station Portal (not claimed)
   const tone = (rs) => (!rs.length ? '' : rs.every((r) => (r.origin || 'claim') === 'claim') ? 'bg-emerald-100' : 'bg-orange-100')
+  // A box is typed into in Edit when it is empty or holds one fill-up added by hand;
+  // claims and the Fuel Station Portal stay locked (click to add beside them).
+  const editable = (rs) => rs.length === 0 || (rs.length === 1 && rs[0].origin === 'manual' && rs[0].usage_id)
+  const key = (date, col) => `${date}|${col.key}`
+  const valueOf = (date, col, rs, f) => {
+    const d = draft[key(date, col)]
+    if (d && d[f] !== undefined) return d[f]
+    if (rs.length === 1 && rs[0].origin === 'manual') return String(f === 'l' ? rs[0].litres ?? '' : rs[0].amount ?? '')
+    return ''
+  }
+  const setVal = (date, col, f, v) => setDraft((d) => ({ ...d, [key(date, col)]: { ...d[key(date, col)], [f]: v } }))
+  // the changes waiting to be saved; a box with only one of the two is not complete
+  const changes = []
+  const incomplete = new Set()
+  if (editing)
+    for (const [k, v] of Object.entries(draft)) {
+      const [date, colKeyStr] = k.split('|')
+      const col = cols.find((c) => c.key === colKeyStr)
+      if (!col) continue
+      const rs = inCell(date, col)
+      const l = v.l ?? (rs[0]?.origin === 'manual' ? String(rs[0].litres) : '')
+      const rm = v.rm ?? (rs[0]?.origin === 'manual' ? String(rs[0].amount) : '')
+      const had = rs.length === 1 && rs[0].origin === 'manual' ? rs[0] : null
+      const blank = l === '' && rm === ''
+      if (!blank && !(Number(l) > 0 && Number(rm) > 0)) {
+        incomplete.add(k)
+        continue
+      }
+      if (blank && had) changes.push({ kind: 'delete', had })
+      else if (!blank && !had) changes.push({ kind: 'add', date, col, l, rm })
+      else if (!blank && had && (Number(l) !== Number(had.litres) || Number(rm) !== Number(had.amount))) changes.push({ kind: 'update', had, l, rm })
+    }
+
+  async function save() {
+    setSaving(true)
+    setError('')
+    try {
+      const r2 = (v) => Math.round(Number(v) * 100) / 100
+      for (const c of changes) {
+        if (c.kind === 'add')
+          await addUsage(company.id, {
+            card_id: card.id,
+            fill_date: c.date,
+            litres: r2(c.l),
+            amount: r2(c.rm),
+            source: 'manual',
+            vehicle_id: card.vehicle_id || null,
+            ...(c.col.id ? { driver_id: c.col.id } : { driver_name: c.col.name })
+          })
+        else if (c.kind === 'update') await updateUsage(c.had.usage_id, { litres: r2(c.l), amount: r2(c.rm) })
+        else if (c.kind === 'delete') await deleteCardRecord('usage', c.had.usage_id)
+      }
+      setDraft({})
+      setEditing(false)
+      setTick((t) => t + 1)
+      onChanged?.()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  const cancel = () => {
+    setDraft({})
+    setError('')
+    setEditing(false)
+  }
+  const inp = 'block h-[15px] w-full min-w-0 rounded-sm border border-slate-300 bg-white px-1 py-0 text-right text-[11px] leading-none tabular-nums outline-none focus:border-brand focus:ring-1 focus:ring-brand/30'
 
   return (
     <Modal open onClose={onClose} wide="xl" title={`Fleet card : ${title}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setMonth((m) => shift(m, -1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Previous month">
+        <button type="button" disabled={editing} onClick={() => setMonth((m) => shift(m, -1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30" aria-label="Previous month">
           ‹
         </button>
         <span className="w-28 text-center text-sm font-semibold text-slate-800">{monthLabel(month)}</span>
         <button
           type="button"
           onClick={() => setMonth((m) => shift(m, 1))}
-          disabled={month >= thisMonth()}
+          disabled={editing || month >= thisMonth()}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"
           aria-label="Next month"
         >
@@ -84,16 +157,33 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
           <span className="inline-flex items-center gap-1.5">
             <span className="h-3 w-5 rounded bg-orange-100 ring-1 ring-orange-200" /> Fuel Station Portal / added by hand
           </span>
-          <span className="text-slate-400">· litres</span>
         </span>
         <span className="flex-1" />
-        {editing && <span className="text-xs text-brand-dark">Click a box to add a fill-up</span>}
-        {canAdd && (
-          <Button size="sm" variant={editing ? 'primary' : 'secondary'} onClick={() => setEditing((v) => !v)}>
-            <IconPencil width={15} height={15} /> {editing ? 'Done' : 'Edit'}
-          </Button>
+        {editing ? (
+          <>
+            {incomplete.size > 0 ? (
+              <span className="text-xs font-medium text-red-600">Fill in both litre and RM</span>
+            ) : (
+              <span className="text-xs text-slate-500" title="Boxes from a claim or the Fuel Station Portal stay as they are: click one to add another fill-up beside it">
+                Type litre and RM in the boxes
+              </span>
+            )}
+            <Button size="sm" variant="secondary" disabled={saving} onClick={cancel}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={saving || incomplete.size > 0 || changes.length === 0} onClick={save}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        ) : (
+          canAdd && (
+            <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+              <IconPencil width={15} height={15} /> Edit
+            </Button>
+          )
         )}
       </div>
+      {error && <p className="mb-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-700">{error}</p>}
 
       {rows === undefined ? (
         <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
@@ -101,17 +191,31 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
         <p className="py-10 text-center text-sm text-slate-500">Run the Fuel SQL migration 20261212 (fleet card statement) to see the usage here.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          {/* compact rows: the whole month (28–31 days) shows without scrolling */}
+          {/* compact rows: the whole month (28–31 days) shows without scrolling; two columns per driver */}
           <table className="w-full border-collapse text-xs">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <th className="sticky left-0 z-20 w-16 border-b border-slate-200 bg-slate-50 px-3 py-1.5">Date</th>
+            <thead className="bg-slate-50 text-slate-500">
+              <tr className="font-semibold">
+                <th rowSpan={2} className="sticky left-0 z-20 w-12 border-b border-slate-200 bg-slate-50 px-2 py-1 text-left uppercase tracking-wide">
+                  Date
+                </th>
                 {cols.map((c) => (
-                  <th key={c.key} className="min-w-[8rem] border-b border-l border-slate-200 px-3 py-1.5 text-right normal-case tracking-normal">
+                  <th key={c.key} colSpan={2} className="border-b border-l border-slate-200 px-2 py-1 text-center text-slate-700">
                     {c.name}
                   </th>
                 ))}
-                <th className="min-w-[6rem] border-b border-l border-slate-200 px-3 py-1.5 text-right">Total L</th>
+                <th colSpan={2} className="border-b border-l border-slate-200 px-2 py-1 text-center uppercase tracking-wide">
+                  Total
+                </th>
+              </tr>
+              <tr className="text-[10px] font-semibold uppercase tracking-wide">
+                {[...cols, { key: '__total' }].map((c) => [
+                  <th key={`${c.key}-l`} className="w-[4.5rem] border-b border-l border-slate-200 px-2 py-0.5 text-right">
+                    Litre
+                  </th>,
+                  <th key={`${c.key}-rm`} className="w-[4.5rem] border-b border-slate-200 px-2 py-0.5 text-right">
+                    RM
+                  </th>
+                ])}
               </tr>
             </thead>
             <tbody>
@@ -120,46 +224,54 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
                 const future = date > today
                 const dayRows = list.filter((r) => r.date === date)
                 return (
-                  <tr key={d} className={`${new Date(date).getDay() === 0 ? 'bg-slate-50/70' : ''} ${future ? 'text-slate-300' : ''}`}>
-                    <td className="sticky left-0 z-[1] border-b border-slate-100 bg-white px-3 py-px font-semibold tabular-nums text-slate-700">{d}</td>
+                  <tr key={d} className={future ? 'text-slate-300' : ''}>
+                    <td className="sticky left-0 z-[1] border-b border-slate-100 bg-white px-2 py-px font-semibold tabular-nums text-slate-700">{d}</td>
                     {cols.map((c) => {
                       const rs = inCell(date, c)
-                      const clickable = editing && !future
-                      return (
-                        <td
-                          key={c.key}
-                          onClick={clickable ? () => setCell({ date, col: c }) : undefined}
-                          className={`border-b border-l border-slate-100 px-3 py-px text-right tabular-nums ${tone(rs)} ${clickable ? 'cursor-pointer hover:ring-2 hover:ring-inset hover:ring-brand/40' : ''}`}
-                        >
-                          {rs.length ? (
-                            <b className="font-semibold text-slate-900">{n2(sum(rs))}</b>
-                          ) : clickable ? (
-                            <span className="text-slate-300">+</span>
-                          ) : (
-                            ''
-                          )}
+                      const k = key(date, c)
+                      const bad = incomplete.has(k)
+                      if (editing && !future && editable(rs))
+                        return [
+                          <td key={`${c.key}-l`} className={`border-b border-l border-slate-100 px-1 py-0 ${bad ? 'bg-red-50' : tone(rs)}`}>
+                            <input inputMode="decimal" aria-label={`${c.name} ${d} litre`} value={valueOf(date, c, rs, 'l')} onChange={(e) => setVal(date, c, 'l', e.target.value)} className={`${inp} ${bad ? '!border-red-500 !bg-red-50' : ''}`} />
+                          </td>,
+                          <td key={`${c.key}-rm`} className={`border-b border-slate-100 px-1 py-0 ${bad ? 'bg-red-50' : tone(rs)}`}>
+                            <input inputMode="decimal" aria-label={`${c.name} ${d} RM`} value={valueOf(date, c, rs, 'rm')} onChange={(e) => setVal(date, c, 'rm', e.target.value)} className={`${inp} ${bad ? '!border-red-500 !bg-red-50' : ''}`} />
+                          </td>
+                        ]
+                      const lock = editing && !future && rs.length > 0 ? () => setCell({ date, col: c }) : undefined
+                      return [
+                        <td key={`${c.key}-l`} onClick={lock} className={`border-b border-l border-slate-100 px-2 py-px text-right tabular-nums ${tone(rs)} ${lock ? 'cursor-pointer' : ''}`} title={lock ? 'From a claim or the Fuel Station Portal: click to add beside it' : undefined}>
+                          {rs.length ? <b className="font-semibold text-slate-900">{n2(sumL(rs))}</b> : ''}
+                        </td>,
+                        <td key={`${c.key}-rm`} onClick={lock} className={`border-b border-slate-100 px-2 py-px text-right tabular-nums text-slate-600 ${tone(rs)} ${lock ? 'cursor-pointer' : ''}`}>
+                          {rs.length ? n2(sumRM(rs)) : ''}
                         </td>
-                      )
+                      ]
                     })}
-                    <td className="border-b border-l border-slate-100 px-3 py-px text-right font-semibold tabular-nums text-slate-700">{dayRows.length ? n2(sum(dayRows)) : ''}</td>
+                    <td className="border-b border-l border-slate-100 px-2 py-px text-right font-semibold tabular-nums text-slate-700">{dayRows.length ? n2(sumL(dayRows)) : ''}</td>
+                    <td className="border-b border-slate-100 px-2 py-px text-right tabular-nums text-slate-600">{dayRows.length ? n2(sumRM(dayRows)) : ''}</td>
                   </tr>
                 )
               })}
             </tbody>
-            <tfoot className="bg-slate-50">
-              <tr className="font-bold">
-                <td className="sticky left-0 border-t-2 border-slate-200 bg-slate-50 px-3 py-1.5 uppercase tracking-wide text-slate-500">Total</td>
-                {cols.map((c) => (
-                  <td key={c.key} className="border-l border-t-2 border-slate-200 px-3 py-1.5 text-right tabular-nums">
-                    {n2(sum(list.filter((r) => colKey(r) === c.key)))}
+            <tfoot className="bg-slate-50 font-bold">
+              <tr>
+                <td className="sticky left-0 border-t-2 border-slate-200 bg-slate-50 px-2 py-1 uppercase tracking-wide text-slate-500">Total</td>
+                {[...cols.map((c) => list.filter((r) => colKey(r) === c.key)), list].map((rs, i) => [
+                  <td key={`${i}-l`} className="border-l border-t-2 border-slate-200 px-2 py-1 text-right tabular-nums">
+                    {n2(sumL(rs))}
+                  </td>,
+                  <td key={`${i}-rm`} className="border-t-2 border-slate-200 px-2 py-1 text-right tabular-nums text-slate-700">
+                    {n2(sumRM(rs))}
                   </td>
-                ))}
-                <td className="border-l border-t-2 border-slate-200 px-3 py-1.5 text-right tabular-nums">{n2(sum(list))}</td>
+                ])}
               </tr>
             </tfoot>
           </table>
         </div>
       )}
+
       {cell && (
         <CellEditor
           company={company}
