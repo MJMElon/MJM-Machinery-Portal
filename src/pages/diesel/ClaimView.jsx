@@ -27,6 +27,7 @@ import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { DraftCountdown, claimNo } from './DieselClaims.jsx'
 import { MarkPaidModal, PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
+import { useNotice } from '../../components/Notice.jsx'
 
 // One fuel claim: title (claim no., created date, status), the receipt rows
 // and the totals. Top right: the claimant gets Print / Submit / Edit / Delete;
@@ -117,10 +118,13 @@ export default function ClaimView() {
       setBusy(false)
     }
   }
+  const [notice, notify] = useNotice()
   const review = (status, note) =>
     act(async () => {
       const data = await reviewClaim(claim.id, status, note ?? claim.review_note)
       setClaim((c) => ({ ...c, ...data }))
+      const word = { approved: 'approved', rejected: 'rejected', paid: 'marked paid', pending: 'back to pending' }[status] || 'saved'
+      notify(`Claim ${claimNo(claim, 0)} ${word}`, `${claimantName || ''}${claimantName ? ' · ' : ''}${money(payable)}`, status === 'rejected' ? 'red' : status === 'paid' ? 'blue' : 'green')
     })
   const remove = () =>
     window.confirm('Delete this claim? This cannot be undone.') &&
@@ -232,6 +236,7 @@ export default function ClaimView() {
             ))
           }
         />
+        {notice}
         <ErrorBox>{error}</ErrorBox>
       </div>
 
