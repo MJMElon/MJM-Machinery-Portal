@@ -218,7 +218,9 @@ export default function DieselClaims() {
   }
 
   const canEdit = (c) => ['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'edit')
-  const canDelete = (c) => (['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin
+  // Approved (pending for reimbursement) and paid claims are never deleted, not even by a super admin
+  const canDelete = (c) =>
+    !['approved', 'paid'].includes(c.status) && ((['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin)
 
   return (
     <div className="space-y-5">
