@@ -41,8 +41,8 @@ export default function ClaimEdit() {
   return (
     <div className="space-y-4">
       <PageHeader
-        backTo={id ? `/diesel/claims/${id}` : '/diesel/claims'}
-        backLabel={id ? 'Back to claim' : 'Back to claim list'}
+        backTo="/diesel/claims"
+        backLabel="Back to My Claims"
         title={id ? `Edit fuel claim ${claim ? claimNo(claim, 0) : ''}` : 'New fuel claim'}
       />
       <ErrorBox>{error}</ErrorBox>
@@ -57,7 +57,7 @@ export default function ClaimEdit() {
           claim={claim}
           lines={lines}
           onSaved={(savedId) => navigate(`/diesel/claims/${savedId}`, { replace: true })}
-          onCancel={() => navigate(id ? `/diesel/claims/${id}` : '/diesel/claims')}
+          onCancel={() => navigate('/diesel/claims')}
         />
       )}
     </div>
