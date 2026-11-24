@@ -12,6 +12,8 @@ export interface GatewayUser {
   id: string
   email: string
   full_name: string | null
+  /** MJM Intranet Super Admin (= super admin in this portal too) */
+  is_super_admin?: boolean
 }
 
 export interface Deps {
@@ -27,6 +29,8 @@ export interface Deps {
   checkLink(email: string, intranetId: string): Promise<'ok' | 'mismatch' | 'moved'>
   /** Keep the portal user list in step with MJM Intranet (adds the row, updates name/e-mail, ties it to the Intranet account). */
   enrol(userId: string, email: string, fullName: string | null, intranetId: string): Promise<void>
+  /** Intranet Super Admin → super admin here; no longer → take back only what the Intranet gave. */
+  setIntranetSuper?(userId: string, isSuper: boolean): Promise<void>
 }
 
 export const CORS = {
@@ -72,6 +76,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   try {
     const { userId, tokenHash } = await deps.issueSession(email, fullName)
     await deps.enrol(userId, email, fullName, intranetId)
+    if (deps.setIntranetSuper) await deps.setIntranetSuper(userId, check.user.is_super_admin === true)
     return json({ token_hash: tokenHash, email, full_name: fullName })
   } catch (e) {
     return json({ error: 'session_failed', detail: String((e as Error)?.message ?? e) }, 500)

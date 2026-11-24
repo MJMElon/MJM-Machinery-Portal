@@ -22,6 +22,8 @@ export interface IntranetUser {
   email: string
   full_name: string | null
   is_admin?: boolean
+  /** MJM Intranet Super Admin (= super admin in this portal too) */
+  is_super_admin?: boolean
   // Intranet companies this person may use with the Icon (HR allocation in the
   // Businesses where the Icon is opened for them). Absent from older Intranets.
   company_ids?: string[]
@@ -134,6 +136,11 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
     const flags: Record<string, unknown> = {}
     if (data.module_users) flags.cmms = data.module_users.map((u) => ids.get(u.id)).filter(Boolean)
     if (fuel?.module_users) flags.fuel = fuel.module_users.map((u) => ids.get(u.id)).filter(Boolean)
+    // Intranet Super Admins → super admin here (only when the Intranet already sends is_super_admin)
+    const everyone = [...(data.module_users ?? []), ...(fuel?.module_users ?? [])]
+    if (everyone.some((u) => typeof u.is_super_admin === 'boolean')) {
+      flags.super = [...new Set(everyone.filter((u) => u.is_super_admin).map((u) => ids.get(u.id)).filter(Boolean))]
+    }
     const { data: r, error: e2 } = await db.rpc('machinery_apply_intranet_users', { p: flags })
     users = e2 ? { users_warning: e2.message } : { users: all.size, ...(r ?? {}) }
 

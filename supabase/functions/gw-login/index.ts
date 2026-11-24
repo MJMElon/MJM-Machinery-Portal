@@ -106,6 +106,21 @@ Deno.serve(async (req) => {
       return data === 'mismatch' || data === 'moved' ? data : 'ok'
     },
 
+    // MJM Intranet Super Admin = super admin in this portal (migration 20261214100000).
+    // Only a super admin right that came from the Intranet is ever taken back.
+    async setIntranetSuper(userId, isSuper) {
+      const { data: row, error } = await db.from('machinery_portal_admins').select('is_super_admin, intranet_super').eq('user_id', userId).maybeSingle()
+      if (error || !row) {
+        if (error) console.error('intranet super admin: run migration 20261214100000', error.message)
+        return
+      }
+      if (isSuper && !row.is_super_admin) {
+        await db.from('machinery_portal_admins').update({ is_super_admin: true, intranet_super: true }).eq('user_id', userId)
+      } else if (!isSuper && row.intranet_super) {
+        await db.from('machinery_portal_admins').update({ is_super_admin: false, intranet_super: false }).eq('user_id', userId)
+      }
+    },
+
     async enrol(userId, email, fullName, intranetId) {
       // full_name exists after the businesses migration; fall back without it.
       let { error } = await db
