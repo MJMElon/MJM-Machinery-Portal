@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Modal } from '../../components/ui.jsx'
-import { IconCheck, IconPencil, IconPrint, IconTrash, IconX } from '../../components/icons.jsx'
+import { IconBuilding, IconCheck, IconPencil, IconPrint, IconTrash, IconX } from '../../components/icons.jsx'
 import { ErrorBox, Loading, StatusBadge, inputCls } from '../../components/diesel/shared.jsx'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import {
@@ -26,6 +26,7 @@ import {
 } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 import { DraftCountdown, claimNo } from './DieselClaims.jsx'
 import { MarkPaidModal, PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
 import { useNotice } from '../../components/Notice.jsx'
@@ -89,10 +90,15 @@ export default function ClaimView() {
   // (cash receipts and fleet card reloads); fleet card fill-ups need no approval.
   const shownLines = own ? lines : lines.filter(payableLine)
   const hiddenFills = lines.length - shownLines.length
+  const { companies } = useCompany()
+  const billName = (id) => {
+    const c = (companies || []).find((x) => x.id === id)
+    return c ? c.short_name || c.name : 'another company'
+  }
   const claimantName = own ? user.fullName || user.email : personLabel(person.get(claim?.claimant_id))
 
   const print = () =>
-    act(() => printClaim({ company, claim, lines, vehicles, cards, claimantName }))
+    act(() => printClaim({ company, claim, lines, vehicles, cards, claimantName, companies }))
 
   useEffect(() => {
     if (!loading && claim && params.get('print') === '1' && !['draft', 'rejected'].includes(claim.status) && !printedOnLoad.current) {
@@ -332,7 +338,15 @@ export default function ClaimView() {
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className={`${tall} overflow-hidden text-slate-600`}>{l.remark || '—'}</div>
+                        <div className={`${tall} overflow-hidden text-slate-600`}>
+                          {l.bill_to_company_id && (
+                            <span className="mb-1 inline-flex max-w-full items-center gap-1 rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                              <IconBuilding width={12} height={12} className="shrink-0" />
+                              <span className="truncate">Bill to {billName(l.bill_to_company_id)}</span>
+                            </span>
+                          )}
+                          <span className="block">{l.remark || (l.bill_to_company_id ? '' : '—')}</span>
+                        </div>
                       </td>
                       <td className="px-2 py-3">
                         {l.receipt_path ? (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card } from '../ui.jsx'
-import { IconPlus, IconTrash } from '../icons.jsx'
+import { IconBuilding, IconNotebook, IconPlus, IconTrash } from '../icons.jsx'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 import { F, inputCls, opt } from './shared.jsx'
 import {
   PAYMENTS,
@@ -100,6 +101,17 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
         }))
       : [blankLine(mine)]
   )
+  // Bill to: the companies this person may open in Fuel Manage (one per receipt)
+  const { companies } = useCompany()
+  const billCos = useMemo(
+    () => (companies || []).filter((c) => c.is_active !== false && c.diesel_enabled).sort((a, b) => (a.short_name || a.name).localeCompare(b.short_name || b.name)),
+    [companies]
+  )
+  const coName = (id) => {
+    const c = (companies || []).find((x) => x.id === id)
+    return c ? c.short_name || c.name : 'Company'
+  }
+  const [textOpen, setTextOpen] = useState({}) // row key → remark box opened by the note button
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
@@ -434,7 +446,49 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                       </div>
                     </td>
                     <td className="px-2 py-3">
-                      <textarea value={l.remark} maxLength={300} placeholder="Remark" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${tall} resize-none py-2`} title="Remark" />
+                      {/* Remark: two buttons — Bill to company (one per receipt) and a text note */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <label
+                            className={`relative inline-flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold ${
+                              l.bill_to_company_id ? 'border-brand bg-brand text-white' : 'border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800'
+                            }`}
+                            title={l.bill_to_company_id ? `Bill to ${coName(l.bill_to_company_id)} (click to change)` : 'Bill to company: which company this fuel is charged to later'}
+                          >
+                            <IconBuilding width={15} height={15} className="shrink-0" />
+                            <span className="truncate">{l.bill_to_company_id ? coName(l.bill_to_company_id) : 'Bill to'}</span>
+                            {/* the real drop-down sits invisibly on top, so it opens the phone / browser list */}
+                            <select
+                              value={l.bill_to_company_id || ''}
+                              onChange={(e) => update(l.key, { bill_to_company_id: e.target.value })}
+                              className="absolute inset-0 cursor-pointer opacity-0"
+                              aria-label="Bill to company"
+                            >
+                              <option value="">— Not charged to another company —</option>
+                              {billCos.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                  {c.short_name ? ` (${c.short_name})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setTextOpen((o) => ({ ...o, [l.key]: !(o[l.key] ?? Boolean(l.remark)) }))}
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+                              l.remark ? 'border-slate-400 bg-slate-100 text-slate-800' : 'border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800'
+                            }`}
+                            title={l.remark ? 'Remark text' : 'Add remark text'}
+                            aria-label="Remark text"
+                          >
+                            <IconNotebook width={15} height={15} />
+                          </button>
+                        </div>
+                        {(textOpen[l.key] ?? Boolean(l.remark)) && (
+                          <textarea autoFocus={textOpen[l.key] === true && !l.remark} value={l.remark} maxLength={300} rows={2} placeholder="More details…" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${cell} h-auto resize-none py-1.5`} title="Remark" />
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-3">
                       <label

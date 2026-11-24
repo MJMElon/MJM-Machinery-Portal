@@ -23,6 +23,7 @@ import {
   vehicleLabel
 } from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 import { day, money, num, today } from '../../lib/format.js'
 
 // Fuel Usage Report: one row per vehicle with two small month charts (litres
@@ -53,6 +54,8 @@ const dateCls = 'h-9 w-auto rounded-lg border border-slate-300 bg-white px-2 tex
 const perL = (v) => `RM ${Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} / L`
 export default function DieselUsage() {
   const { company, access } = useOutletContext()
+  const { companies } = useCompany()
+  const billName = (id) => (companies || []).find((c) => c.id === id)?.name || 'Another company'
   const [fills, setFills] = useState([])
   const [issued, setIssued] = useState([]) // fuel usage records, shaped like fills (estate tab)
   const [locations, setLocations] = useState([])
@@ -431,6 +434,8 @@ export default function DieselUsage() {
           card: f.source === 'cash' ? 'Cash' : c ? `Fleet card ${c.card_no}` : 'Fleet card'
         }
         row.cardNo = c?.card_no || ''
+        // Bill to company chosen on the claim receipt (migration 20261229)
+        row.billTo = f.bill_to_company_id ? billName(f.bill_to_company_id) : ''
         row.from = f.fromClaim ? [coShort, f.claimNo ? `Claim ${f.claimNo}` : '', row.who].filter(Boolean).join(' · ') : f.driver ? row.who : ''
         // one group per vehicle and kind: fleet card first, then cash
         const vk = f.vehicle_id || ''
@@ -920,6 +925,9 @@ function VehicleTable({ groups, total }) {
                     <td className="px-3 py-2 text-right tabular-nums text-slate-600">{perL(r)}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">{n2(r.amount)}</td>
                     <td className="break-words px-3 py-2">
+                      {r.billTo && (
+                        <span className="mb-0.5 inline-block rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-white">Bill to {r.billTo}</span>
+                      )}
                       {r.remark && <span className="block text-slate-800">{r.remark}</span>}
                       {r.from && <span className="block text-xs text-slate-500">{r.from}</span>}
                     </td>
@@ -946,6 +954,51 @@ function VehicleTable({ groups, total }) {
         <span className="tabular-nums">{n2(total.litres)} L</span>
         <span className="tabular-nums">RM {n2(total.amount)}</span>
       </div>
+      <BillToSummary rows={groups.flatMap((g) => g.rows)} />
+    </div>
+  )
+}
+
+/** Totals per Bill to company (the receipts charged to another company), for the month-end billing. */
+function billToTotals(rows) {
+  const m = new Map()
+  for (const r of rows) {
+    if (!r.billTo) continue
+    const t = m.get(r.billTo) || { name: r.billTo, n: 0, litres: 0, amount: 0 }
+    t.n += 1
+    t.litres += r.litres
+    t.amount += r.amount
+    m.set(r.billTo, t)
+  }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+function BillToSummary({ rows }) {
+  const list = billToTotals(rows)
+  if (!list.length) return null
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-300">
+      <p className="bg-slate-800 px-4 py-2 text-sm font-bold text-white">Bill to other companies</p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-1.5">Company</th>
+            <th className="px-3 py-1.5 text-right">Receipts</th>
+            <th className="px-3 py-1.5 text-right">Litre</th>
+            <th className="px-4 py-1.5 text-right">Total amount (RM)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((t) => (
+            <tr key={t.name} className="border-t border-slate-100">
+              <td className="px-4 py-2 font-semibold text-slate-800">{t.name}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{t.n}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{n2(t.litres)}</td>
+              <td className="px-4 py-2 text-right font-bold tabular-nums">{n2(t.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

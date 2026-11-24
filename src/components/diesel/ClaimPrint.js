@@ -77,7 +77,8 @@ table { border-collapse: collapse; font-size: 11px; }
 `
 
 /** The claim form as a complete HTML document (string). */
-export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, approverName = '', images = {} }) {
+export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, approverName = '', images = {}, companies = [] }) {
+  const billTo = (id) => companies.find((c) => c.id === id)?.name || ''
   const approved = ['approved', 'paid'].includes(claim.status) && Boolean(claim.reviewed_at)
   const vById = new Map((vehicles || []).map((v) => [v.id, v]))
   const cById = new Map((cards || []).map((c) => [c.id, c]))
@@ -102,7 +103,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
         <td class="c">${i + 1}</td>
         <td>${esc(day(l.fill_date))}</td>
         <td class="wrap">${esc(l.receipt_no || '—')}</td>
-        <td>${describe(l)}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
+        <td>${describe(l)}${l.bill_to_company_id && billTo(l.bill_to_company_id) ? `<span class="remark">Bill to: ${esc(billTo(l.bill_to_company_id))}</span>` : ''}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
         <td class="r">${l.litres != null ? Number(l.litres).toFixed(2) : '—'}</td>
         <td class="r">${l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
         <td class="r">${Number(l.amount || 0).toFixed(2)}</td>
@@ -188,7 +189,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
  * been shown (Chrome and Firefox: once it closes). `lines` may include
  * fleet-card lines; only cash lines are printed.
  */
-export async function printClaim({ company, claim, lines, vehicles, cards, claimantName }) {
+export async function printClaim({ company, claim, lines, vehicles, cards, claimantName, companies = [] }) {
   const cash = (lines || []).filter((l) => l.payment !== 'fleet_card')
   const images = {}
   await Promise.all(
@@ -206,6 +207,6 @@ export async function printClaim({ company, claim, lines, vehicles, cards, claim
     const p = people.find((x) => x.user_id === claim.reviewed_by)
     approverName = p ? personLabel(p) : ''
   }
-  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, approverName, images })
+  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, approverName, images, companies })
   return printHtml(html)
 }

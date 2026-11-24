@@ -194,7 +194,7 @@ function usageVehicleHtml({ title, lines, groups, receipts }) {
     <tbody>${g.rows
       .map(
         (r) =>
-          `<tr><td>${esc(dd(r.date))}</td><td>${esc(r.receipt || '–')}</td><td class="r">${fmt(r.litres, 2)}</td><td class="r">${perL(r.litres, r.amount)}</td><td class="r b">${fmt(r.amount, 2)}</td><td>${r.remark ? `${esc(r.remark)}<br />` : ''}${r.from ? `<i>${esc(r.from)}</i>` : ''}</td></tr>`
+          `<tr><td>${esc(dd(r.date))}</td><td>${esc(r.receipt || '–')}</td><td class="r">${fmt(r.litres, 2)}</td><td class="r">${perL(r.litres, r.amount)}</td><td class="r b">${fmt(r.amount, 2)}</td><td>${r.billTo ? `<b>Bill to ${esc(r.billTo)}</b><br />` : ''}${r.remark ? `${esc(r.remark)}<br />` : ''}${r.from ? `<i>${esc(r.from)}</i>` : ''}</td></tr>`
       )
       .join('')}
     <tr class="sub"><td colspan="2" class="r">Subtotal</td><td class="r">${fmt(sum(g.rows, 'litres'), 2)}</td><td class="r">${perL(sum(g.rows, 'litres'), sum(g.rows, 'amount'))}</td><td class="r">${fmt(sum(g.rows, 'amount'), 2)}</td><td></td></tr></tbody>
@@ -244,6 +244,21 @@ tr { break-inside: avoid; }
   <div class="head"><h1>${esc(title)}</h1>${lines.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('')}</div>
   ${body || '<p>No fuel usage for this selection.</p>'}
   <div class="tot">Total · ${all.length} receipt${all.length === 1 ? '' : 's'}<span>${fmt(sum(all, 'litres'), 2)} L</span><span>RM ${fmt(sum(all, 'amount'), 2)}</span></div>
+  ${(() => {
+    // Bill to other companies: totals per company (month-end billing)
+    const m = new Map()
+    for (const r of all) if (r.billTo) {
+      const t = m.get(r.billTo) || { name: r.billTo, n: 0, litres: 0, amount: 0 }
+      t.n++; t.litres += r.litres; t.amount += r.amount
+      m.set(r.billTo, t)
+    }
+    const list = [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+    return list.length
+      ? `<h2>Bill to other companies</h2><table class="t"><colgroup><col /><col style="width:12%" /><col style="width:14%" /><col style="width:20%" /></colgroup>
+    <thead><tr class="h"><th>Company</th><th class="r">Receipts</th><th class="r">Litre</th><th class="r">Total amount (RM)</th></tr></thead>
+    <tbody>${list.map((t) => `<tr><td><b>${esc(t.name)}</b></td><td class="r">${t.n}</td><td class="r">${fmt(t.litres, 2)}</td><td class="r b">${fmt(t.amount, 2)}</td></tr>`).join('')}</tbody></table>`
+      : ''
+  })()}
   ${receipts
     .map(
       (r, i) => `<div class="rc">

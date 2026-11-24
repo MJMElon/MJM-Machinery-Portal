@@ -10,6 +10,7 @@ import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import { PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
 
@@ -29,6 +30,7 @@ export default function DieselClaims() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
+  const { companies } = useCompany()
   const [claims, setClaims] = useState([])
   const [lines, setLines] = useState([])
   const [vehicles, setVehicles] = useState([])
@@ -165,7 +167,7 @@ export default function DieselClaims() {
     setBusyId(c.id)
     setError('')
     try {
-      await printClaim({ company, claim: c, lines: linesOf(c.id), vehicles, cards, claimantName: user.fullName || user.email })
+      await printClaim({ company, claim: c, lines: linesOf(c.id), vehicles, cards, claimantName: user.fullName || user.email, companies })
     } catch (e) {
       setError(e.message)
     } finally {

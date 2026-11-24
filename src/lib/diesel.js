@@ -357,10 +357,16 @@ async function replaceLines(claimId, lines) {
     odometer_km: l.odometer_km === '' || l.odometer_km == null ? null : Number(l.odometer_km),
     description: l.description || null,
     remark: l.remark || null,
-    receipt_path: l.receipt_path || null
+    receipt_path: l.receipt_path || null,
+    // Bill to company (migration 20261229); only sent when one is chosen, so older databases still save
+    ...(l.bill_to_company_id ? { bill_to_company_id: l.bill_to_company_id } : 'bill_to_company_id' in l ? { bill_to_company_id: null } : {})
   }))
   if (!rows.length) return
-  const { error } = await supabase.from(LINES).upsert(rows, { onConflict: 'id' })
+  let { error } = await supabase.from(LINES).upsert(rows, { onConflict: 'id' })
+  if (error && ['PGRST204', '42703'].includes(error.code) && /bill_to/.test(error.message || '')) {
+    if (rows.some((r) => r.bill_to_company_id)) throw new Error('Bill to company needs the SQL migration 20261229 in the database first.')
+    ;({ error } = await supabase.from(LINES).upsert(rows.map(({ bill_to_company_id, ...r }) => r), { onConflict: 'id' })) // eslint-disable-line no-unused-vars
+  }
   if (error) throw friendly(error)
 }
 
