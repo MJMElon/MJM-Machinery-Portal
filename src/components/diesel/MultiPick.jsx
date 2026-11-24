@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react'
  */
 // head: a column title that opens the list (in a table header). The list is
 // placed on the screen (fixed) so the table's scroll box does not cut it off.
-export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left' }) {
+// searchable: always show the search box at the top (else only for long lists).
+export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left', searchable = false, searchPlaceholder = 'Search…' }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [pos, setPos] = useState(null)
@@ -39,6 +40,7 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
       const left = align === 'right' ? r.right - w : r.left
       setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(left, window.innerWidth - w - 8)), width: w })
     }
+    if (open) setQ('')
     setOpen((o) => !o)
   }
 
@@ -105,14 +107,14 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
           className={`z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-left font-normal normal-case tracking-normal shadow-xl ${head ? 'fixed' : 'absolute left-0 right-0 top-full mt-1 min-w-[16rem]'}`}
           style={head && pos ? { top: pos.top, left: pos.left, width: pos.width } : undefined}
         >
-          {options.length > 8 && (
+          {(searchable || options.length > 8) && (
             <div className="border-b border-slate-100 p-2">
               <input
                 autoFocus
                 type="search"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search…"
+                placeholder={searchPlaceholder}
                 className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-sm focus:border-brand focus:outline-none"
               />
             </div>

@@ -47,6 +47,8 @@ import { day, money, num, today } from '../../lib/format.js'
 // locations.
 // Print prints the charts with the filters in the heading.
 const ISSUED_COLOR = '#0d9488'
+// a date box only as wide as dd/mm/yyyy
+const dateCls = 'h-9 w-auto rounded-lg border border-slate-300 bg-white px-2 text-sm font-normal text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-300'
 /** 'RM 2.95 / L' (up to 3 decimals) */
 const perL = (v) => `RM ${Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} / L`
 export default function DieselUsage() {
@@ -299,8 +301,8 @@ export default function DieselUsage() {
   }
   const F = {
     card: (label = 'Type') => <MultiPick head label={label} allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={pickCards} />,
-    driver: (label = 'Driver') => <MultiPick head label={label} allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />,
-    vehicle: (label = 'Vehicle') => <MultiPick head label={label} allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />,
+    driver: (label = 'Driver') => <MultiPick head searchable searchPlaceholder="Search driver name…" label={label} allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />,
+    vehicle: (label = 'Vehicle') => <MultiPick head searchable searchPlaceholder="Search vehicle…" label={label} allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />,
     type: (label = 'Type') => <MultiPick head label={label} allLabel="All types" options={typeOpts} value={typeF} onChange={pickType} />,
     machine: (label = 'Machine') => <MultiPick head label={label} allLabel="All machines" options={machineOpts} value={machineF} onChange={setMachineF} />,
     loc: (label = 'Location') => (locations.length ? <MultiPick head label={label} allLabel="All locations" options={locOpts} value={locF} onChange={pickLoc} /> : label)
@@ -579,18 +581,24 @@ export default function DieselUsage() {
                 other filters are on the column titles. Chart view has no column for the fleet card
                 (HQ) or the location (estate), so those sit here too. */}
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2.5" data-noprint>
-              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} h-10 w-40 rounded-xl px-2 text-sm`} aria-label="From date" />
-              <span className="text-sm text-slate-400">to</span>
-              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`${inputCls} h-10 w-40 rounded-xl px-2 text-sm`} aria-label="To date" />
+              {/* date boxes only as wide as the date; the button in the intranet's dark frame colour */}
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                From
+                <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={dateCls} />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                To
+                <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={dateCls} />
+              </label>
               <button
                 type="button"
                 onClick={search}
                 disabled={searching}
                 title="Search (load the latest data again)"
                 aria-label="Search"
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white hover:opacity-90 disabled:opacity-60"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1f2933] text-white shadow-sm hover:bg-[#0f172a] disabled:opacity-60"
               >
-                <IconSearch width={18} height={18} className={searching ? 'animate-pulse' : ''} />
+                <IconSearch width={17} height={17} className={searching ? 'animate-pulse' : ''} />
               </button>
               {view !== 'table' && tab === 'hq' && <span className="ml-2">{F.card('Fleet card')}</span>}
               {view !== 'table' && tab !== 'hq' && locations.length > 0 && <span className="ml-2">{F.loc()}</span>}
