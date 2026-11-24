@@ -63,8 +63,13 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to, co
               <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
             </div>
           )}
-          {card.auto_topup && card.auto_topup_below != null && (
-            <p className="text-[10px] font-medium text-emerald-700">Auto top-up below {money(card.auto_topup_below)}</p>
+          {(card.auto_topup_below != null || card.auto_topup_max != null) && (
+            <p className={`text-[10px] font-medium ${card.auto_topup ? 'text-emerald-700' : 'text-slate-500'}`}>
+              {card.auto_topup_below != null && `Min ${money(card.auto_topup_below)}`}
+              {card.auto_topup_below != null && card.auto_topup_max != null && ' · '}
+              {card.auto_topup_max != null && `Max ${money(card.auto_topup_max)}`}
+              {card.auto_topup ? ' · Auto' : ''}
+            </p>
           )}
           {balance != null && (
             <div className="flex justify-between gap-2">
