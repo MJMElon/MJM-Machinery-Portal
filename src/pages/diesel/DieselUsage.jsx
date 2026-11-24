@@ -18,6 +18,7 @@ import {
   listPeople,
   listVehicles,
   personLabel,
+  receiptUrls,
   saveDieselPrice,
   vehicleLabel
 } from '../../lib/diesel.js'
@@ -37,7 +38,7 @@ import { day, money, num, today } from '../../lib/format.js'
 // listed (HQ or not), plus "No vehicle recorded" for receipts without one.
 // HQ vehicle data = receipts: cash and fleet-card receipts on fuel claims (not
 // rejected) plus fill-ups typed on a card.
-// Estate machine data = Operational Diesel Records: diesel
+// Estate machine data = Estate Fuel Record: diesel
 // issued to each machine from the company tank. A record has litres only; its
 // RM is litres x the diesel price in force on its date (the "Diesel price"
 // button keeps the price list). A location filter shows when the company has
@@ -115,7 +116,17 @@ export default function DieselUsage() {
       const counted = lines.filter((l) => l.line_kind !== 'reload' && !['rejected', 'draft'].includes(claimById.get(l.claim_id)?.status))
       const countedIds = new Set(counted.map((l) => l.id))
       setFills([
-        ...counted.map((l) => ({ ...l, source: l.payment === 'fleet_card' ? 'card' : 'cash', driver: claimById.get(l.claim_id)?.claimant_id, fromClaim: true })),
+        ...counted.map((l) => {
+          const c = claimById.get(l.claim_id)
+          return {
+            ...l,
+            source: l.payment === 'fleet_card' ? 'card' : 'cash',
+            driver: c?.claimant_id,
+            fromClaim: true,
+            claimedOn: c?.submitted_on || c?.created_at?.slice(0, 10) || '',
+            claimNo: c?.claim_no != null ? String(c.claim_no).padStart(3, '0') : ''
+          }
+        }),
         // fuel station statement rows already matched to one of those receipts are that receipt (count once)
         ...cardData.usage
           .filter((u) => !u.claim_line_id || !countedIds.has(u.claim_line_id))
@@ -360,7 +371,7 @@ export default function DieselUsage() {
         ]
       : [
           `Machine type: ${names(A.typeF, typeOpts, 'all')} · Machine: ${names(A.machineF, machineOpts, 'all')}${locations.length ? ` · Location: ${names(A.locF, locOpts, 'all')}` : ''}`,
-          `Diesel issued, from Operational Diesel Records · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
+          `Diesel issued, from Estate Fuel Record · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
   // Table view: every receipt in the filters, grouped by fleet card (HQ:
@@ -386,7 +397,13 @@ export default function DieselUsage() {
           receipt: f.receipt_no || '',
           litres: Number(f.litres || 0),
           amount: Number(f.amount || 0),
-          remark: f.remark || f.notes || ''
+          remark: f.remark || f.notes || '',
+          // for the receipt pages of the printout (receipts on fuel claims only)
+          claimed: Boolean(f.fromClaim),
+          photo: f.fromClaim ? f.receipt_path || '' : '',
+          claimedOn: f.claimedOn || '',
+          claimNo: f.claimNo || '',
+          card: f.source === 'cash' ? 'Cash' : c ? `Fleet card ${c.card_no}` : 'Fleet card'
         }
         if (f.source === 'cash') add('cash', 'Cash claims (no fleet card)', 'z', row)
         else if (c) add(c.id, `Fleet card ${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${regOf(vById.get(c.vehicle_id))})` : ''}`, `a${c.card_no}`, row)
@@ -412,17 +429,28 @@ export default function DieselUsage() {
   })()
   const detailTotal = detailGroups.reduce((t, g) => ({ litres: t.litres + g.rows.reduce((s, r) => s + r.litres, 0), amount: t.amount + g.rows.reduce((s, r) => s + r.amount, 0), n: t.n + g.rows.length }), { litres: 0, amount: 0, n: 0 })
 
-  // Print: a table, one row per person (HQ: who claimed / drove) or per
-  // machine (estate), Jan – Dec litres and RM of the year, and the average
-  // fuel price per litre.
+  // Print. Chart view: a table, one row per person (HQ: who claimed / drove)
+  // or per machine (estate), Jan – Dec litres and RM of the year, and the
+  // average fuel price per litre. Table view: the receipts table, then (HQ)
+  // every claimed receipt by date, one per page, "Claimed by … on …".
   async function print() {
     setPrinting(true)
     try {
       if (view === 'table') {
+        // The summary table, then every claimed receipt by date, one per page.
+        const claimed =
+          tab === 'hq'
+            ? detailGroups
+                .flatMap((g) => g.rows)
+                .filter((r) => r.claimed)
+                .sort((a, b) => a.date.localeCompare(b.date) || (a.claimedOn || '').localeCompare(b.claimedOn || '') || a.who.localeCompare(b.who))
+            : []
+        const urls = await receiptUrls(claimed.map((r) => r.photo)).catch(() => ({}))
         await printUsageDetail({
-          title: 'Fuel Usage Reports',
+          title: 'Reports',
           hq: tab === 'hq',
           groups: detailGroups,
+          receipts: claimed.map((r) => ({ ...r, url: urls[r.photo] || '', pdf: /\.pdf$/i.test(r.photo) })),
           lines: [
             `${company.name} · ${tab === 'hq' ? 'HQ Vehicle' : 'Estate Machinery'}`,
             `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'}`,
@@ -451,7 +479,7 @@ export default function DieselUsage() {
         byKey.set(k, r)
       }
       await printUsageTable({
-        title: 'Fuel Usage Reports',
+        title: 'Reports',
         nameHeader: tab === 'hq' ? 'User' : 'Machine',
         year,
         rows: [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name)),
@@ -611,7 +639,7 @@ export default function DieselUsage() {
               ) : (
                 <>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Operational Diesel Records)
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Estate Fuel Record)
                   </span>
                   <button
                     type="button"

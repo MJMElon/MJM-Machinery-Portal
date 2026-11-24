@@ -26,7 +26,7 @@ export function Desktop({ modules, orderKey }) {
 export function ModuleList({ modules, orderKey, columns = 1 }) {
   const { open } = useWindows()
   return (
-    <div className="pt-2 sm:pt-8">
+    <div className={columns === 2 ? 'pt-0' : 'pt-2 sm:pt-8'}>
       <TileGrid orderKey={orderKey} layout={columns === 2 ? 'list2' : 'list'}>
         {modules.map((m) => (
           <ModuleRow key={m.key} m={m} onOpen={() => open(m)} />

@@ -66,7 +66,7 @@ export function SettingsIcon({ className }) {
 export function DieselClaimsIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-dcl" from="#f59e0b" to="#d97706" label="Fuel Receipt Claims">
+      <Tile id="ic-dcl" from="#f59e0b" to="#d97706" label="Fuel Claims">
         <path d="M20 12h24v40l-4-3-4 3-4-3-4 3-4-3-4 3z" />
         <path d="M26 22h12M26 29h12M26 36h7" />
       </Tile>
@@ -77,7 +77,7 @@ export function DieselClaimsIcon({ className }) {
 export function DieselUsageIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-dus" from="#0ea5e9" to="#0369a1" label="Fuel Usage Reports">
+      <Tile id="ic-dus" from="#0ea5e9" to="#0369a1" label="Reports">
         <path d="M32 13c-8 10-13 16-13 23a13 13 0 0 0 26 0c0-7-5-13-13-23z" />
         <path d="M25 38a7 7 0 0 0 7 7" />
       </Tile>
@@ -85,11 +85,11 @@ export function DieselUsageIcon({ className }) {
   )
 }
 
-// Operational Diesel Records: a fuel pump (fuel issued to machines).
+// Estate Fuel Record: a fuel pump (fuel issued to machines).
 export function FuelRecordIcon({ className }) {
   return (
     <span className={className}>
-      <Tile id="ic-frc" label="Operational Diesel Records">
+      <Tile id="ic-frc" label="Estate Fuel Record">
         <rect x="14" y="12" width="22" height="40" rx="3" />
         <path d="M19 19h12v9H19zM10 52h30" />
         <path d="M36 30h5a4 4 0 0 1 4 4v9a3.5 3.5 0 0 0 7 0V24l-6-6" />

@@ -10,7 +10,7 @@ portal (Setel) and sends them to CMMS 2. CMMS 2 does the rest:
   day or a day either side, amount within RM 0.10, or the same receipt number). It is
   counted once: on the claim when there is one, otherwise as **Not claimed yet**.
 - shows it in Fleet Card Manage → the card → Usage, in My fleet card, the card balance
-  and Fuel Usage Reports.
+  and Reports.
 
 ## One-time setup
 

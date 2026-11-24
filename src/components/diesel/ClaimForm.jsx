@@ -182,11 +182,16 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   const valid =
     lines.length > 0 &&
     lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (isReload(l) ? l.card_id && Number(l.amount) > 0 : Number(l.amount) > 0 || Number(l.litres) > 0))
+  // A draft may be half filled: any row with something in it (a photo, a date,
+  // a figure); a reload row still needs its card. Blank dates save as today.
+  const filled = (l) => Boolean(l.file || l.receipt_path || Number(l.amount) > 0 || Number(l.litres) > 0 || l.receipt_no || l.station || l.vehicle_id)
+  const draftValid = lines.some(filled) && lines.every((l) => !isReload(l) || l.card_id)
 
   // status: 'draft' (Save as draft) or 'pending' (Submit). A pending claim being edited stays pending.
   async function save(e, status = 'pending') {
     e?.preventDefault?.()
-    if (!valid || busy) return
+    const asDraft = status === 'draft' && (!claim || claim.status === 'draft')
+    if (!(asDraft ? draftValid : valid) || busy) return
     setBusy(true)
     setError('')
     const uploaded = []
@@ -200,6 +205,19 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
           if (l.receipt_path) removeReceipt(l.receipt_path)
         }
         prepared.push({ ...l, company_id: company.id, receipt_path: receipt_path || null, id: l.id || undefined })
+      }
+      // A draft keeps its empty rows out, and blank figures as blanks.
+      if (asDraft) {
+        const kept = prepared.filter(filled)
+        prepared.length = 0
+        for (const l of kept)
+          prepared.push({
+            ...l,
+            fill_date: l.fill_date || today(),
+            amount: Number(l.amount) > 0 ? l.amount : 0,
+            litres: Number(l.litres) > 0 ? l.litres : '',
+            unit_price: Number(l.unit_price) >= 0 ? l.unit_price : ''
+          })
       }
       const wasDraft = claim?.status === 'draft'
       const next = claim && !wasDraft ? undefined : status // only a new claim or a draft changes status here
@@ -222,7 +240,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
         Cancel
       </Button>
       {draftable && (
-        <Button type="button" variant="secondary" disabled={busy || !valid || reading} onClick={(e) => save(e, 'draft')}>
+        <Button type="button" variant="secondary" disabled={busy || !draftValid || reading} onClick={(e) => save(e, 'draft')}>
           {busy ? 'Saving…' : 'Save as draft'}
         </Button>
       )}
