@@ -40,7 +40,9 @@ export default function ClaimReview() {
   const approver = isSuperAdmin || access.admin
   const accountant = isSuperAdmin || access.pay
   const topupApprover = isSuperAdmin || Boolean(access.topupApprover)
-  const claimsUser = approver || accountant || access.viewAll
+  // Only accountants and people set to approve claims or top-up requests see this page
+  // (Reports access alone is not enough).
+  const claimsUser = approver || accountant
   const allowed = claimsUser || topupApprover
   const TABS = [(approver || topupApprover) && ['pending', 'Pending approval'], accountant && ['topay', 'To pay'], claimsUser && ['all', 'All claims']].filter(Boolean)
   const wanted = params.get('tab') === 'topup' ? 'pending' : params.get('tab')

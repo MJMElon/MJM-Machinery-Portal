@@ -5,7 +5,7 @@ import { Button, Card } from '../../components/ui.jsx'
 import { IconBell, IconClock, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
-import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPaymentDocs, listPeople, listVehicles, personLabel, remindApprovers, removeReceipt } from '../../lib/diesel.js'
+import { CLAIM_STATUS, cancelTopup, deleteClaim, listTopups, topupNo, isReload, listClaimCards, listClaimLines, listClaims, listPaymentDocs, listPeople, listVehicles, personLabel, remindApprovers, removeReceipt } from '../../lib/diesel.js'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import { PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
 import { day, money, num } from '../../lib/format.js'
@@ -39,10 +39,20 @@ export default function DieselClaims() {
   const [busyId, setBusyId] = useState(null)
   const [toReview, setToReview] = useState(0)
   const [docs, setDocs] = useState({}) // payment documents of paid claims
+  const [topups, setTopups] = useState([]) // my fleet card top-up requests waiting for approval
 
   const load = useCallback(async () => {
     try {
-      let [c, p, v, cs] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
+      let [c, p, v, cs, tu] = await Promise.all([
+        listClaims(company.id, { mine: user.id }),
+        [],
+        listVehicles(company.id).catch(() => []),
+        listClaimCards(company.id).catch(() => []),
+        listTopups(company.id).catch(() => null)
+      ])
+      // My top-up requests still waiting for approval: one row each on top of the list
+      // (once approved they become a draft claim, see migration 20261218)
+      setTopups((tu || []).filter((r) => r.requested_by === user.id && r.status === 'pending'))
       let ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
       // Drafts past 30 days: deleted with their receipt photos.
       const expired = c.filter((x) => x.status === 'draft' && !x.topup_request_id && draftDaysLeft(x) <= 0)
@@ -117,6 +127,21 @@ export default function DieselClaims() {
   // Rows not yet rejected count towards the dashboard (a card reload is not fuel: the fuel shows when the card is used)
   const liveLines = lines.filter((l) => !isReload(l) && !['rejected', 'draft'].includes(claims.find((c) => c.id === l.claim_id)?.status))
 
+  // Take back a top-up request that is still waiting for approval.
+  async function cancelRequest(r) {
+    if (!window.confirm(`Cancel top up request ${topupNo(r)}?`)) return
+    setBusyId(r.id)
+    setError('')
+    try {
+      await cancelTopup(r.id)
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function remove(c) {
     if (!window.confirm(`Delete claim ${claimNo(c, 0)}? This cannot be undone.`)) return
     setBusyId(c.id)
@@ -177,7 +202,8 @@ export default function DieselClaims() {
       <PageHeader
         right={
           <div className="flex flex-wrap gap-2">
-            {(access.admin || access.pay || access.viewAll) && (
+            {/* only accountants and people who approve claims or top-up requests */}
+            {(isSuperAdmin || access.admin || access.pay || access.topupApprover) && (
               <Button variant="secondary" onClick={() => navigate('/diesel/claims/review')}>
                 Claims Approval
                 {toReview > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{toReview}</span>}
@@ -207,7 +233,7 @@ export default function DieselClaims() {
         <h3 className="border-b border-slate-200 px-5 py-3 font-semibold text-slate-800">My Claims</h3>
         {loading ? (
           <Loading />
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && topups.length === 0 ? (
           <Empty>No claims yet. Press New claim after filling up.</Empty>
         ) : (
           <div className="overflow-x-auto">
@@ -225,6 +251,31 @@ export default function DieselClaims() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {topups.map((r) => {
+                  const card = cards.find((x) => x.id === r.card_id)
+                  const v = card?.vehicle_id ? vehicles.find((x) => x.id === card.vehicle_id) : null
+                  return (
+                    <tr key={`tu-${r.id}`} className="bg-amber-50/40">
+                      <td className="whitespace-nowrap py-3 pl-5 pr-3 align-middle font-semibold tabular-nums text-slate-800">{topupNo(r)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 align-middle font-semibold tabular-nums text-slate-800">{day((r.requested_at || r.created_at || '').slice(0, 10))}</td>
+                      <td className="whitespace-nowrap px-3 py-3 align-middle">
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Pending top up request</span>
+                      </td>
+                      <td className="px-3 py-3 align-middle text-sky-700">
+                        Fleet card top up request: {card?.card_no || 'fleet card'}
+                        {v ? ` (${v.reg_no || v.name})` : ''}
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums align-middle text-slate-400">—</td>
+                      <td className="px-3 py-3 text-right tabular-nums align-middle text-slate-400">—</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(Number(r.amount || 0))}</td>
+                      <td className="py-3 pl-6 pr-4 align-middle">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <ActionButton onClick={() => cancelRequest(r)} label="Cancel this top up request" Icon={IconTrash} danger disabled={busyId === r.id} />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
                 {rows.map((c, i) => {
                   const ls = linesOf(c.id)
                   const cash = sumUp(ls.filter((l) => l.payment !== 'fleet_card' && !isReload(l)))
