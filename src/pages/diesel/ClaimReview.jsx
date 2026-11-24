@@ -10,7 +10,7 @@ import { claimNo } from './DieselClaims.jsx'
 import { RejectModal } from './ClaimView.jsx'
 import { PendingClaims } from '../../components/diesel/PendingClaims.jsx'
 
-// Review claims, in three tabs:
+// Claims Approval (& Payment for accountants), in three tabs:
 //   Pending approval  claims waiting for me: the people I am approver for
 //                     (User setting → Claims approved by); claimant, date,
 //                     amount, the receipt pictures, ✓ / ✗ (PendingClaims.jsx)
@@ -118,6 +118,7 @@ export default function ClaimReview() {
 
   return (
     <div className="space-y-4">
+      <h2 className="text-center font-display text-2xl font-bold tracking-tight text-slate-900">{accountant ? 'Claims Approval & Payment' : 'Claims Approval'}</h2>
       <ErrorBox>{error}</ErrorBox>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-2 pt-2">
@@ -187,6 +188,10 @@ export default function ClaimReview() {
             busy={busy}
             onApprove={(list) => act(list, 'approved')}
             onReject={setRejecting}
+            onRefresh={() => {
+              setLoading(true)
+              load()
+            }}
           />
         ) : (
           <div className="overflow-x-auto">

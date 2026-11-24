@@ -64,7 +64,7 @@ export function Shell() {
 function pageTitle(path) {
   if (path === '/') return ''
   if (path.startsWith('/cmms')) return 'Machinery Manage'
-  if (path.startsWith('/diesel/claims/review')) return 'Review claims'
+  if (path.startsWith('/diesel/claims/review')) return 'Claims Approval'
   if (path.startsWith('/diesel/claims')) return 'Fuel Claims'
   if (path.startsWith('/diesel/records')) return 'Estate Fuel Record'
   if (path.startsWith('/diesel/usage')) return 'Reports'
