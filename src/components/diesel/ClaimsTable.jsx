@@ -221,12 +221,16 @@ export function ClaimsTable({
                       <div className="flex items-center justify-end gap-1.5">
                         {approveHere && (
                           <>
-                            <button type="button" disabled={busy} onClick={() => onApprove([c])} className={`${round} bg-green-600 text-white shadow-sm hover:bg-green-700`} title="Approve" aria-label={`Approve ${claimNo(c, 0)}`}>
-                              <IconCheck width={18} height={18} />
-                            </button>
-                            <button type="button" disabled={busy} onClick={() => onReject(c)} className={`${round} border border-red-200 bg-white text-red-600 hover:bg-red-50`} title="Reject" aria-label={`Reject ${claimNo(c, 0)}`}>
-                              <IconX width={18} height={18} />
-                            </button>
+                            <Tip label="Approve">
+                              <button type="button" disabled={busy} onClick={() => onApprove([c])} className={`${round} bg-green-600 text-white shadow-sm hover:bg-green-700`} aria-label={`Approve ${claimNo(c, 0)}`}>
+                                <IconCheck width={18} height={18} />
+                              </button>
+                            </Tip>
+                            <Tip label="Reject">
+                              <button type="button" disabled={busy} onClick={() => onReject(c)} className={`${round} border border-red-200 bg-white text-red-600 hover:bg-red-50`} aria-label={`Reject ${claimNo(c, 0)}`}>
+                                <IconX width={18} height={18} />
+                              </button>
+                            </Tip>
                           </>
                         )}
                         {payHere && (
@@ -240,9 +244,11 @@ export function ClaimsTable({
                             Mark paid
                           </button>
                         )}
-                        <Link to={`/diesel/claims/${c.id}?from=review`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-brand" title="View claim" aria-label="View claim">
-                          <IconEye width={18} height={18} />
-                        </Link>
+                        <Tip label="View claim">
+                          <Link to={`/diesel/claims/${c.id}?from=review`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-brand" aria-label="View claim">
+                            <IconEye width={18} height={18} />
+                          </Link>
+                        </Tip>
                       </div>
                     </td>
                   </tr>
@@ -266,13 +272,28 @@ export function ClaimsTable({
   )
 }
 
+/** A label that shows right above a button while the mouse is on it. */
+function Tip({ label, children }) {
+  return (
+    <span className="group/tip relative inline-flex">
+      {children}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-xs font-semibold text-white opacity-0 shadow transition-opacity duration-100 group-hover/tip:opacity-100 group-focus-within/tip:opacity-100"
+      >
+        {label}
+      </span>
+    </span>
+  )
+}
+
 /** Under the status: who did it and when ("Approved by Ahmad on 22 Nov 2026"). */
 function StatusLine({ claim, nameOf }) {
   const verb = { approved: 'Approved', rejected: 'Rejected', paid: 'Paid' }[claim.status]
   if (!verb || !claim.reviewed_at) return null
   return (
-    <span className="mt-0.5 block text-xs leading-snug text-slate-500" title={claim.review_note || ''}>
-      {verb} by {nameOf(claim.reviewed_by)} on {day(claim.reviewed_at.slice(0, 10))}
+    <span className="mt-1 block pl-2 text-xs leading-snug text-slate-500" title={claim.review_note || ''}>
+      {verb} by {nameOf(claim.reviewed_by)} <span className="whitespace-nowrap">on {day(claim.reviewed_at.slice(0, 10))}</span>
     </span>
   )
 }
