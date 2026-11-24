@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '../ui.jsx'
 import { IconChevron, IconCheck, IconEye, IconRefresh, IconSearch, IconX } from '../icons.jsx'
 import { StatusBadge } from './shared.jsx'
+import { PaymentDocsButton } from './PaymentDocs.jsx'
 import { CLAIM_STATUS, isReload, openReceipt, receiptUrls } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
 
@@ -35,6 +36,7 @@ export function ClaimsTable({
   onSearch,
   statusFilter = '',
   onStatusFilter,
+  docs = {},
   empty
 }) {
   const [picked, setPicked] = useState(() => new Set())
@@ -70,9 +72,10 @@ export function ClaimsTable({
   const total = (list) => list.reduce((s, c) => s + payableOf(c), 0)
 
   async function bulk(list) {
-    const word = mode === 'pending' ? 'Approve' : 'Mark paid:'
-    if (list.length > 1 && !window.confirm(`${word} ${list.length} claims (${money(total(list))})?`)) return
-    await (mode === 'pending' ? onApprove(list) : onPay(list))
+    // Mark paid opens its own window (documents + confirm)
+    if (mode !== 'pending') return onPay(list)
+    if (list.length > 1 && !window.confirm(`Approve ${list.length} claims (${money(total(list))})?`)) return
+    await onApprove(list)
     setPicked(new Set())
   }
 
@@ -104,13 +107,15 @@ export function ClaimsTable({
             />
           </label>
         )}
-        <button type="button" onClick={onRefresh} disabled={busy} className={`${round} text-slate-600 hover:bg-slate-100`} title="Refresh" aria-label="Refresh">
-          <IconRefresh width={18} height={18} />
-        </button>
+        {mode !== 'all' && (
+          <button type="button" onClick={onRefresh} disabled={busy} className={`${round} text-slate-600 hover:bg-slate-100`} title="Refresh" aria-label="Refresh">
+            <IconRefresh width={18} height={18} />
+          </button>
+        )}
         {ticks && <MoreMenu disabled={busy || rows.length === 0} label={bulkLabel} onPick={() => bulk(chosen.length ? chosen : rows)} />}
         {ticks && chosen.length > 0 && <span className="ml-2 text-xs font-medium text-slate-500">{chosen.length} selected</span>}
         {mode === 'all' && (
-          <label className="relative ml-1 w-full max-w-xs">
+          <label className="relative w-full max-w-xs">
             <IconSearch width={16} height={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
@@ -205,7 +210,10 @@ export function ClaimsTable({
                     </td>
                     {showStatus && (
                       <td className="px-3 py-2.5">
-                        <StatusBadge status={c.status} />
+                        <span className="inline-flex items-center gap-1.5">
+                          <StatusBadge status={c.status} />
+                          {c.status === 'paid' && <PaymentDocsButton docs={docs[c.id]} />}
+                        </span>
                         <StatusLine claim={c} nameOf={nameOf} />
                       </td>
                     )}
@@ -258,13 +266,13 @@ export function ClaimsTable({
   )
 }
 
-/** Under the status: who did it and when ("by Ahmad · 22 Nov 2026"). */
+/** Under the status: who did it and when ("Approved by Ahmad on 22 Nov 2026"). */
 function StatusLine({ claim, nameOf }) {
-  if (claim.status === 'pending') return <span className="mt-0.5 block text-xs text-slate-400">Waiting for approval</span>
-  if (!claim.reviewed_at || !['approved', 'rejected', 'paid'].includes(claim.status)) return null
+  const verb = { approved: 'Approved', rejected: 'Rejected', paid: 'Paid' }[claim.status]
+  if (!verb || !claim.reviewed_at) return null
   return (
     <span className="mt-0.5 block text-xs leading-snug text-slate-500" title={claim.review_note || ''}>
-      by {nameOf(claim.reviewed_by)} on {day(claim.reviewed_at.slice(0, 10))}
+      {verb} by {nameOf(claim.reviewed_by)} on {day(claim.reviewed_at.slice(0, 10))}
     </span>
   )
 }
@@ -294,7 +302,7 @@ function StatusFilter({ value, onChange }) {
         <IconChevron width={14} height={14} className={`transition ${open ? '-rotate-90' : 'rotate-90'}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-9 z-20 min-w-[170px] rounded-xl border border-slate-200 bg-white py-1 normal-case tracking-normal shadow-lg">
+        <div className="absolute left-0 top-9 z-20 min-w-[230px] rounded-xl border border-slate-200 bg-white py-1 normal-case tracking-normal shadow-lg">
           {[['', 'All statuses'], ...Object.entries(CLAIM_STATUS).filter(([k]) => k !== 'draft').map(([k, v]) => [k, v.label])].map(([k, label]) => (
             <button
               key={k || 'all'}

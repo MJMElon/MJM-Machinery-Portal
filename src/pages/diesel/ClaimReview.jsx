@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/ui.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { cardBalances, cardLedger, isReload, listCardData, listClaimLines, listClaims, listPeople, listTopups, listVehicles, personLabel, reviewClaim } from '../../lib/diesel.js'
+import { cardBalances, cardLedger, isReload, listCardData, listClaimLines, listClaims, listPaymentDocs, listPeople, listTopups, listVehicles, personLabel, reviewClaim } from '../../lib/diesel.js'
 import { TopupSection } from '../../components/diesel/TopupRequests.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
 import { RejectModal } from './ClaimView.jsx'
 import { ClaimsTable } from '../../components/diesel/ClaimsTable.jsx'
+import { MarkPaidModal } from '../../components/diesel/PaymentDocs.jsx'
+import { IconBack } from '../../components/icons.jsx'
 
-// Claims Approval (& Payment for accountants), in three tabs:
+// Claims Approval (& Payment for accountants), in tabs:
 //   Pending approval  claims waiting for me: the people I am approver for
 //                     (User setting → Claims approved by); claimant, date,
 //                     amount, the receipt pictures, ✓ / ✗ (PendingClaims.jsx)
@@ -30,6 +32,9 @@ export default function ClaimReview() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [rejecting, setRejecting] = useState(null) // claim
+  const [paying, setPaying] = useState(null) // claims to mark paid
+  const [docs, setDocs] = useState({}) // payment documents by claim
+  const navigate = useNavigate()
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
 
@@ -60,7 +65,10 @@ export default function ClaimReview() {
           ? Promise.all([listTopups(company.id).catch(() => null), listCardData(company.id).catch(() => ({ cards: [] })), listVehicles(company.id).catch(() => []), cardLedger(company.id).catch(() => null)])
           : null
       ])
-      const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
+      const [ls, ds] = c.length
+        ? await Promise.all([listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []), listPaymentDocs(c.filter((x) => x.status === 'paid').map((x) => x.id)).catch(() => ({}))])
+        : [[], {}]
+      setDocs(ds)
       setClaims(c)
       setLines(ls)
       setPeople(p)
@@ -94,12 +102,6 @@ export default function ClaimReview() {
   const t = q.trim().toLowerCase()
   const all = sorted.filter((c) => (!status || c.status === status) && (!t || nameOf(c.claimant_id).toLowerCase().includes(t) || claimNo(c, 0).includes(t)))
   const rows = tab === 'pending' ? pending : tab === 'topay' ? toPay : all
-  const topupsToDo = tu?.topups
-    ? tu.topups.filter(
-        (r) => (r.status === 'pending' && r.requested_by !== user.id && access.approvesTopup?.(r.requested_by)) || (r.status === 'approved' && access.can('topup', 'process'))
-      ).length
-    : 0
-  const count = { pending: pending.length, topay: toPay.length, topup: topupsToDo }
 
   async function act(list, nextStatus, note) {
     setBusy(true)
@@ -130,7 +132,17 @@ export default function ClaimReview() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-center font-display text-2xl font-bold tracking-tight text-slate-900">{accountant ? 'Claims Approval & Payment' : 'Claims Approval'}</h2>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('/diesel/claims')}
+          className="inline-flex items-center gap-1.5 justify-self-start rounded-xl px-2 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-brand"
+        >
+          <IconBack width={18} height={18} /> Back to My Claims
+        </button>
+        <h2 className="text-center font-display text-2xl font-bold tracking-tight text-slate-900">{accountant ? 'Claims Approval & Payment' : 'Claims Approval'}</h2>
+        <span />
+      </div>
       <ErrorBox>{error}</ErrorBox>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-2 pt-2">
@@ -143,7 +155,6 @@ export default function ClaimReview() {
                 className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold ${tab === k ? 'bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}
               >
                 {label}
-                {count[k] > 0 && <span className={`rounded-full px-2 py-0.5 text-xs ${k === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-700'}`}>{count[k]}</span>}
                 {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
               </button>
             ))}
@@ -188,7 +199,8 @@ export default function ClaimReview() {
             canPay={canPay}
             onApprove={(list) => act(list, 'approved')}
             onReject={setRejecting}
-            onPay={(list) => act(list, 'paid')}
+            onPay={setPaying}
+            docs={docs}
             onRefresh={() => {
               setLoading(true)
               load()
@@ -201,6 +213,10 @@ export default function ClaimReview() {
           />
         )}
       </Card>
+
+      {paying && (
+        <MarkPaidModal claims={paying} payableOf={payableOf} claimNo={claimNo} nameOf={nameOf} onPaid={(list) => act(list, 'paid')} onClose={() => setPaying(null)} />
+      )}
 
       {rejecting && (
         <RejectModal
