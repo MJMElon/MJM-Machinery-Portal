@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/ui.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { isReload, listClaimLines, listClaims, listPeople, personLabel, reviewClaim } from '../../lib/diesel.js'
+import { cardBalances, cardLedger, isReload, listCardData, listClaimLines, listClaims, listPeople, listTopups, listVehicles, personLabel, reviewClaim } from '../../lib/diesel.js'
+import { TopupSection } from '../../components/diesel/TopupRequests.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
 import { RejectModal } from './ClaimView.jsx'
@@ -14,8 +15,11 @@ import { ClaimsTable } from '../../components/diesel/ClaimsTable.jsx'
 //                     amount, the receipt pictures, ✓ / ✗ (PendingClaims.jsx)
 //   To pay            approved claims, for accountants: mark paid
 //   All claims        every claim I can see (accountants: the whole company)
-// Same table on every tab (ClaimsTable.jsx). Approve / reject / mark paid
-// right in the row, or several at once from the toolbar.
+//   Top-up requests   fleet card top-up requests: to approve, to top up
+//                     (procurement), my requests, all (TopupRequests.jsx)
+// ?tab=pending|topay|all|topup opens that tab (the Fuel Manage task bar).
+// Same table on every claims tab (ClaimsTable.jsx). Approve / reject / mark
+// paid right in the row, or several at once from the toolbar.
 export default function ClaimReview() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
@@ -29,27 +33,45 @@ export default function ClaimReview() {
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
 
+  const [params] = useSearchParams()
   const approver = isSuperAdmin || access.admin
   const accountant = isSuperAdmin || access.pay
-  const allowed = approver || accountant || access.viewAll
-  const TABS = [approver && ['pending', 'Pending approval'], accountant && ['topay', 'To pay'], ['all', 'All claims']].filter(Boolean)
-  const [tab, setTab] = useState(TABS[0][0])
+  // Top-up requests: approvers of top-ups, procurement, and anyone who may request one (their own requests)
+  const topupUser = isSuperAdmin || access.topupApprover || access.can('topup', 'process') || access.can('cards', 'view')
+  const claimsUser = approver || accountant || access.viewAll
+  const allowed = claimsUser || topupUser
+  const TABS = [
+    approver && ['pending', 'Pending approval'],
+    accountant && ['topay', 'To pay'],
+    claimsUser && ['all', 'All claims'],
+    topupUser && ['topup', 'Top-up requests']
+  ].filter(Boolean)
+  const wanted = params.get('tab')
+  const [tab, setTab] = useState(TABS.some(([k]) => k === wanted) ? wanted : TABS[0]?.[0])
+  const [tu, setTu] = useState(null) // { topups, cards, vById, balance } once loaded; topups null before the migration
 
   const load = useCallback(async () => {
     if (!allowed) return setLoading(false)
     try {
-      const [c, p] = await Promise.all([listClaims(company.id), listPeople(company.id).catch(() => [])])
+      const [c, p, t] = await Promise.all([
+        claimsUser ? listClaims(company.id) : [],
+        listPeople(company.id).catch(() => []),
+        topupUser
+          ? Promise.all([listTopups(company.id).catch(() => null), listCardData(company.id).catch(() => ({ cards: [] })), listVehicles(company.id).catch(() => []), cardLedger(company.id).catch(() => null)])
+          : null
+      ])
       const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
       setClaims(c)
       setLines(ls)
       setPeople(p)
+      if (t) setTu({ topups: t[0], cards: t[1].cards, vById: new Map(t[2].map((v) => [v.id, v])), balance: t[3] ? cardBalances(t[3]) : null })
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [company.id, allowed])
+  }, [company.id, allowed, claimsUser, topupUser])
 
   useEffect(() => {
     setLoading(true)
@@ -72,7 +94,12 @@ export default function ClaimReview() {
   const t = q.trim().toLowerCase()
   const all = sorted.filter((c) => (!status || c.status === status) && (!t || nameOf(c.claimant_id).toLowerCase().includes(t) || claimNo(c, 0).includes(t)))
   const rows = tab === 'pending' ? pending : tab === 'topay' ? toPay : all
-  const count = { pending: pending.length, topay: toPay.length }
+  const topupsToDo = tu?.topups
+    ? tu.topups.filter(
+        (r) => (r.status === 'pending' && r.requested_by !== user.id && access.approvesTopup?.(r.requested_by)) || (r.status === 'approved' && access.can('topup', 'process'))
+      ).length
+    : 0
+  const count = { pending: pending.length, topay: toPay.length, topup: topupsToDo }
 
   async function act(list, nextStatus, note) {
     setBusy(true)
@@ -123,7 +150,30 @@ export default function ClaimReview() {
           </div>
         </div>
 
-        {loading ? (
+        {tab === 'topup' && (
+          <div className="p-3 sm:p-4">
+            {loading || !tu ? (
+              <Loading />
+            ) : tu.topups === null ? (
+              <Empty>Top-up requests are not set up in the database yet.</Empty>
+            ) : (
+              <TopupSection
+                company={company}
+                access={access}
+                me={user.id}
+                topups={tu.topups}
+                cards={tu.cards}
+                vById={tu.vById}
+                person={person}
+                balance={tu.balance}
+                onChanged={load}
+                onError={setError}
+              />
+            )}
+          </div>
+        )}
+
+        {tab === 'topup' ? null : loading ? (
           <Loading />
         ) : (
           <ClaimsTable

@@ -546,6 +546,13 @@ export async function myFleetCards(companyId) {
   return data || []
 }
 
+/** Fuel Manage task bar: reminders worked out in the database ({ unclaimed_fills }); {} before migration 20261216. */
+export async function myFuelTasks(companyId) {
+  const { data, error } = await supabase.rpc('machinery_my_fuel_tasks', { p_company: companyId })
+  if (error) return {}
+  return data || {}
+}
+
 /** The top-up requests the signed-in user may see (own, as approver, card managers); null before the migration. */
 export async function listTopups(companyId) {
   const { data, error } = await supabase.from(TOPUPS).select('*').eq('company_id', companyId).order('requested_at', { ascending: false }).limit(500)
