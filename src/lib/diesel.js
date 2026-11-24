@@ -576,18 +576,27 @@ export async function deleteCard(id) {
 }
 
 // ---- automatic top-up requests (migration 20261220) ------------------------------
-/** Procurement: switch a card's automatic top-up request on / off with its amounts. */
-export async function setAutoTopup(cardId, on, below, amount) {
-  const { error } = await supabase.rpc('machinery_set_auto_topup', {
+/** Procurement: switch a card's automatic top-up request on / off with its amounts and the
+ * requestor (the Procurement person the requests are sent as; migration 20261228). */
+export async function setAutoTopup(cardId, on, below, amount, requester) {
+  const args = {
     p_card: cardId,
     p_on: on,
     p_below: below === '' || below == null ? null : round(below, 2),
     p_amount: amount === '' || amount == null ? null : round(amount, 2)
-  })
+  }
+  let { error } = await supabase.rpc('machinery_set_auto_topup', requester ? { ...args, p_requester: requester } : args)
+  // before migration 20261228: no requestor (sent as me)
+  if (error && requester && ['PGRST202', '42883'].includes(error.code)) ({ error } = await supabase.rpc('machinery_set_auto_topup', args))
   if (error) {
     if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migration 20261220 (automatic top-up) first.')
     throw friendly(error)
   }
+}
+/** The Procurement people of a company (user ids); null before migration 20261228. */
+export async function procurementPeople(companyId) {
+  const { data, error } = await supabase.rpc('machinery_procurement_people', { p_company: companyId })
+  return error ? null : (data || []).map((r) => r.user_id)
 }
 /** Why a card's automatic top-up request was / was not sent: { balance, card_status, waiting }; null before migration 20261226. */
 export async function autoTopupStatus(cardId) {

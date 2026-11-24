@@ -7,9 +7,10 @@ import { ErrorBox, inputCls } from './shared.jsx'
 import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
 import { RequestTopupModal } from './TopupRequests.jsx'
-import { CARD_STATUS, cardBalances, autoTopupCheck, autoTopupStatus, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
+import { CARD_STATUS, cardBalances, autoTopupCheck, autoTopupStatus, procurementPeople, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
 import { PasswordField, PasswordInput } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
+import { useAuth } from '../../auth/AuthContext.jsx'
 
 // A fleet card in use (tested), one page, edited in place:
 //   top     Fleet card details (Edit → fields, status incl. Inactive, Save,
@@ -421,8 +422,24 @@ function Input({ label, wide, children }) {
 // "Auto top-up request" box: when the card balance is below RM X, a top-up
 // request of RM Y is sent by itself (checked every hour, when statements come
 // in and when Fleet Card Manage opens; migration 20261220). Only Procurement
-// sets it; "Request top up" by hand stays.
+// sets it; "Request top up" by hand stays. Requestor: the Procurement person
+// the requests are sent as (they show in that person's claim list and go to
+// their approvers; migration 20261228).
 function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
+  const { user } = useAuth()
+  const [reqBy, setReqBy] = useState(card.auto_topup_by || '')
+  const [procs, setProcs] = useState(null) // Procurement user ids; null = not known (before the migration)
+  useEffect(() => {
+    let live = true
+    procurementPeople(card.company_id).then((ids) => live && setProcs(ids))
+    return () => {
+      live = false
+    }
+  }, [card.company_id])
+  useEffect(() => setReqBy(card.auto_topup_by || ''), [card.id, card.auto_topup_by])
+  // the requestor shown when nobody is set yet: me (when I am Procurement)
+  const requester = reqBy || (procs?.includes(user?.id) ? user.id : procs?.[0] || '')
+  const reqOpts = [...new Set([...(procs || []), card.auto_topup_by, user?.id].filter(Boolean))].filter((id) => !procs || procs.includes(id) || id === card.auto_topup_by)
   const ready = 'auto_topup' in card // the database has the columns
   const [on, setOn] = useState(Boolean(card.auto_topup))
   const [below, setBelow] = useState(card.auto_topup_below ?? '')
@@ -457,14 +474,14 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
     setMsg(made ? `${made} automatic request${made === 1 ? '' : 's'} sent` : `Nothing to send${because}`)
     setChecking(false)
   }
-  const dirty = on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_amount ?? '')
-  const valid = !on || (Number(below) >= 0 && below !== '' && Number(amount) > 0)
+  const dirty = (procs != null && on && requester !== (card.auto_topup_by || '')) || on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_amount ?? '')
+  const valid = !on || (Number(below) >= 0 && below !== '' && Number(amount) > 0 && (procs == null || Boolean(requester)))
 
   async function save() {
     setBusy(true)
     setMsg('')
     try {
-      await setAutoTopup(card.id, on, below, amount)
+      await setAutoTopup(card.id, on, below, amount, procs != null ? requester : null)
       await onSaved()
       setMsg('Saved')
     } catch (e) {
@@ -523,6 +540,30 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
                 </Button>
               </span>
             )}
+          </div>
+          {/* Requestor: the Procurement person the automatic requests are sent as */}
+          <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm ${on ? 'text-slate-700' : 'text-slate-400'}`}>
+            <span>Requestor</span>
+            {procs != null && canSet ? (
+              <select
+                value={requester}
+                onChange={(e) => setReqBy(e.target.value)}
+                disabled={!on || busy}
+                aria-label="Requestor"
+                className={`${inputCls} h-10 w-auto min-w-[14rem] font-semibold`}
+              >
+                {!requester && <option value="">Choose a Procurement person…</option>}
+                {reqOpts.map((id) => (
+                  <option key={id} value={id}>
+                    {nameOf(id)}
+                    {procs.includes(id) ? '' : ' (not Procurement any more)'}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="font-semibold text-slate-800">{card.auto_topup_by ? nameOf(card.auto_topup_by) : '—'}</span>
+            )}
+            <span className="text-xs text-slate-500">The requests are sent in this person's name and show in their claim list.</span>
           </div>
           {!card.auto_topup && <p className="mt-2 text-xs text-slate-500">{canSet ? 'Off. Switch it on, fill in both amounts and Save.' : 'Off. Only Procurement can set it.'}</p>}
         </>
