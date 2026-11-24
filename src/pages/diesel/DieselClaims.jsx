@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconBell, IconClock, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
+import { IconBell, IconClock, IconPencil, IconPlus, IconPrint, IconSend, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
-import { CLAIM_STATUS, cancelTopup, deleteClaim, listTopups, topupNo, isReload, listClaimCards, listClaimLines, listClaims, listPaymentDocs, listPeople, listVehicles, personLabel, remindApprovers, removeReceipt } from '../../lib/diesel.js'
+import { CLAIM_STATUS, cancelTopup, deleteClaim, listTopups, topupNo, isReload, listClaimCards, listClaimLines, listClaims, listPaymentDocs, listPeople, listVehicles, notifyClaim, personLabel, remindApprovers, removeReceipt, setClaimStatus } from '../../lib/diesel.js'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import { PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
 import { day, money, num } from '../../lib/format.js'
@@ -172,6 +172,29 @@ export default function DieselClaims() {
 
   // Bell: remind the approvers of a pending claim (an email, once a day).
   const [note, setNote] = useState('')
+  // Submit a draft straight from the list (a complete one; otherwise it opens in Edit)
+  async function submit(c) {
+    const ls = linesOf(c.id)
+    const complete =
+      ls.length > 0 && ls.every((l) => l.fill_date && (isReload(l) ? l.card_id && Number(l.amount) > 0 : Number(l.amount) > 0 || Number(l.litres) > 0))
+    if (!complete) {
+      setError(`Claim ${claimNo(c, 0)} is not complete yet: fill in every row, then Submit claim.`)
+      return navigate(`/diesel/claims/${c.id}/edit`)
+    }
+    if (!window.confirm(`Submit claim ${claimNo(c, 0)} for approval?`)) return
+    setBusyId(c.id)
+    setError('')
+    try {
+      await setClaimStatus(c.id, 'pending')
+      notifyClaim(c.id)
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function remind(c) {
     setBusyId(c.id)
     setError('')
@@ -310,9 +333,9 @@ export default function DieselClaims() {
                       <td className="py-3 pl-6 pr-4 align-middle">
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton onClick={c.status === 'pending' ? () => remind(c) : null} label="Remind approver to approve" Icon={IconBell} disabled={busyId === c.id} />
-                          <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
                           <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
-                          <ActionButton onClick={() => print(c)} label="Print" Icon={IconPrint} disabled={busyId === c.id} />
+                          <ActionButton onClick={c.status === 'draft' && canEdit(c) ? () => submit(c) : null} label="Submit claim" Icon={IconSend} disabled={busyId === c.id} />
+                          <ActionButton onClick={c.status !== 'draft' ? () => print(c) : null} label="Print" Icon={IconPrint} disabled={busyId === c.id} />
                           <ActionButton onClick={canDelete(c) ? () => remove(c) : null} label="Delete" Icon={IconTrash} danger disabled={busyId === c.id} />
                         </div>
                       </td>
