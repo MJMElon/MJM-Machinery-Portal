@@ -308,7 +308,15 @@ export async function updateClaimWithLines(claimId, header, lines) {
 /** The claimant: submit a draft (→ Pending) or keep it as Draft. */
 export async function setClaimStatus(claimId, status) {
   const { error } = await supabase.from(DIESEL.claims).update({ status }).eq('id', claimId)
-  if (error) throw friendly(error, { '23514': 'Run the Fuel SQL migration 20261208 (claim drafts) to save drafts.' })
+  if (error && /status_check/.test(error.message || '')) throw new Error('Run the SQL 20261221 (repair claim drafts) to save drafts.')
+  if (error) throw friendly(error)
+}
+
+/** The top-up request a claim was made from ({ id, request_no, card_id, amount }); null if it cannot be read. */
+export async function getTopup(id) {
+  if (!id) return null
+  const { data } = await supabase.from('machinery_fleet_topup_requests').select('id, request_no, card_id, amount, status').eq('id', id).maybeSingle()
+  return data || null
 }
 
 async function replaceLines(claimId, lines) {

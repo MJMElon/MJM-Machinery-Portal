@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card } from '../ui.jsx'
 import { IconPlus, IconTrash } from '../icons.jsx'
 import { F, inputCls, opt } from './shared.jsx'
@@ -8,6 +8,8 @@ import {
   cardLabel,
   compressReceipt,
   createClaimWithLines,
+  getTopup,
+  topupNo,
   notifyClaim,
   isReload,
   removeReceipt,
@@ -23,6 +25,10 @@ import { money, num, today } from '../../lib/format.js'
 // a row, is read for a draft of the figures, and is attached to that row; rows
 // can also be typed by hand. Payable = cash rows only; fleet-card rows are
 // recorded for litres / cost but are not paid back.
+// Dropped files first fill the rows that have no receipt yet (e.g. the reload
+// row of a top-up claim), then make new rows; each row's Attachment box takes a
+// dropped file too. A TOP-UP CLAIM (made from an approved top-up request) can
+// only be submitted when its reload row is exactly the approved amount.
 // A row can also be a FLEET CARD RELOAD (chosen in the vehicle box): the
 // person topped up a fleet card with cash and claims that amount back. It has
 // a card instead of a vehicle, no litres, and is always payable.
@@ -97,6 +103,19 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [rowDrag, setRowDrag] = useState(null) // key of the row a file is dragged over
+  // Top-up claim: the approved request (its card and amount)
+  const [topup, setTopup] = useState(null)
+  useEffect(() => {
+    let live = true
+    if (claim?.topup_request_id) getTopup(claim.topup_request_id).then((t) => live && setTopup(t))
+    return () => {
+      live = false
+    }
+  }, [claim?.topup_request_id])
+  const topupRow = topup ? lines.find((l) => isReload(l) && l.card_id === topup.card_id) : null
+  const sameAmount = (a, b) => Math.round(Number(a || 0) * 100) === Math.round(Number(b || 0) * 100)
+  const topupOk = !topup || Boolean(topupRow && sameAmount(topupRow.amount, topup.amount))
   const fileInput = useRef(null)
   const vById = useMemo(() => Object.fromEntries(usable.map((v) => [v.id, v])), [usable])
 
@@ -147,12 +166,20 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   async function addFiles(fileList) {
     const files = [...fileList].filter(Boolean)
     if (!files.length) return
-    const fresh = files.map((file) => ({ ...blankLine(mine), file, scan: readable(file) ? 'scanning' : null }))
-    setLines((ls) => {
-      const onlyBlank = ls.length === 1 && !ls[0].file && !ls[0].amount && !ls[0].litres && !ls[0].receipt_path
-      return onlyBlank ? fresh : [...ls, ...fresh]
-    })
-    for (const row of fresh) if (row.scan === 'scanning') await readRow(row)
+    // rows still without a receipt get the files first (the top-up reload row first), then new rows
+    const empty = lines.filter((l) => !l.file && !l.receipt_path).sort((a, b) => Number(b === topupRow) - Number(a === topupRow))
+    const filled = files.slice(0, empty.length).map((file, i) => ({ ...empty[i], file, scan: readable(file) ? 'scanning' : null }))
+    const fresh = files.slice(empty.length).map((file) => ({ ...blankLine(mine), file, scan: readable(file) ? 'scanning' : null }))
+    const byKey = new Map(filled.map((r) => [r.key, r]))
+    setLines((ls) => [...ls.map((l) => byKey.get(l.key) || l), ...fresh])
+    for (const row of [...filled, ...fresh]) if (row.scan === 'scanning') await readRow(row)
+  }
+  // A file chosen or dropped on one row's Attachment box: attached to that row and read.
+  async function attach(l, file) {
+    if (!file) return
+    const row = { ...l, file, scan: readable(file) ? 'scanning' : null }
+    update(l.key, { file, scan: row.scan })
+    if (row.scan === 'scanning') await readRow(row)
   }
 
   // Read one row's file and fill the draft figures (never overwrites typed values with blanks).
@@ -160,6 +187,15 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
     update(row.key, { scan: 'scanning' })
     const small = row.file.type.startsWith('image/') ? await compressReceipt(row.file) : row.file
     const draft = await scanReceipt(small)
+    // A reload row keeps its card: only the date, amount, receipt no. and station are read
+    if (isReload(row))
+      return update(row.key, {
+        scan: 'done',
+        ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
+        ...(draft.amount ? { amount: fixDp('amount', draft.amount) } : {}),
+        ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
+        ...(draft.station ? { station: draft.station } : {})
+      })
     update(row.key, {
       scan: 'done',
       ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
@@ -180,6 +216,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   const litres = lines.reduce((s, l) => s + (Number(l.litres) || 0), 0)
   const reading = lines.some((l) => l.scan === 'scanning')
   const valid =
+    topupOk &&
     lines.length > 0 &&
     lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (isReload(l) ? l.card_id && Number(l.amount) > 0 : Number(l.amount) > 0 || Number(l.litres) > 0))
   // A draft may be half filled: any row with something in it (a photo, a date,
@@ -257,6 +294,16 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
     <form onSubmit={save} className="space-y-4">
       {error && <p className="rounded-lg bg-red-100 p-2.5 text-sm text-red-700">{error}</p>}
       {buttons}
+      {topup && (
+        <p className={`rounded-xl px-4 py-2.5 text-sm ${topupOk ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+          Top-up claim for request <b>{topupNo(topup)}</b>: approved <b>{money(topup.amount)}</b>.{' '}
+          {topupOk
+            ? 'The reload matches the approved amount.'
+            : topupRow
+              ? `The reload receipt must be ${money(topup.amount)} (now ${money(Number(topupRow.amount) || 0)}). Attach the matching receipt or correct the amount.`
+              : 'Keep the fleet card reload row for this card.'}
+        </p>
+      )}
 
       {/* Header */}
       <Card className="p-4 sm:p-5">
@@ -365,8 +412,11 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                     </td>
                     <td className="px-2 py-3">
                       <Unit unit="RM" left>
-                        <input type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} onBlur={() => blurNumber(l, 'amount')} className={`${tall} pl-10 text-right font-semibold`} title="Total fuel expenses" />
+                        <input type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} onBlur={() => blurNumber(l, 'amount')} className={`${tall} pl-10 text-right font-semibold ${l === topupRow && !topupOk ? 'border-red-400 ring-2 ring-red-200' : ''}`} title="Total fuel expenses" />
                       </Unit>
+                      {l === topupRow && (
+                        <p className={`mt-1 text-right text-[11px] font-medium ${topupOk ? 'text-emerald-700' : 'text-red-600'}`}>Approved {money(topup.amount)}</p>
+                      )}
                     </td>
                     <td className="px-2 py-3">
                       <Unit unit="RM" left>
@@ -387,9 +437,24 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                       <textarea value={l.remark} maxLength={300} placeholder="Remark" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${tall} resize-none py-2`} title="Remark" />
                     </td>
                     <td className="px-2 py-3">
-                      <label className={`${tall} flex cursor-pointer flex-col items-center justify-center gap-1 border-dashed text-xs hover:border-brand`}>
-                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && update(l.key, { file: e.target.files[0], scan: null })} />
-                        <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-medium text-slate-700">Choose</span>
+                      <label
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setRowDrag(l.key)
+                        }}
+                        onDragLeave={() => setRowDrag((k) => (k === l.key ? null : k))}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setRowDrag(null)
+                          attach(l, e.dataTransfer.files?.[0])
+                        }}
+                        className={`${tall} flex cursor-pointer flex-col items-center justify-center gap-1 border-dashed text-xs hover:border-brand ${rowDrag === l.key ? 'border-brand bg-brand-light' : ''}`}
+                        title="Choose a file, or drop it here"
+                      >
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => (attach(l, e.target.files?.[0]), (e.target.value = ''))} />
+                        <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-medium text-slate-700">{rowDrag === l.key ? 'Drop here' : 'Choose or drop'}</span>
                         <span className="w-full truncate px-1 text-center text-slate-600" title={l.file ? l.file.name : l.receipt_path ? 'Attached' : ''}>
                           {l.scan === 'scanning' ? 'Reading…' : l.file ? l.file.name : l.receipt_path ? 'Attached' : 'No file'}
                         </span>
