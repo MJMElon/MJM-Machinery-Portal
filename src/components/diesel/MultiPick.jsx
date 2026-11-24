@@ -9,7 +9,9 @@ import { useEffect, useRef, useState } from 'react'
 // placed on the screen (fixed) so the table's scroll box does not cut it off.
 // searchable: always show the search box at the top (else only for long lists).
 // inline: the list opens in the page flow (pushes what is below down), for pop-ups that scroll.
-export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left', searchable = false, searchPlaceholder = 'Search…', clearLabel = 'Clear (show all)', inline = false }) {
+// float: a form field whose list floats over everything (fixed on the screen, under the
+// field or above it when there is no room), so a pop-up window keeps its size.
+export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left', searchable = false, searchPlaceholder = 'Search…', clearLabel = 'Clear (show all)', inline = false, float = false }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [pos, setPos] = useState(null)
@@ -21,7 +23,7 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
     const away = (e) => box.current && !box.current.contains(e.target) && setOpen(false)
     const esc = (e) => e.key === 'Escape' && setOpen(false)
     // a head list is fixed on the screen: close it when the page scrolls under it
-    const moved = (e) => head && box.current && !box.current.contains(e.target) && setOpen(false)
+    const moved = (e) => (head || float) && box.current && !box.current.contains(e.target) && setOpen(false)
     document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', esc)
     window.addEventListener('scroll', moved, true)
@@ -32,7 +34,7 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
       window.removeEventListener('scroll', moved, true)
       window.removeEventListener('resize', moved)
     }
-  }, [open, head])
+  }, [open, head, float])
 
   const toggleOpen = () => {
     if (head && !open && btn.current) {
@@ -40,6 +42,13 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
       const w = 288
       const left = align === 'right' ? r.right - w : r.left
       setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(left, window.innerWidth - w - 8)), width: w })
+    }
+    if (float && !open && btn.current) {
+      const r = btn.current.getBoundingClientRect()
+      const below = window.innerHeight - r.bottom - 12
+      const above = r.top - 12
+      const up = below < 260 && above > below
+      setPos({ ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }), left: r.left, width: r.width, maxH: Math.max(160, (up ? above : below) - 60) })
     }
     if (open) setQ('')
     setOpen((o) => !o)
@@ -87,8 +96,9 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
       <>
       <span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span>
       <button
+        ref={float ? btn : undefined}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={float ? toggleOpen : () => setOpen((o) => !o)}
         aria-expanded={open}
         className={`flex h-12 w-full items-center gap-2 rounded-xl border bg-white px-3.5 text-left ${open ? 'border-brand ring-2 ring-brand/30' : 'border-slate-300'}`}
       >
@@ -105,8 +115,8 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
 
       {open && (
         <div
-          className={`z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-left font-normal normal-case tracking-normal shadow-xl ${head ? 'fixed' : inline ? 'relative mt-1' : 'absolute left-0 right-0 top-full mt-1 min-w-[16rem]'}`}
-          style={head && pos ? { top: pos.top, left: pos.left, width: pos.width } : undefined}
+          className={`z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-left font-normal normal-case tracking-normal shadow-xl ${head || float ? 'fixed' : inline ? 'relative mt-1' : 'absolute left-0 right-0 top-full mt-1 min-w-[16rem]'}`}
+          style={(head || float) && pos ? { top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width } : undefined}
         >
           {(searchable || options.length > 8) && (
             <div className="border-b border-slate-100 p-2">
@@ -128,7 +138,7 @@ export function MultiPick({ label, allLabel, options, value, onChange, head = fa
               {clearLabel}
             </button>
           </div>
-          <div className="max-h-72 overflow-y-auto py-1">
+          <div className="max-h-72 overflow-y-auto py-1" style={float && pos?.maxH ? { maxHeight: Math.min(288, pos.maxH) } : undefined}>
             {shown.length === 0 && <p className="px-3 py-3 text-center text-sm text-slate-400">No match</p>}
             {groups.map((g) => (
               <div key={g.name || '_'}>

@@ -9,9 +9,9 @@ import { printHtml } from '../../lib/printFrame.js'
 
 // Fleet card top-up requests.
 //   NewTopupModal      "New Top Up Request" pop-up (Fleet Card Manage): tick one
-//                      or more fleet cards → this month's litres used / monthly
-//                      volume and the card balance → top-up amount per card →
-//                      Send request (one request per card). With Consolidate on,
+//                      or more fleet cards (the list floats over the window) →
+//                      one row per card: litres used / monthly volume, balance,
+//                      top-up amount → Send request (one request per card). With Consolidate on,
 //                      the cards of the other companies are in the list too.
 //   RequestTopupModal  the older form: fleet card, amount, needed by, reason → Pending
 //   TopupSection       the requests: "To approve" (approver), "My requests", "All";
@@ -108,33 +108,6 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
   const opts = data
     ? data.cards.map((c) => ({ value: c.id, label: label(c), group: many ? c.company.name : '' })).sort((a, b) => (many ? a.group.localeCompare(b.group) : 0))
     : []
-  const usageBox = (card, info) => (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">This month usage</p>
-        <div className="mt-1.5 flex items-baseline justify-between gap-2 text-sm">
-          <span className="text-slate-600">Litre used</span>
-          <span className="font-bold tabular-nums text-slate-900">{num(info.used, 2)} L</span>
-        </div>
-        <div className="flex items-baseline justify-between gap-2 text-sm">
-          <span className="text-slate-600">Monthly volume</span>
-          <span className="font-bold tabular-nums text-slate-900">{info.quota == null ? '—' : `${num(info.quota, 0)} L`}</span>
-        </div>
-        {info.quota ? (
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-            <div className={`h-full rounded-full ${info.pct >= 90 ? 'bg-red-500' : info.pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${info.pct}%` }} />
-          </div>
-        ) : null}
-      </div>
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fleet card current balance</p>
-        <p className={`mt-2 text-2xl font-bold tabular-nums ${info.balance != null && info.balance < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-          {info.balance == null ? '—' : money(info.balance)}
-        </p>
-      </div>
-    </div>
-  )
-
   return (
     <Modal open onClose={onClose} title="New Top Up Request">
       <form onSubmit={send} className="space-y-4">
@@ -149,7 +122,7 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
               label="Fleet card (tick one or more)"
               allLabel="Choose fleet cards…"
               clearLabel="Clear"
-              inline
+              float
               searchable={opts.length > 5}
               searchPlaceholder="Search card no. or vehicle…"
               options={opts}
@@ -157,33 +130,7 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
               onChange={setIds}
             />
 
-            {chosen.length === 1 ? (
-              <>
-                {usageBox(chosen[0], infoOf(chosen[0]))}
-                <div>
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Top up amount</span>
-                  <div className="flex items-stretch gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">RM</span>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        required
-                        inputMode="decimal"
-                        value={amounts[chosen[0].id] ?? ''}
-                        onChange={(e) => setAmt(chosen[0].id, e.target.value)}
-                        placeholder="0.00"
-                        className={`${inputCls} h-14 pl-14 text-2xl font-bold tabular-nums`}
-                      />
-                    </div>
-                    <Button type="submit" className="h-14 shrink-0 px-5" disabled={busy || !ready}>
-                      {busy ? 'Sending…' : 'Send request'}
-                    </Button>
-                  </div>
-                </div>
-              </>
-            ) : chosen.length > 1 ? (
+            {chosen.length > 0 ? (
               <>
                 {/* one row per ticked card: usage, balance and its own amount */}
                 <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -224,15 +171,13 @@ export function NewTopupModal({ company, companies, onClose, onSent }) {
                     )
                   })}
                   <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    <span className="font-semibold text-slate-600">
-                      {chosen.length} cards · one request each
-                    </span>
+                    <span />
                     <span className="font-bold tabular-nums text-slate-900">Total {money(total)}</span>
                   </div>
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit" className="h-12 px-5" disabled={busy || !ready}>
-                    {busy ? 'Sending…' : `Send ${chosen.length} requests`}
+                    {busy ? 'Sending…' : chosen.length === 1 ? 'Send request' : `Send ${chosen.length} requests`}
                   </Button>
                 </div>
               </>
