@@ -9,6 +9,7 @@ import {
   deleteClaim,
   getClaim,
   getClaimLines,
+  payableLine,
   listPaymentDocs,
   isReload,
   listClaimCards,
@@ -84,6 +85,10 @@ export default function ClaimView() {
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const cById = new Map(cards.map((c) => [c.id, c]))
   const own = claim?.claimant_id === user.id
+  // An approver / accountant looking at someone else's claim sees only what is paid back
+  // (cash receipts and fleet card reloads); fleet card fill-ups need no approval.
+  const shownLines = own ? lines : lines.filter(payableLine)
+  const hiddenFills = lines.length - shownLines.length
   const claimantName = own ? user.fullName || user.email : personLabel(person.get(claim?.claimant_id))
 
   const print = () =>
@@ -103,9 +108,9 @@ export default function ClaimView() {
   // accountant, on approved claims. Nobody approves their own claim.
   const canApprove = claim && !own && access.approves(claim.claimant_id)
   const canPay = claim && access.pay && (!own || isSuperAdmin)
-  const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
-  const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
-  const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)
+  const total = shownLines.reduce((s, l) => s + Number(l.amount || 0), 0)
+  const payable = shownLines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
+  const litres = shownLines.reduce((s, l) => s + Number(l.litres || 0), 0)
 
   async function act(fn) {
     setBusy(true)
@@ -124,7 +129,16 @@ export default function ClaimView() {
       const data = await reviewClaim(claim.id, status, note ?? claim.review_note)
       setClaim((c) => ({ ...c, ...data }))
       const word = { approved: 'approved', rejected: 'rejected', paid: 'marked paid', pending: 'back to pending' }[status] || 'saved'
-      notify(`Claim ${claimNo(claim, 0)} ${word}`, `${claimantName || ''}${claimantName ? ' · ' : ''}${money(payable)}`, status === 'rejected' ? 'red' : status === 'paid' ? 'blue' : 'green')
+      const back = status === 'paid' ? 'approved' : 'pending'
+      notify(`Claim ${claimNo(claim, 0)} ${word}`, `${claimantName || ''}${claimantName ? ' · ' : ''}${money(payable)}`, status === 'rejected' ? 'red' : status === 'paid' ? 'blue' : 'green', async () => {
+        try {
+          const undone = await reviewClaim(claim.id, back, null)
+          setClaim((c) => ({ ...c, ...undone }))
+          notify(`Claim ${claimNo(claim, 0)}: undone`, back === 'approved' ? 'Back to Pending for reimbursement.' : 'Back to Pending for approval.', 'blue')
+        } catch (e) {
+          setError(e.message)
+        }
+      })
     })
   const remove = () =>
     window.confirm('Delete this claim? This cannot be undone.') &&
@@ -263,7 +277,7 @@ export default function ClaimView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {lines.map((l, i) => (
+                  {shownLines.map((l, i) => (
                     <tr key={l.id} className="align-top">
                       <td className="px-3 py-3 text-slate-500">{i + 1}</td>
                       <td className="px-2 py-3">
@@ -353,13 +367,18 @@ export default function ClaimView() {
                 </tfoot>
               </table>
             </div>
-            {(claim.notes || claim.reviewed_at || payable === 0) && (
+            {(claim.notes || claim.reviewed_at || payable === 0 || hiddenFills > 0) && (
               <div className="space-y-1 px-4 py-3 text-sm text-slate-600">
                 {claim.notes && <p>Notes: {claim.notes}</p>}
                 {claim.reviewed_at && (
                   <p>
                     Reviewed {day(claim.reviewed_at.slice(0, 10))} by {personLabel(person.get(claim.reviewed_by)) || 'admin'}
                     {claim.review_note ? ` · ${claim.review_note}` : ''}
+                  </p>
+                )}
+                {hiddenFills > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {hiddenFills} fleet card fill-up{hiddenFills === 1 ? '' : 's'} on this claim {hiddenFills === 1 ? 'is' : 'are'} not shown: fleet card usage needs no approval.
                   </p>
                 )}
                 {payable === 0 && <Badge>Nothing to pay back — fleet card only</Badge>}

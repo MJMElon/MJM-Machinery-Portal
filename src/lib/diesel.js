@@ -22,6 +22,8 @@ export const FUEL_TYPES = [
 export const CLAIM_STATUS = {
   draft: { label: 'Draft', color: 'slate' },
   pending: { label: 'Pending for approval', color: 'amber' },
+  // fleet card fill-ups only: nothing to pay back, no approval (migration 20261224)
+  recorded: { label: 'Recorded', color: 'slate' },
   approved: { label: 'Pending for reimbursement', color: 'green' },
   rejected: { label: 'Rejected', color: 'red' },
   paid: { label: 'Paid', color: 'blue' }
@@ -279,7 +281,9 @@ export async function createClaimWithLines(companyId, userId, header, lines) {
       submitted_on: header.submitted_on,
       fill_date: header.submitted_on,
       notes: header.notes || null,
-      status: header.status === 'draft' ? 'draft' : 'pending',
+      // saved as a draft first; submitted after its receipts are in (a claim with
+      // nothing to pay back then becomes Recorded instead of Pending)
+      status: 'draft',
       amount: 0
     })
     .select('id')
@@ -287,6 +291,7 @@ export async function createClaimWithLines(companyId, userId, header, lines) {
   if (error) throw friendly(error)
   try {
     await replaceLines(data.id, lines)
+    if (header.status !== 'draft') await setClaimStatus(data.id, 'pending')
   } catch (e) {
     await supabase.from(DIESEL.claims).delete().eq('id', data.id)
     throw e
@@ -303,7 +308,12 @@ export async function updateClaimWithLines(claimId, header, lines) {
   if (error) throw friendly(error)
   await replaceLines(claimId, lines)
   if (header.status) await setClaimStatus(claimId, header.status)
+  // a pending claim whose receipts changed: checked again (nothing to pay back → Recorded)
+  else await supabase.from(DIESEL.claims).update({ status: 'pending' }).eq('id', claimId).eq('status', 'pending')
 }
+
+/** The payable part of a claim: cash receipts and fleet card reloads (what an approver looks at). */
+export const payableLine = (l) => l.payment !== 'fleet_card' || l.line_kind === 'reload'
 
 /** The claimant: submit a draft (→ Pending) or keep it as Draft. */
 export async function setClaimStatus(claimId, status) {
@@ -638,6 +648,14 @@ export async function decideTopup(id, approve, note) {
   const { error } = await supabase.rpc('machinery_topup_decide', { p_id: id, p_approve: approve, p_note: note || null })
   if (error && /status_check/.test(error.message || '')) throw new Error('The database does not accept Draft claims yet: run the SQL 20261221 (repair claim drafts), then approve again.')
   if (error) throw friendly(error)
+}
+/** Undo an approve / reject of a top-up request (back to Pending; an unsubmitted top-up claim is removed). */
+export async function undoTopup(id) {
+  const { error } = await supabase.rpc('machinery_topup_undo', { p_id: id })
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migration 20261225 (top-up undo) first.')
+    throw friendly(error)
+  }
 }
 export async function cancelTopup(id) {
   const { error } = await supabase.rpc('machinery_topup_cancel', { p_id: id })

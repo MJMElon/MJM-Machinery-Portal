@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/ui.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
-import { decideTopup, isReload, listCardData, listClaimLines, listClaims, listPaymentDocs, listPeople, listTopups, listVehicles, personLabel, reviewClaim, topupNo } from '../../lib/diesel.js'
+import { decideTopup, isReload, payableLine, undoTopup, listCardData, listClaimLines, listClaims, listPaymentDocs, listPeople, listTopups, listVehicles, personLabel, reviewClaim, topupNo } from '../../lib/diesel.js'
 import { money } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
@@ -124,6 +124,22 @@ export default function ClaimReview() {
 
   // Small notice at the top right after approve / reject / mark paid (counts down, then goes)
   const [notice, notify] = useNotice()
+  // Undo from the notice: approve / reject → back to Pending; paid → back to approved
+  async function undo(list, nextStatus) {
+    setBusy(true)
+    setError('')
+    try {
+      for (const c of list)
+        if (c.kind === 'topup') await undoTopup(c.topup.id)
+        else await reviewClaim(c.id, nextStatus === 'paid' ? 'approved' : 'pending', nextStatus === 'rejected' ? null : undefined)
+      notify(list.length === 1 ? `${list[0].kind === 'topup' ? 'Top-up request' : 'Claim'} ${noOf(list[0], 0)}: undone` : `${list.length} items: undone`, nextStatus === 'paid' ? 'Back to Pending for reimbursement.' : 'Back to Pending for approval.', 'blue')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      await load()
+      setBusy(false)
+    }
+  }
   function announce(list, nextStatus) {
     const word = { approved: 'approved', rejected: 'rejected', paid: 'marked paid', pending: 'back to pending' }[nextStatus] || 'saved'
     const tone = nextStatus === 'rejected' ? 'red' : nextStatus === 'paid' ? 'blue' : 'green'
@@ -135,15 +151,16 @@ export default function ClaimReview() {
         return notify(
           `Top-up request ${noOf(c, 0)} ${word}`,
           nextStatus === 'approved' ? `A draft top-up claim is now in ${nameOf(c.claimant_id)}'s My Claims.` : `${nameOf(c.claimant_id)} · ${money(c.amount)}`,
-          tone
+          tone,
+          () => undo(list, nextStatus)
         )
-      return notify(`Claim ${noOf(c, 0)} ${word}`, `${nameOf(c.claimant_id)} · ${money(payableOf(c))}`, tone)
+      return notify(`Claim ${noOf(c, 0)} ${word}`, `${nameOf(c.claimant_id)} · ${money(payableOf(c))}`, tone, () => undo(list, nextStatus))
     }
     const parts = [
       claimsDone.length && `${claimsDone.length} claim${claimsDone.length === 1 ? '' : 's'}`,
       tops.length && `${tops.length} top-up request${tops.length === 1 ? '' : 's'}`
     ].filter(Boolean)
-    notify(`${parts.join(' and ')} ${word}`, `Total ${money(list.reduce((t, c) => t + payableOf(c), 0))}`, tone)
+    notify(`${parts.join(' and ')} ${word}`, `Total ${money(list.reduce((t, c) => t + payableOf(c), 0))}`, tone, () => undo(list, nextStatus))
   }
 
   async function act(list, nextStatus, note) {
@@ -215,7 +232,7 @@ export default function ClaimReview() {
           <ClaimsTable
             mode={tab}
             rows={rows}
-            linesOf={linesOf}
+            linesOf={(id) => linesOf(id).filter(payableLine)}
             nameOf={nameOf}
             claimNo={noOf}
             payableOf={payableOf}
