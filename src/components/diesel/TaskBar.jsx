@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Button, Card } from '../ui.jsx'
-import { IconChevron } from '../icons.jsx'
+import { Button } from '../ui.jsx'
+import { IconBell, IconChevron } from '../icons.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useWindows } from '../Windows.jsx'
 import { DieselClaimsIcon } from '../AppIcons.jsx'
@@ -8,9 +8,11 @@ import { listClaims, myFuelTasks } from '../../lib/diesel.js'
 
 // Fuel Manage main page → one row under the dashboard with the signed-in
 // person's pending tasks, most important first; < > steps through them and
-// the button opens the page where the task is done (in its window). Shown:
+// "Continue to the page" opens the page where the task is done (in its
+// window). The bar is warm gold, apart from the white dashboard and the black
+// buttons, with the tone of the task as a small dot by the bell. Shown:
 // fuel claims waiting for my approval, and my fleet card fill-ups not claimed.
-// To add a reminder: push one more { key, rank, text, button, open } below.
+// To add a reminder: push one more { key, rank, tone, text, open } below.
 // Lower rank = shown first.
 const REVIEW = { key: 'diesel-claims-review', label: 'Claims Approval', Icon: DieselClaimsIcon }
 const CLAIMS = { key: 'diesel-claims', label: 'Fuel Claims', Icon: DieselClaimsIcon }
@@ -33,10 +35,10 @@ export function TaskBar({ company, access }) {
       const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
       const claimApprove = approver ? all.filter((c) => c.status === 'pending' && c.claimant_id !== user.id && access.approves(c.claimant_id)).length : 0
       if (claimApprove)
-        t.push({ key: 'claim-approve', rank: 1, tone: 'amber', text: `${plural(claimApprove, 'fuel claim', 'fuel claims')} waiting for your approval`, button: 'Approve', open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
+        t.push({ key: 'claim-approve', rank: 1, tone: 'amber', text: `${plural(claimApprove, 'fuel claim', 'fuel claims')} waiting for your approval`, open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
       const unclaimed = Number(db.unclaimed_fills || 0)
       if (unclaimed)
-        t.push({ key: 'unclaimed', rank: 2, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} not claimed yet: upload the receipt`, button: 'New claim', open: { ...CLAIMS, path: '/diesel/claims/new' } })
+        t.push({ key: 'unclaimed', rank: 2, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} not claimed yet: upload the receipt`, open: { ...CLAIMS, path: '/diesel/claims/new' } })
       setTasks(t.sort((a, b) => a.rank - b.rank))
       setI(0)
     })
@@ -52,27 +54,37 @@ export function TaskBar({ company, access }) {
   const step = (d) => setI((x) => (x + d + tasks.length) % tasks.length)
 
   return (
-    <Card className="mx-auto mb-3 flex max-w-3xl items-center gap-3 px-4 py-2.5">
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-      <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" title={task.text}>
-        {task.text}
-      </p>
-      <Button size="sm" onClick={() => open(task.open)}>
-        {task.button}
+    <div className="relative mx-auto mb-3 flex max-w-3xl items-center gap-3 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 via-yellow-50 to-white py-2.5 pl-5 pr-3 shadow-sm">
+      {/* gold light down the left edge */}
+      <span className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-amber-300 via-yellow-400 to-amber-500 shadow-[0_0_10px_rgba(251,191,36,0.7)]" aria-hidden="true" />
+      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200">
+        <IconBell width={18} height={18} />
+        <span className={`absolute right-0.5 top-0.5 h-2 w-2 rounded-full ring-2 ring-amber-50 ${dot}`} aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Reminder</p>
+        <p className="truncate text-sm font-semibold text-slate-800" title={task.text}>
+          {task.text}
+        </p>
+      </div>
+      <Button size="sm" onClick={() => open(task.open)} className="shrink-0">
+        <span className="hidden sm:inline">Continue to the page</span>
+        <span className="sm:hidden">Continue</span>
+        <IconChevron width={16} height={16} />
       </Button>
       {tasks.length > 1 && (
         <div className="flex shrink-0 items-center gap-0.5">
-          <button type="button" onClick={() => step(-1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Previous task">
+          <button type="button" onClick={() => step(-1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-800/70 hover:bg-amber-100" aria-label="Previous task">
             <IconChevron width={18} height={18} className="rotate-180" />
           </button>
-          <span className="w-9 text-center text-xs font-semibold tabular-nums text-slate-500">
+          <span className="w-9 text-center text-xs font-semibold tabular-nums text-amber-800/80">
             {Math.min(i, tasks.length - 1) + 1}/{tasks.length}
           </span>
-          <button type="button" onClick={() => step(1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Next task">
+          <button type="button" onClick={() => step(1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-800/70 hover:bg-amber-100" aria-label="Next task">
             <IconChevron width={18} height={18} />
           </button>
         </div>
       )}
-    </Card>
+    </div>
   )
 }
