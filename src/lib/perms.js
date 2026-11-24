@@ -274,10 +274,14 @@ export async function removePerms(companyId, userId) {
 /** The signed-in user's matrix for a company: { loaded, perms, can(section, action), any(sections) } */
 export function usePerms(companyId) {
   const { user, isSuperAdmin } = useAuth()
-  const [state, setState] = useState({ loaded: false, perms: {}, error: '' })
+  // `key`: the company / person / super admin the loaded rights belong to. While
+  // they are being loaded for a new key the old ones do not count (loaded =
+  // false), so a page never shows "No access" for a moment before the real rights arrive.
+  const key = `${companyId || ''}|${user?.id || ''}|${isSuperAdmin ? 1 : 0}`
+  const [state, setState] = useState({ loaded: false, perms: {}, error: '', key: null })
   useEffect(() => {
-    if (!companyId || !user) return setState({ loaded: true, perms: {}, error: '' })
-    if (isSuperAdmin) return setState({ loaded: true, perms: {}, error: '' })
+    if (!companyId || !user) return setState({ loaded: true, perms: {}, error: '', key })
+    if (isSuperAdmin) return setState({ loaded: true, perms: {}, error: '', key })
     let active = true
     // Role setup + what the MJM Intranet icons give (machinery_my_perms); before
     // that migration, just the Role setup row.
@@ -288,14 +292,15 @@ export function usePerms(companyId) {
           return supabase.from(PERMS_TABLE).select('perms').eq('company_id', companyId).eq('user_id', user.id).maybeSingle().then((r) => ({ data: r.data?.perms, error: r.error }))
         return { data, error }
       })
-      .then(({ data, error }) => active && setState({ loaded: true, perms: data || {}, error: error ? friendly(error).message : '' }))
+      .then(({ data, error }) => active && setState({ loaded: true, perms: data || {}, error: error ? friendly(error).message : '', key }))
     return () => {
       active = false
     }
-  }, [companyId, user, isSuperAdmin])
+  }, [companyId, user, isSuperAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
   return useMemo(
     () => ({
       ...state,
+      loaded: state.loaded && state.key === key,
       super: isSuperAdmin,
       can: (section, action) => isSuperAdmin || has(state.perms, section, action),
       any: (sections) => isSuperAdmin || hasAny(state.perms, sections),
@@ -309,7 +314,7 @@ export function usePerms(companyId) {
       // Fuel Manage role (User setting): 'user' / 'accountant' / 'procurement'
       fuelRole: isSuperAdmin ? 'procurement' : fuelRole(state.perms)
     }),
-    [state, isSuperAdmin]
+    [state, isSuperAdmin, key]
   )
 }
 
