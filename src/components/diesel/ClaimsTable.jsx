@@ -9,6 +9,8 @@ import { day, money, num } from '../../lib/format.js'
 
 // Claims Approval: one table for the three tabs, same columns and spacing.
 //   Pending approval  ☐ | Claim No. | Submitted | Claimant | Claim amount | Receipts | Status | ✓ ✗
+//                     (fleet card top-up requests too: rows with kind 'topup',
+//                     TU-0001, the card instead of receipts)
 //   To pay            ☐ | … | Status (approved by … on …) | Mark paid
 //   All claims        … | Status (click the title to filter) | what I may do
 // Toolbar on top (as in a mail inbox): tick all, refresh and ⋮ (Approve all /
@@ -162,7 +164,8 @@ export function ClaimsTable({
                 const litres = ls.reduce((s, l) => s + Number(l.litres || 0), 0)
                 const pics = receiptsOf(c)
                 const approveHere = c.status === 'pending' && canApprove(c)
-                const payHere = c.status === 'approved' && canPay(c)
+                const payHere = !c.kind && c.status === 'approved' && canPay(c)
+                const topup = c.kind === 'topup'
                 return (
                   <tr key={c.id} className={`h-16 align-middle hover:bg-slate-50/60 ${picked.has(c.id) ? 'bg-brand-light/30' : ''}`}>
                     <td className="py-3 text-center">
@@ -171,9 +174,13 @@ export function ClaimsTable({
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <Link to={`/diesel/claims/${c.id}?from=review`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
-                        {claimNo(c, 0)}
-                      </Link>
+                      {topup ? (
+                        <span className="font-semibold tabular-nums text-slate-800">{claimNo(c, 0)}</span>
+                      ) : (
+                        <Link to={`/diesel/claims/${c.id}?from=review`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
+                          {claimNo(c, 0)}
+                        </Link>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 font-semibold tabular-nums text-slate-800">{day(c.submitted_on || c.fill_date)}</td>
                     <td className="truncate px-3 py-2.5 font-medium text-slate-800" title={nameOf(c.claimant_id)}>
@@ -181,10 +188,16 @@ export function ClaimsTable({
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <span className="block font-semibold tabular-nums text-slate-900">{money(payableOf(c))}</span>
+                      {topup && <span className="text-xs font-medium text-sky-700">Top-up</span>}
                       {litres > 0 && <span className="text-xs tabular-nums text-slate-500">{num(litres, 2)} L</span>}
                     </td>
                     <td className="px-3 py-2.5">
-                      {pics.length === 0 ? (
+                      {topup ? (
+                        <span className="block min-w-0">
+                          <span className="block font-medium leading-snug text-slate-700">{c.card}</span>
+                          {c.reason && <span className="block truncate text-xs text-slate-500" title={c.reason}>{c.reason}</span>}
+                        </span>
+                      ) : pics.length === 0 ? (
                         <span className="text-xs text-slate-400">No receipt attached</span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
@@ -214,7 +227,7 @@ export function ClaimsTable({
                           <StatusBadge status={c.status} />
                           {c.status === 'paid' && <PaymentDocsButton docs={docs[c.id]} />}
                         </span>
-                        <StatusLine claim={c} nameOf={nameOf} />
+                        {topup ? <span className="mt-1 block pl-2 text-xs leading-snug text-slate-500">Fleet card top-up request</span> : <StatusLine claim={c} nameOf={nameOf} />}
                       </td>
                     )}
                     <td className="px-3 py-2.5">
@@ -244,11 +257,15 @@ export function ClaimsTable({
                             Mark paid
                           </button>
                         )}
+                        {topup ? (
+                          <span className="h-9 w-9" aria-hidden="true" />
+                        ) : (
                         <Tip label="View claim">
                           <Link to={`/diesel/claims/${c.id}?from=review`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-brand" aria-label="View claim">
                             <IconEye width={18} height={18} />
                           </Link>
                         </Tip>
+                        )}
                       </div>
                     </td>
                   </tr>

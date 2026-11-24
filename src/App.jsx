@@ -94,7 +94,7 @@ export default function App() {
             <Route path="records" element={<FuelRecords />} />
             <Route path="records/mobile" element={<Navigate to="/app/fuel" replace />} />
             <Route path="cards" element={<FleetCardManage />} />
-            <Route path="cards/topup" element={<Navigate to="/diesel/claims/review?tab=topup" replace />} />
+            <Route path="cards/topup" element={<Navigate to="/diesel/claims/review?tab=pending" replace />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
             <Route path="cards/:id/edit" element={<FleetCardPage key="edit" mode="edit" />} />

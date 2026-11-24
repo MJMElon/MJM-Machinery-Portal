@@ -4,7 +4,7 @@ import { IconBell, IconChevron } from '../icons.jsx'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { useWindows } from '../Windows.jsx'
 import { DieselClaimsIcon } from '../AppIcons.jsx'
-import { listClaims, myFuelTasks } from '../../lib/diesel.js'
+import { listClaims, listTopups, myFuelTasks } from '../../lib/diesel.js'
 
 // Fuel Manage main page → one row under the dashboard with the signed-in
 // person's pending tasks, most important first; < > steps through them and
@@ -27,15 +27,22 @@ export function TaskBar({ company, access }) {
     if (!user) return
     let live = true
     const approver = isSuperAdmin || access.admin
-    // Only two reminders: claims waiting for my approval, and my fleet card
-    // fill-ups (from the station statement) not put on a fuel claim yet.
-    Promise.all([approver ? listClaims(company.id).catch(() => []) : [], myFuelTasks(company.id)]).then(([all, db]) => {
+    const topupApprover = isSuperAdmin || Boolean(access.topupApprover)
+    // Only two reminders: claims / top-up requests waiting for my approval, and
+    // my fleet card fill-ups (from the station statement) not put on a fuel claim yet.
+    Promise.all([
+      approver ? listClaims(company.id).catch(() => []) : [],
+      myFuelTasks(company.id),
+      topupApprover ? listTopups(company.id).catch(() => null) : null
+    ]).then(([all, db, topups]) => {
       if (!live) return
       const t = []
       const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
       const claimApprove = approver ? all.filter((c) => c.status === 'pending' && c.claimant_id !== user.id && access.approves(c.claimant_id)).length : 0
-      if (claimApprove)
-        t.push({ key: 'claim-approve', rank: 1, tone: 'amber', text: `${plural(claimApprove, 'fuel claim', 'fuel claims')} waiting for your approval`, open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
+      const topupApprove = (topups || []).filter((r) => r.status === 'pending' && (r.requested_by !== user.id || isSuperAdmin) && (isSuperAdmin || access.approvesTopup?.(r.requested_by))).length
+      const what = [claimApprove && plural(claimApprove, 'fuel claim', 'fuel claims'), topupApprove && plural(topupApprove, 'top-up request', 'top-up requests')].filter(Boolean)
+      if (what.length)
+        t.push({ key: 'claim-approve', rank: 1, tone: 'amber', text: `${what.join(' and ')} waiting for your approval`, open: { ...REVIEW, path: '/diesel/claims/review?tab=pending' } })
       const unclaimed = Number(db.unclaimed_fills || 0)
       if (unclaimed)
         t.push({ key: 'unclaimed', rank: 2, tone: 'blue', text: `${plural(unclaimed, 'fleet card fill-up', 'fleet card fill-ups')} not claimed yet: upload the receipt`, open: { ...CLAIMS, path: '/diesel/claims/new' } })
