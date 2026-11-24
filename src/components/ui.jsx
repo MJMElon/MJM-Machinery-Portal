@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 // Small white/simple UI kit used across every page.
 // Tailwind classes only; no extra component libraries.
 
@@ -138,12 +139,20 @@ export function EmptyState({ title, subtitle, action }) {
   )
 }
 
+// Closes only on a real click outside: pressed AND released on the dark
+// backdrop. Pressing inside (selecting text, dragging) and letting go outside
+// keeps it open.
 export function Modal({ open, onClose, title, children, wide = false }) {
+  const downOutside = useRef(false)
   if (!open) return null
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-      onClick={onClose}
+      onPointerDown={(e) => (downOutside.current = e.target === e.currentTarget)}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && downOutside.current) onClose?.()
+        downOutside.current = false
+      }}
     >
       <div
         className={cx(
