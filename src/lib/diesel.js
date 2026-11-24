@@ -628,6 +628,7 @@ export async function requestTopup(companyId, { card_id, amount, needed_by, reas
 }
 export async function decideTopup(id, approve, note) {
   const { error } = await supabase.rpc('machinery_topup_decide', { p_id: id, p_approve: approve, p_note: note || null })
+  if (error && /status_check/.test(error.message || '')) throw new Error('The database does not accept Draft claims yet: run the SQL 20261221 (repair claim drafts), then approve again.')
   if (error) throw friendly(error)
 }
 export async function cancelTopup(id) {
