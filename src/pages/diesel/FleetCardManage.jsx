@@ -11,7 +11,8 @@ import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, lastImports, l
 import { thisMonth } from '../../lib/format.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
-// Fleet Card Manage: every fleet card drawn as a small card (number, fuel
+// Fleet Card Manage (tabs Active / Inactive: inactive and cancelled cards are
+// kept for their history and listed apart): every fleet card drawn as a small card (number, fuel
 // station, vehicle, status) with this month's litres against the subsidy
 // quota and the RM balance; click a card to open it. The dashed card with
 // "+" starts a new fleet card. "Request top up" opens the New Top Up Request
@@ -87,6 +88,10 @@ export default function FleetCardManage() {
     load()
   }, [load])
 
+  // Tabs: Active (in use, applying, blocked) | Inactive (inactive or cancelled cards, kept for their history)
+  const [view, setView] = useState('active')
+  const isOff = (c) => ['inactive', 'cancelled'].includes(c.status)
+  const inView = (c) => (view === 'inactive' ? isOff(c) : !isOff(c))
   const month = thisMonth()
   const canAdd = access.can('cards', 'add')
   const grid = 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-7'
@@ -99,11 +104,7 @@ export default function FleetCardManage() {
       g.ledger
         ? g.ledger.filter((r) => r.card_id === cid && r.kind === 'usage' && r.month === month).reduce((s, r) => s + Number(r.litres || 0), 0)
         : g.usage.filter((u) => u.card_id === cid && u.fill_date.startsWith(month)).reduce((s, u) => s + Number(u.litres || 0), 0)
-    const cards = [...g.cards].sort(
-      (a, b) =>
-        ['cancelled', 'inactive'].includes(a.status) - ['cancelled', 'inactive'].includes(b.status) ||
-        String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz'))
-    )
+    const cards = g.cards.filter(inView).sort((a, b) => String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz')))
     return (
       <div className={grid}>
         {cards.map((c) => (
@@ -118,13 +119,15 @@ export default function FleetCardManage() {
             checklist={`${checklistDone(c)} / ${CARD_CHECKLIST.length}`}
           />
         ))}
-        {own && canAdd && <AddCardTile />}
+        {own && canAdd && view === 'active' && <AddCardTile />}
       </div>
     )
   }
 
   const mineGroup = groups.find((g) => g.company.id === company.id)
-  const others = groups.filter((g) => g.company.id !== company.id && g.cards.length)
+  const others = groups.filter((g) => g.company.id !== company.id && g.cards.some(inView))
+  const count = (pick) => groups.reduce((n, g) => n + g.cards.filter(pick).length, 0)
+  const mineShown = mineGroup ? mineGroup.cards.filter(inView).length : 0
 
   return (
     <div className="space-y-5">
@@ -172,18 +175,36 @@ export default function FleetCardManage() {
       <Card className="p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold text-slate-800">Fleet cards</h3>
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 text-sm" role="tablist" aria-label="Which fleet cards">
+            {[
+              ['active', 'Active', count((c) => !isOff(c))],
+              ['inactive', 'Inactive', count(isOff)]
+            ].map(([k, label, n]) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={view === k}
+                onClick={() => setView(k)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-medium ${view === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {label}
+                <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${view === k ? 'bg-slate-100 text-slate-600' : 'text-slate-400'}`}>{n}</span>
+              </button>
+            ))}
+          </div>
         </div>
         {loading ? (
           <Loading />
         ) : (
           <div className="space-y-6">
-            {mineGroup && (mineGroup.cards.length || canAdd) ? (
+            {mineGroup && (mineShown || (canAdd && view === 'active')) ? (
               <section>
                 {showAll && <GroupTitle company={mineGroup.company} />}
                 {tiles(mineGroup, true)}
               </section>
             ) : (
-              <Empty>No fleet cards in {company.name}.</Empty>
+              <Empty>{view === 'inactive' ? `No inactive fleet cards in ${company.name}.` : `No fleet cards in ${company.name}.`}</Empty>
             )}
             {showAll &&
               others.map((g) => (
@@ -192,7 +213,9 @@ export default function FleetCardManage() {
                   {tiles(g, false)}
                 </section>
               ))}
-            {showAll && others.length === 0 && <p className="text-sm text-slate-400">No fleet cards you can see in the other companies of this business.</p>}
+            {showAll && others.length === 0 && (
+              <p className="text-sm text-slate-400">No {view === 'inactive' ? 'inactive ' : ''}fleet cards you can see in the other companies of this business.</p>
+            )}
           </div>
         )}
       </Card>
