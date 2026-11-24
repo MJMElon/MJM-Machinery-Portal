@@ -111,10 +111,8 @@ function Meter({ quota, used, month }) {
 function Recent({ rows }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Last purchases on this card
-        <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">(Data Linked from Fuel Station Portal)</span>
-      </p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last purchases on this card</p>
+      <p className="mb-1.5 text-[10px] text-slate-400">(Data Linked from Fuel Station Portal)</p>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
