@@ -381,7 +381,7 @@ table.d td.k { width: 34%; font-weight: 700; background: #f6f8f7; }
     <tr><td><div class="ln">${esc(who(r.requested_by))}</div></td><td><div class="ln">${esc(who(r.decided_by))}</div></td><td><div class="ln"></div></td></tr>
     <tr><td class="role">Requester</td><td class="role">Approver</td><td class="role">Account Department</td></tr>
   </table>
-  <p class="foot">After the top-up, the reload is claimed on a fuel claim (Fuel Receipt Claims → Fleet card reload). Printed ${esc(day(today()))}.</p>
+  <p class="foot">After the top-up, the reload is claimed on a fuel claim (Fuel Claims → Fleet card reload). Printed ${esc(day(today()))}.</p>
 </div></body></html>`
   return printHtml(html)
 }

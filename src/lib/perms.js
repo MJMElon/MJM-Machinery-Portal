@@ -43,13 +43,13 @@ export const MODULES = [
     sections: [
       {
         key: 'claims',
-        label: 'Fuel Receipt Claims',
+        label: 'Fuel Claims',
         actions: ['view', 'add', 'edit', 'delete'],
         special: ['view_all', 'approve', 'pay'],
         hint: 'View / add / edit / delete apply to the person’s own claims'
       },
-      { key: 'usage', label: 'Fuel Usage Reports', actions: ['view', 'add', 'delete'], special: [] },
-      { key: 'fuel_record', label: 'Operational Diesel Records', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
+      { key: 'usage', label: 'Reports', actions: ['view', 'add', 'delete'], special: [] },
+      { key: 'fuel_record', label: 'Estate Fuel Record', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
       { key: 'cards', label: 'Fleet Card Manage', actions: ['view', 'add', 'edit', 'delete'], special: [] },
       { key: 'report', label: 'Report', actions: ['view'], special: [] }
     ]
@@ -101,7 +101,7 @@ export const ROLE_MODEL = [
     pages: [
       {
         section: 'claims',
-        label: 'Fuel Receipt Claims',
+        label: 'Fuel Claims',
         options: [
           { key: 'own', label: 'View own claims record (submit, edit, delete own claims)', actions: ['view', 'add', 'edit', 'delete'] },
           { key: 'all', label: 'View all users’ claims in this company', actions: ['view_all'] },
@@ -119,7 +119,7 @@ export const ROLE_MODEL = [
       },
       {
         section: 'usage',
-        label: 'Fuel Usage Reports',
+        label: 'Reports',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'manage', label: 'Record / delete card fill-ups', actions: ['add', 'delete'] }
@@ -127,7 +127,7 @@ export const ROLE_MODEL = [
       },
       {
         section: 'fuel_record',
-        label: 'Operational Diesel Records',
+        label: 'Estate Fuel Record',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'add', label: 'Add records', actions: ['add'] },
@@ -135,7 +135,7 @@ export const ROLE_MODEL = [
           { key: 'delete', label: 'Delete records', actions: ['delete'] }
         ]
       },
-      { section: 'report', label: 'Report (old)', options: [{ key: 'view', label: 'View Fuel Usage Reports', actions: ['view'] }] }
+      { section: 'report', label: 'Report (old)', options: [{ key: 'view', label: 'View Reports', actions: ['view'] }] }
     ]
   }
 ]

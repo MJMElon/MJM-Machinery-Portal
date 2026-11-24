@@ -20,10 +20,10 @@ export function MyFleetCards({ company }) {
 
   if (!cards) return null // loading, or the database function is not there yet
   if (!cards.length)
-    return <p className="mx-auto mb-4 max-w-3xl text-center text-xs text-slate-400">You are not a driver on any fleet card in {company.name}.</p>
+    return <p className="mx-auto mb-3 max-w-3xl text-center text-xs text-slate-400">You are not a driver on any fleet card in {company.name}.</p>
 
   return (
-    <div className="mx-auto mb-5 max-w-3xl space-y-3">
+    <div className="mx-auto mb-3 max-w-3xl space-y-3">
       {cards.map((c) => (
         <Card key={c.id} className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 px-4 py-2.5">

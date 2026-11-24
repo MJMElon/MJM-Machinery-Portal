@@ -8,10 +8,12 @@ import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
 import { RejectModal } from './ClaimView.jsx'
+import { PendingClaims } from '../../components/diesel/PendingClaims.jsx'
 
 // Review claims, in three tabs:
 //   Pending approval  claims waiting for me: the people I am approver for
-//                     (User setting → Claims approved by)
+//                     (User setting → Claims approved by); claimant, date,
+//                     amount, the receipt pictures, ✓ / ✗ (PendingClaims.jsx)
 //   To pay            approved claims, for accountants: mark paid
 //   All claims        every claim I can see (accountants: the whole company)
 // Approve / reject / mark paid right in the row, or several at once.
@@ -151,7 +153,7 @@ export default function ClaimReview() {
           )}
         </div>
 
-        {chosen.length > 0 && (
+        {tab !== 'pending' && chosen.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-brand-light/50 px-5 py-2.5 text-sm">
             <span className="font-semibold text-slate-800">
               {chosen.length} selected · {money(chosenTotal)}
@@ -175,6 +177,17 @@ export default function ClaimReview() {
           <Loading />
         ) : rows.length === 0 ? (
           <Empty>{tab === 'pending' ? 'Nothing waiting for your approval.' : tab === 'topay' ? 'No approved claims waiting for payment.' : 'No claims found.'}</Empty>
+        ) : tab === 'pending' ? (
+          <PendingClaims
+            rows={rows}
+            linesOf={linesOf}
+            nameOf={nameOf}
+            claimNo={claimNo}
+            payableOf={payableOf}
+            busy={busy}
+            onApprove={(list) => act(list, 'approved')}
+            onReject={setRejecting}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] text-sm">

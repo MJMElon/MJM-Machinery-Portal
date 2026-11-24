@@ -125,6 +125,17 @@ export async function receiptUrl(path, seconds = 600) {
   return data.signedUrl
 }
 
+/** Signed links (10 min) for many receipts at once: { path: url }; PDFs and failures are left out. */
+export async function receiptUrls(paths, seconds = 600) {
+  const list = [...new Set((paths || []).filter((p) => p && !/\.pdf$/i.test(p)))]
+  const out = {}
+  for (let i = 0; i < list.length; i += 100) {
+    const { data } = await supabase.storage.from(DIESEL.bucket).createSignedUrls(list.slice(i, i + 100), seconds)
+    for (const d of data || []) if (d.signedUrl && !d.error) out[d.path] = d.signedUrl
+  }
+  return out
+}
+
 /** Last odometer reading recorded for a vehicle before a date (claims + card fill-ups). */
 export async function lastOdometer(vehicleId, beforeDate) {
   const pick = (table) =>

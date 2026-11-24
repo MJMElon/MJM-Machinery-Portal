@@ -1,6 +1,6 @@
 import { printHtml } from '../../lib/printFrame.js'
 
-// Fuel Usage Reports printout: two tables, Jan – Dec of one year, one row per
+// Reports printout: two tables, Jan – Dec of one year, one row per
 // person (HQ vehicles: the claimant / driver) or per machine (estate):
 //   1. fuel usage in litres   2. fuel expenses in RM
 // and below them the average fuel price per litre (RM ÷ litres), per month
@@ -88,10 +88,13 @@ export const printUsageTable = (opts) => printHtml(usageTableHtml(opts))
 
 /**
  * Table view printout (A4 portrait): every receipt, grouped (fleet card / cash,
- * or machine type), with subtotals and the total.
+ * or machine type), with subtotals and the total. Then, when `receipts` is
+ * given, every claimed receipt by date, one per page: the photo and under it
+ * "Claimed by <name> on <date>".
  * groups: [{ title, rows: [{ date, who, vehicle, receipt?, litres, amount, remark }] }]
+ * receipts: [{ url, pdf, date, who, vehicle, receipt, litres, amount, card, claimNo, claimedOn }]
  */
-export function usageDetailHtml({ title, lines = [], hq, groups }) {
+export function usageDetailHtml({ title, lines = [], hq, groups, receipts = [] }) {
   const dd = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '')
   const sum = (rows, k) => rows.reduce((t, r) => t + (r[k] || 0), 0)
   const all = groups.flatMap((g) => g.rows)
@@ -131,6 +134,14 @@ body { font: 9px/1.4 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -w
 .t tr.sub td { font-weight: 700; border-bottom: 1.5px solid #cbd5e1; }
 .t tfoot td { font-weight: 700; background: #f1f5f9; border-top: 2px solid ${GREEN}; }
 tr { break-inside: avoid; }
+.rc { break-before: page; page-break-before: always; text-align: center; }
+.rc .no { text-align: left; font-size: 10px; font-weight: 700; color: ${GREEN}; margin: 0 0 6px; }
+.rc .no span { font-weight: 500; color: #6b7280; }
+.rc img { display: block; margin: 0 auto; max-width: 100%; max-height: 228mm; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; }
+.rc .nophoto { margin: 40mm auto; width: 70%; padding: 18px; border: 1.5px dashed #cbd5e1; border-radius: 8px; color: #6b7280; font-size: 11px; }
+.rc .cap { margin: 8px auto 0; display: inline-block; text-align: left; border-top: 2px solid ${GREEN}; padding-top: 5px; font-size: 11px; }
+.rc .cap b { color: ${GREEN}; }
+.rc .cap p { margin: 2px 0 0; color: #374151; font-size: 10px; }
 </style></head><body>
 <table class="page"><thead><tr><td></td></tr></thead><tfoot><tr><td></td></tr></tfoot><tbody><tr><td>
   <div class="head"><h1>${esc(title)}</h1>${lines.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('')}</div>
@@ -140,6 +151,18 @@ tr { break-inside: avoid; }
     <tbody>${body || `<tr><td colspan="${hq ? 7 : 6}">No fuel usage for this selection.</td></tr>`}</tbody>
     <tfoot><tr><td colspan="${span}" class="r">Total · ${all.length} receipt${all.length === 1 ? '' : 's'}</td><td class="r">${fmt(sum(all, 'litres'), 2)}</td><td class="r">${fmt(sum(all, 'amount'), 2)}</td><td></td></tr></tfoot>
   </table>
+  ${receipts
+    .map(
+      (r, i) => `<div class="rc">
+    <p class="no">Receipt ${i + 1} of ${receipts.length} <span>· ${esc(dd(r.date))}${r.receipt ? ` · No. ${esc(r.receipt)}` : ''}</span></p>
+    ${r.url ? `<img src="${esc(r.url)}" alt="Receipt ${i + 1}" />` : `<div class="nophoto">${r.pdf ? 'This receipt is a PDF file: open it from the claim to see it.' : 'No receipt photo attached.'}</div>`}
+    <div class="cap">
+      Claimed by <b>${esc(r.who)}</b> on <b>${esc(dd(r.claimedOn))}</b>${r.claimNo ? ` · Claim ${esc(r.claimNo)}` : ''}
+      <p>Filled ${esc(dd(r.date))} · ${esc(r.vehicle)} · ${fmt(r.litres, 2)} L · RM ${fmt(r.amount, 2)} · ${esc(r.card)}</p>
+    </div>
+  </div>`
+    )
+    .join('')}
 </td></tr></tbody></table>
 </body></html>`
 }
