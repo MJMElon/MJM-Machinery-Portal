@@ -326,6 +326,15 @@ export default function DieselUsage() {
   // HQ: receipts. Estate: fuel usage records.
   const rows = tab === 'hq' ? fills.filter((f) => inRange(f.fill_date) && passHq(f)) : issued.filter((f) => inRange(f.fill_date) && (!A.machineF.length || A.machineF.includes(f.vehicle_id)))
   const hasVehicle = new Set(rows.map((r) => r.vehicle_id))
+  // Why receipts may be missing (HQ tab): in the dates but on a vehicle not ticked HQ, or outside the dates
+  const hidden =
+    tab === 'hq'
+      ? {
+          notHq: fills.filter((f) => inRange(f.fill_date) && !hqIds.has(f.vehicle_id)).length,
+          outside: fills.filter((f) => !inRange(f.fill_date) && hqIds.has(f.vehicle_id)).length,
+          latest: fills.filter((f) => hqIds.has(f.vehicle_id)).reduce((m, f) => (f.fill_date > m ? f.fill_date : m), '')
+        }
+      : null
 
   // Vehicles listed: HQ with a card / driver filter → the vehicles with
   // receipts in it (and the chosen cards' own vehicles); a vehicle filter →
@@ -635,6 +644,23 @@ export default function DieselUsage() {
               {view !== 'table' && tab !== 'hq' && locations.length > 0 && <span className="ml-2">{F.loc()}</span>}
               {tab === 'hq' && !cardOpts.some((o) => o.value !== 'cash') && <span className="text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</span>}
             </div>
+
+            {hidden && (hidden.notHq > 0 || (rows.length === 0 && hidden.outside > 0)) && (
+              <div className="space-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900" data-noprint>
+                {hidden.notHq > 0 && (
+                  <p>
+                    {hidden.notHq} receipt{hidden.notHq === 1 ? ' is' : 's are'} in these dates but on a vehicle not ticked <b>HQ vehicle</b> (or with no vehicle), so not shown here. Tick the vehicle in
+                    Machinery Profile to include it.
+                  </p>
+                )}
+                {rows.length === 0 && hidden.outside > 0 && (
+                  <p>
+                    No receipt in these dates. {hidden.outside} HQ vehicle receipt{hidden.outside === 1 ? ' is' : 's are'} outside them
+                    {hidden.latest ? ` (latest ${day(hidden.latest)})` : ''}: change From / To.
+                  </p>
+                )}
+              </div>
+            )}
 
             {view === 'table' ? (
               tab === 'hq' ? <VehicleTable groups={detailGroups} total={detailTotal} /> : <DetailTable groups={detailGroups} total={detailTotal} hq={false} F={F} />
