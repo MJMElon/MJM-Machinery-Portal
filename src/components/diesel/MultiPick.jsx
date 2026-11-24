@@ -5,22 +5,42 @@ import { useEffect, useRef, useState } from 'react'
  * options: [{ value, label, group? }] — options with a group are listed under
  * that heading. value: array of chosen values.
  */
-export function MultiPick({ label, allLabel, options, value, onChange }) {
+// head: a column title that opens the list (in a table header). The list is
+// placed on the screen (fixed) so the table's scroll box does not cut it off.
+export function MultiPick({ label, allLabel, options, value, onChange, head = false, align = 'left' }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
+  const [pos, setPos] = useState(null)
   const box = useRef(null)
+  const btn = useRef(null)
 
   useEffect(() => {
     if (!open) return
     const away = (e) => box.current && !box.current.contains(e.target) && setOpen(false)
     const esc = (e) => e.key === 'Escape' && setOpen(false)
+    // a head list is fixed on the screen: close it when the page scrolls under it
+    const moved = (e) => head && box.current && !box.current.contains(e.target) && setOpen(false)
     document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', esc)
+    window.addEventListener('scroll', moved, true)
+    window.addEventListener('resize', moved)
     return () => {
       document.removeEventListener('pointerdown', away)
       document.removeEventListener('keydown', esc)
+      window.removeEventListener('scroll', moved, true)
+      window.removeEventListener('resize', moved)
     }
-  }, [open])
+  }, [open, head])
+
+  const toggleOpen = () => {
+    if (head && !open && btn.current) {
+      const r = btn.current.getBoundingClientRect()
+      const w = 288
+      const left = align === 'right' ? r.right - w : r.left
+      setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(left, window.innerWidth - w - 8)), width: w })
+    }
+    setOpen((o) => !o)
+  }
 
   const chosen = new Set(value)
   const byValue = new Map(options.map((o) => [o.value, o]))
@@ -44,7 +64,24 @@ export function MultiPick({ label, allLabel, options, value, onChange }) {
   }
 
   return (
-    <div className="relative" ref={box}>
+    <div className={head ? 'inline-block' : 'relative'} ref={box}>
+      {head ? (
+        <button
+          ref={btn}
+          type="button"
+          onClick={toggleOpen}
+          aria-expanded={open}
+          title={value.length ? `${label}: ${summary}` : `Filter by ${label.toLowerCase()}`}
+          className={`-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold uppercase tracking-wide ${value.length ? 'bg-brand/10 text-brand' : 'text-slate-500 hover:bg-slate-200/60 hover:text-slate-700'}`}
+        >
+          {label}
+          {value.length > 0 && <span className="rounded-full bg-brand px-1.5 text-[10px] font-semibold normal-case leading-4 text-white">{value.length}</span>}
+          <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M3.5 5h13l-5 6v4.5l-3 1.5V11z" />
+          </svg>
+        </button>
+      ) : (
+      <>
       <span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span>
       <button
         type="button"
@@ -60,9 +97,14 @@ export function MultiPick({ label, allLabel, options, value, onChange }) {
           <path d="M5 7.5l5 5 5-5" />
         </svg>
       </button>
+      </>
+      )}
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-40 mt-1 min-w-[16rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div
+          className={`z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-left font-normal normal-case tracking-normal shadow-xl ${head ? 'fixed' : 'absolute left-0 right-0 top-full mt-1 min-w-[16rem]'}`}
+          style={head && pos ? { top: pos.top, left: pos.left, width: pos.width } : undefined}
+        >
           {options.length > 8 && (
             <div className="border-b border-slate-100 p-2">
               <input

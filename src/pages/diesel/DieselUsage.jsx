@@ -27,11 +27,13 @@ import { day, money, num, today } from '../../lib/format.js'
 
 // Fuel Usage Report: one row per vehicle with two small month charts (litres
 // and RM, fleet card vs cash). Tabs on top: HQ vehicle / Estate machine; each
-// tab has its own filters (tick as many as needed; none ticked = all):
-//   HQ vehicle:     fleet card (or cash), driver, vehicle, date from – to
-//   Estate machine: machine type, machine, date from – to
-// The report follows the filters straight away; Search loads the latest data
-// again (for when something looks out of date). Date defaults to the 1st of
+// tab has its own filters (tick as many as needed; none ticked = all), on the
+// column titles of the table (click a title to filter):
+//   HQ vehicle:     Type (fleet card or cash), driver, vehicle
+//   Estate machine: machine type, machine, location
+// The date range sits at the top left of the table with a search icon next to
+// it. The report follows the filters straight away; the search icon loads the
+// latest data again (for when something looks out of date). Date defaults to the 1st of
 // this month – today. Print = tables (Jan – Dec litres and RM per person or
 // machine, average price per litre), see UsagePrint.js.
 // With a driver or fleet card filter every vehicle with matching receipts is
@@ -286,6 +288,24 @@ export default function DieselUsage() {
     .filter((v) => (!typeF.length || typeF.includes(v.machine_type || 'No type')) && (!locF.length || locF.includes(locKey(v))))
     .map((v) => ({ value: v.id, label: vehicleLabel(v) }))
 
+  // ---- Filters sit on the column titles (click a title to filter)
+  const pickType = (v) => {
+    setTypeF(v)
+    setMachineF((m) => m.filter((id) => !v.length || v.includes(vById.get(id)?.machine_type || 'No type')))
+  }
+  const pickLoc = (v) => {
+    setLocF(v)
+    setMachineF((m) => m.filter((id) => !v.length || (vById.get(id) && v.includes(locKey(vById.get(id))))))
+  }
+  const F = {
+    card: (label = 'Type') => <MultiPick head label={label} allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={pickCards} />,
+    driver: (label = 'Driver') => <MultiPick head label={label} allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />,
+    vehicle: (label = 'Vehicle') => <MultiPick head label={label} allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />,
+    type: (label = 'Type') => <MultiPick head label={label} allLabel="All types" options={typeOpts} value={typeF} onChange={pickType} />,
+    machine: (label = 'Machine') => <MultiPick head label={label} allLabel="All machines" options={machineOpts} value={machineF} onChange={setMachineF} />,
+    loc: (label = 'Location') => (locations.length ? <MultiPick head label={label} allLabel="All locations" options={locOpts} value={locF} onChange={pickLoc} /> : label)
+  }
+
   // ---- Receipts that pass the filters of the tab
   const A = draft
   const inRange = (d) => (!A.from || d >= A.from) && (!A.to || d <= A.to)
@@ -394,6 +414,7 @@ export default function DieselUsage() {
           who: f.driver ? who(f.driver) : 'No driver recorded',
           vehicle: v ? regOf(v) : 'No vehicle',
           general: Boolean(v?.general_use),
+          type: f.source === 'cash' ? 'Cash' : 'Fleet card',
           receipt: f.receipt_no || '',
           litres: Number(f.litres || 0),
           amount: Number(f.amount || 0),
@@ -414,6 +435,7 @@ export default function DieselUsage() {
         const type = v?.machine_type || 'No type'
         add(type, type, type, {
           id: f.id,
+          type,
           date: f.fill_date,
           who: v ? vehicleLabel(v) : 'No machine recorded',
           vehicle: locations.find((l) => l.id === v?.location_id)?.name || '',
@@ -450,7 +472,8 @@ export default function DieselUsage() {
           title: 'Reports',
           hq: tab === 'hq',
           groups: detailGroups,
-          receipts: claimed.map((r) => ({ ...r, url: urls[r.photo] || '', pdf: /\.pdf$/i.test(r.photo) })),
+          // a receipt with nothing attached gets no page (no "No receipt" sheet in the printout)
+          receipts: claimed.filter((r) => r.photo).map((r) => ({ ...r, url: urls[r.photo] || '', pdf: /\.pdf$/i.test(r.photo) })).filter((r) => r.url || r.pdf),
           lines: [
             `${company.name} · ${tab === 'hq' ? 'HQ Vehicle' : 'Estate Machinery'}`,
             `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'}`,
@@ -552,72 +575,30 @@ export default function DieselUsage() {
               <span className="flex-1 rounded-tr-2xl bg-slate-50/60" />
             </div>
 
-            <div className="border-b border-slate-200 p-3" data-noprint>
-              <div
-                className={`grid gap-3 sm:grid-cols-2 ${
-                  tab === 'hq'
-                    ? 'lg:grid-cols-[minmax(0,1.7fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_auto]' // fleet card widest, driver narrower
-                    : 'lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)_auto]'
-                }`}
+            {/* Date range at the top left of the table, the search (reload) icon next to it; the
+                other filters are on the column titles. Chart view has no column for the fleet card
+                (HQ) or the location (estate), so those sit here too. */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2.5" data-noprint>
+              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} h-10 w-40 rounded-xl px-2 text-sm`} aria-label="From date" />
+              <span className="text-sm text-slate-400">to</span>
+              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`${inputCls} h-10 w-40 rounded-xl px-2 text-sm`} aria-label="To date" />
+              <button
+                type="button"
+                onClick={search}
+                disabled={searching}
+                title="Search (load the latest data again)"
+                aria-label="Search"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white hover:opacity-90 disabled:opacity-60"
               >
-                {tab === 'hq' ? (
-                  <>
-                    <div>
-                      <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={pickCards} />
-                      {!cardOpts.some((o) => o.value !== 'cash') && (
-                        <p className="mt-1 text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</p>
-                      )}
-                    </div>
-                    <MultiPick label="Driver" allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />
-                    <MultiPick label="Vehicle" allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />
-                  </>
-                ) : (
-                  <>
-                    <MultiPick
-                      label="Machine type"
-                      allLabel="All types"
-                      options={typeOpts}
-                      value={typeF}
-                      onChange={(v) => {
-                        setTypeF(v)
-                        setMachineF((m) => m.filter((id) => !v.length || v.includes(vById.get(id)?.machine_type || 'No type')))
-                      }}
-                    />
-                    <MultiPick label="Machine" allLabel="All machines" options={machineOpts} value={machineF} onChange={setMachineF} />
-                    {locations.length > 0 ? (
-                      <MultiPick
-                        label="Location"
-                        allLabel="All locations"
-                        options={locOpts}
-                        value={locF}
-                        onChange={(v) => {
-                          setLocF(v)
-                          setMachineF((m) => m.filter((id) => !v.length || (vById.get(id) && v.includes(locKey(vById.get(id))))))
-                        }}
-                      />
-                    ) : (
-                      <span className="hidden lg:block" />
-                    )}
-                  </>
-                )}
-                <div>
-                  <span className="mb-1 block text-xs font-semibold text-slate-600">Date</span>
-                  <div className="flex items-center gap-2">
-                    <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} h-12 min-w-0 flex-1 rounded-xl px-2 text-sm`} aria-label="From date" />
-                    <span className="text-sm text-slate-400">to</span>
-                    <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`${inputCls} h-12 min-w-0 flex-1 rounded-xl px-2 text-sm`} aria-label="To date" />
-                  </div>
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={search} disabled={searching} className="h-12 w-full lg:w-auto" title="Load the latest data again">
-                    <IconSearch width={18} height={18} /> {searching ? 'Loading…' : 'Search'}
-                  </Button>
-                </div>
-              </div>
+                <IconSearch width={18} height={18} className={searching ? 'animate-pulse' : ''} />
+              </button>
+              {view !== 'table' && tab === 'hq' && <span className="ml-2">{F.card('Fleet card')}</span>}
+              {view !== 'table' && tab !== 'hq' && locations.length > 0 && <span className="ml-2">{F.loc()}</span>}
+              {tab === 'hq' && !cardOpts.some((o) => o.value !== 'cash') && <span className="text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</span>}
             </div>
 
             {view === 'table' ? (
-              <DetailTable groups={detailGroups} total={detailTotal} hq={tab === 'hq'} />
+              <DetailTable groups={detailGroups} total={detailTotal} hq={tab === 'hq'} F={F} />
             ) : (
             <>
             <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-2 text-[11px] text-slate-600">
@@ -660,8 +641,8 @@ export default function DieselUsage() {
                 <table className="w-full min-w-[980px] text-sm">
                   <thead>
                     <tr className="border-y border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="w-44 px-4 py-2">Vehicle reg no.</th>
-                      <th className="w-40 px-3 py-2">Driver</th>
+                      <th className="w-44 px-4 py-2">{F.vehicle('Vehicle reg no.')}</th>
+                      <th className="w-40 px-3 py-2">{F.driver()}</th>
                       <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
                       <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
                     </tr>
@@ -697,25 +678,32 @@ export default function DieselUsage() {
                   </tbody>
                 </table>
               </div>
-            ) : listed.length === 0 ? (
-              <Empty>
-                {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length || A.locF.length
-                  ? 'No vehicle for this filter.'
-                  : tab === 'hq'
-                    ? 'No HQ vehicles yet. Tick "HQ vehicle" in Machinery Profile.'
-                    : 'No estate machines in Machinery Profile yet.'}
-              </Empty>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[980px] text-sm">
                   <thead>
                     <tr className="border-y border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="w-44 px-4 py-2">{tab === 'hq' ? 'Vehicle reg no.' : 'Machine'}</th>
-                      <th className="w-40 px-3 py-2">{tab === 'hq' ? 'Driver' : 'Type'}</th>
+                      <th className="w-44 px-4 py-2">{tab === 'hq' ? F.vehicle('Vehicle reg no.') : F.machine()}</th>
+                      <th className="w-40 px-3 py-2">{tab === 'hq' ? F.driver() : F.type()}</th>
                       <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
                       <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
                     </tr>
                   </thead>
+                  {listed.length === 0 && (
+                    <tbody>
+                      <tr>
+                        <td colSpan={4}>
+                          <Empty>
+                            {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length || A.locF.length
+                              ? 'No vehicle for this filter.'
+                              : tab === 'hq'
+                                ? 'No HQ vehicles yet. Tick "HQ vehicle" in Machinery Profile.'
+                                : 'No estate machines in Machinery Profile yet.'}
+                          </Empty>
+                        </td>
+                      </tr>
+                    </tbody>
+                  )}
                   <tbody>
                     {listed.map((v) => (
                       <VehicleRow
@@ -743,24 +731,42 @@ export default function DieselUsage() {
 
 // Table view: groups (fleet card / cash, or machine type) with their receipts,
 // a subtotal per group and the total.
-function DetailTable({ groups, total, hq }) {
-  if (!groups.length) return <Empty>No fuel usage for this filter.</Empty>
-  const cols = hq ? 7 : 6
+function DetailTable({ groups, total, hq, F }) {
+  // Type (fleet card / cash, or machine type) first and narrow; every other column the same width.
+  const cols = hq ? 8 : 7
   const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const even = `${(90 / (cols - 1)).toFixed(3)}%`
+  const span = hq ? 5 : 4
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[860px] text-sm">
+      <table className="w-full min-w-[960px] table-fixed text-sm">
+        <colgroup>
+          <col style={{ width: '10%' }} />
+          {Array.from({ length: cols - 1 }, (_, i) => (
+            <col key={i} style={{ width: even }} />
+          ))}
+        </colgroup>
         <thead>
           <tr className="border-y border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <th className="w-32 px-4 py-2">Date</th>
-            <th className="px-3 py-2">{hq ? 'Driver' : 'Machine'}</th>
-            <th className="px-3 py-2">{hq ? 'Vehicle' : 'Location'}</th>
-            {hq && <th className="px-3 py-2">Receipt no.</th>}
-            <th className="w-28 px-3 py-2 text-right">Litres</th>
-            <th className="w-32 px-3 py-2 text-right">Amount (RM)</th>
-            <th className="w-[24%] px-3 py-2">Remark</th>
+            <th className="px-4 py-2">{hq ? F.card() : F.type()}</th>
+            <th className="px-3 py-2">Date</th>
+            <th className="px-3 py-2">{hq ? F.driver() : F.machine()}</th>
+            <th className="px-3 py-2">{hq ? F.vehicle() : F.loc()}</th>
+            {hq && <th className="px-3 py-2">Claim no.</th>}
+            <th className="px-3 py-2 text-right">Litres</th>
+            <th className="px-3 py-2 text-right">Amount (RM)</th>
+            <th className="px-3 py-2">Remark</th>
           </tr>
         </thead>
+        {groups.length === 0 && (
+          <tbody>
+            <tr>
+              <td colSpan={cols}>
+                <Empty>No fuel usage for this filter.</Empty>
+              </td>
+            </tr>
+          </tbody>
+        )}
         {groups.map((g) => {
           const l = g.rows.reduce((s, r) => s + r.litres, 0)
           const a = g.rows.reduce((s, r) => s + r.amount, 0)
@@ -776,20 +782,27 @@ function DetailTable({ groups, total, hq }) {
               </tr>
               {g.rows.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100 align-top">
-                  <td className="whitespace-nowrap px-4 py-2 text-slate-600">{day(r.date)}</td>
-                  <td className="px-3 py-2 text-slate-800">{r.who}</td>
-                  <td className="px-3 py-2 text-slate-700">
+                  <td className="px-4 py-2">
+                    {hq ? (
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.type === 'Cash' ? 'bg-amber-50 text-amber-800' : 'bg-sky-50 text-sky-800'}`}>{r.type}</span>
+                    ) : (
+                      <span className="text-slate-600">{r.type}</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{day(r.date)}</td>
+                  <td className="break-words px-3 py-2 text-slate-800">{r.who}</td>
+                  <td className="break-words px-3 py-2 text-slate-700">
                     {r.vehicle}
                     {r.general && <span className="ml-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">general</span>}
                   </td>
-                  {hq && <td className="px-3 py-2 text-slate-500">{r.receipt || '—'}</td>}
+                  {hq && <td className="px-3 py-2 text-slate-500">{r.claimNo || '—'}</td>}
                   <td className="px-3 py-2 text-right tabular-nums">{n2(r.litres)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{n2(r.amount)}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.remark || ''}</td>
+                  <td className="break-words px-3 py-2 text-slate-600">{r.remark || ''}</td>
                 </tr>
               ))}
               <tr className="border-t border-slate-200 font-semibold">
-                <td colSpan={hq ? 4 : 3} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
+                <td colSpan={span} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
                   Subtotal
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{n2(l)}</td>
@@ -799,16 +812,18 @@ function DetailTable({ groups, total, hq }) {
             </tbody>
           )
         })}
-        <tfoot>
-          <tr className="bg-slate-100 font-bold">
-            <td colSpan={hq ? 4 : 3} className="px-4 py-2.5 text-right text-xs uppercase tracking-wide text-slate-600">
-              Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
-            </td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.litres)}</td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.amount)}</td>
-            <td />
-          </tr>
-        </tfoot>
+        {groups.length > 0 && (
+          <tfoot>
+            <tr className="bg-slate-100 font-bold">
+              <td colSpan={span} className="px-4 py-2.5 text-right text-xs uppercase tracking-wide text-slate-600">
+                Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.litres)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.amount)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   )
