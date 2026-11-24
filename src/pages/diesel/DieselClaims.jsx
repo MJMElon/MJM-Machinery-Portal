@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconClock, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
+import { IconBell, IconClock, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
-import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPeople, listVehicles, personLabel, removeReceipt } from '../../lib/diesel.js'
+import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPeople, listVehicles, personLabel, remindApprovers, removeReceipt } from '../../lib/diesel.js'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
@@ -141,6 +141,30 @@ export default function DieselClaims() {
     }
   }
 
+  // Bell: remind the approvers of a pending claim (an email, once a day).
+  const [note, setNote] = useState('')
+  async function remind(c) {
+    setBusyId(c.id)
+    setError('')
+    setNote('')
+    try {
+      const r = await remindApprovers(c.id)
+      setNote(
+        r === 'sent'
+          ? `Reminder sent to the approver of claim ${claimNo(c, 0)}.`
+          : r === 'already'
+          ? `The approver of claim ${claimNo(c, 0)} was already reminded today.`
+          : r === 'off'
+          ? 'Email is not set up yet, so no reminder could be sent.'
+          : 'No approver with an email address is set for you yet.'
+      )
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const canEdit = (c) => ['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'edit')
   const canDelete = (c) => (['pending', 'draft'].includes(c.status) && c.claimant_id === user.id && access.can('claims', 'delete')) || isSuperAdmin
 
@@ -164,6 +188,14 @@ export default function DieselClaims() {
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {note && (
+        <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800">
+          <IconBell width={16} height={16} /> {note}
+          <button type="button" className="ml-auto text-xs text-emerald-700 hover:underline" onClick={() => setNote('')}>
+            Close
+          </button>
+        </p>
+      )}
 
       {!loading && <FuelDashboard lines={liveLines} />}
 
@@ -175,17 +207,17 @@ export default function DieselClaims() {
           <Empty>No claims yet. Press New claim after filling up.</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[960px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-20 py-2.5 pl-5 pr-3">No.</th>
                   <th className="w-32 px-3 py-2.5">Date</th>
                   <th className="w-40 px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Description</th>
-                  <th className="w-28 px-3 py-2.5 text-right">Litre</th>
-                  <th className="w-40 px-3 py-2.5 text-right">Total fuel expenses</th>
-                  <th className="w-44 px-3 py-2.5 text-right">Claim payable amount</th>
-                  <th className="w-40 px-3 py-2.5 text-center">Action</th>
+                  <th className="w-24 px-3 py-2.5 text-right">Litre</th>
+                  <th className="w-32 px-3 py-2.5 text-right">Total fuel expenses</th>
+                  <th className="w-36 px-3 py-2.5 text-right">Claim payable amount</th>
+                  <th className="w-56 py-2.5 pl-6 pr-4 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -219,8 +251,9 @@ export default function DieselClaims() {
                       <td className="px-3 py-3 text-right tabular-nums align-middle">{num(cash.litres + sub.litres, 2)} L</td>
                       <td className="px-3 py-3 text-right tabular-nums align-middle">{money(cash.amount + sub.amount)}</td>
                       <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 align-middle">{money(cash.amount + reload.amount)}</td>
-                      <td className="px-3 py-3 align-middle">
+                      <td className="py-3 pl-6 pr-4 align-middle">
                         <div className="flex items-center justify-center gap-0.5">
+                          <ActionButton onClick={c.status === 'pending' ? () => remind(c) : null} label="Remind approver to approve" Icon={IconBell} disabled={busyId === c.id} />
                           <ActionButton to={`/diesel/claims/${c.id}`} label="View" Icon={IconEye} />
                           <ActionButton to={canEdit(c) ? `/diesel/claims/${c.id}/edit` : null} label="Edit" Icon={IconPencil} />
                           <ActionButton onClick={() => print(c)} label="Print" Icon={IconPrint} disabled={busyId === c.id} />

@@ -5,7 +5,9 @@
 // claim as it is now in the database, not on what the browser says:
 //   pending,  called by the claimant  → "New fuel claim to approve" to the
 //                                        claimant's approvers (Claim approval
-//                                        setting → Claims approved by)
+//                                        setting → Claims approved by);
+//                                        { remind: true } (the bell in My
+//                                        Claims) → a reminder, once a day
 //   approved, called by the reviewer  → "approved" to the claimant, and
 //                                        "ready to pay" to the accountants
 //   rejected, called by the reviewer  → "rejected" (with the reason) to the claimant
@@ -68,8 +70,11 @@ Deno.serve(async (req) => {
   if (!me) return reply({ error: 'Not signed in' }, 401)
 
   let claimId = ''
+  let remind = false
   try {
-    claimId = String((await req.json())?.claim_id ?? '')
+    const body = await req.json()
+    claimId = String(body?.claim_id ?? '')
+    remind = body?.remind === true
   } catch {
     // empty body
   }
@@ -85,7 +90,8 @@ Deno.serve(async (req) => {
   let stamp = ''
   if (claim.status === 'pending' && claim.claimant_id === me.id) {
     event = 'submitted'
-    stamp = String(claim.created_at)
+    // The claimant's bell in My Claims: a reminder to the approvers, once a day.
+    stamp = remind ? `reminder:${new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)}` : String(claim.created_at)
   } else if (['approved', 'rejected', 'paid'].includes(claim.status) && claim.reviewed_by === me.id) {
     event = claim.status
     stamp = String(claim.reviewed_at)
@@ -135,8 +141,15 @@ Deno.serve(async (req) => {
       .map((r) => r.user_id)
     mails.push([
       approvers,
-      `New fuel claim #${no} from ${claimant} to approve`,
-      page({ company: companyName, heading: 'New fuel claim to approve', intro: `${claimant} has submitted a fuel claim. You are their approver.`, rows, button: 'Review claim', link: link(`/diesel/claims/${claimId}?from=review`) }),
+      remind ? `Reminder: fuel claim #${no} from ${claimant} is waiting for your approval` : `New fuel claim #${no} from ${claimant} to approve`,
+      page({
+        company: companyName,
+        heading: remind ? 'Fuel claim waiting for your approval' : 'New fuel claim to approve',
+        intro: remind ? `${claimant} is asking you to approve this fuel claim. You are their approver.` : `${claimant} has submitted a fuel claim. You are their approver.`,
+        rows,
+        button: 'Review claim',
+        link: link(`/diesel/claims/${claimId}?from=review`),
+      }),
     ])
   } else {
     const by = nameOf(claim.reviewed_by)
