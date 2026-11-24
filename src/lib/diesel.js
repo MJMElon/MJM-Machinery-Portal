@@ -553,7 +553,7 @@ export async function saveCard(companyId, { id, ...fields }) {
 }
 export async function deleteCard(id) {
   const { error } = await supabase.from(DIESEL.cards).delete().eq('id', id)
-  if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Cancelled instead.' })
+  if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Inactive instead (Edit in Fleet card details).' })
 }
 
 // ---- fleet card top-up requests ----------------------------------------------
