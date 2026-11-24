@@ -147,12 +147,24 @@ export function Modal({ open, onClose, title, children, wide = false }) {
     >
       <div
         className={cx(
-          'max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl',
+          'relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl',
           wide ? 'max-w-2xl sm:p-6' : 'max-w-app'
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {title && <h3 className="mb-3 text-base font-bold text-slate-800">{title}</h3>}
+        {/* X: close the window */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Close"
+          title="Close"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+        {title && <h3 className="mb-3 pr-9 text-base font-bold text-slate-800">{title}</h3>}
         {children}
       </div>
     </div>

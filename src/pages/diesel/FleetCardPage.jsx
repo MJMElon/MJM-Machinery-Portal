@@ -272,6 +272,7 @@ export default function FleetCardPage({ mode }) {
         ledger={ledger}
         reload={load}
         startEdit={mode === "edit"}
+        companyTag={params.get("cons") === "1" ? company.short_name || company.code || company.name : null}
       />
     );
 
