@@ -13,7 +13,8 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 
 export const claimNo = (c, i) => (c.claim_no != null ? String(c.claim_no).padStart(3, '0') : String(i + 1))
 
-// A draft is kept 30 days from its last save, then deleted for good
+// A draft is kept 30 days from its last save, then deleted for good (not a
+// draft made from an approved top-up request: migration 20261218)
 // (here when the claimant opens the page, and every night in the database:
 // migration 20261215).
 export const DRAFT_DAYS = 30
@@ -44,7 +45,7 @@ export default function DieselClaims() {
       let [c, p, v, cs] = await Promise.all([listClaims(company.id, { mine: user.id }), [], listVehicles(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
       let ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
       // Drafts past 30 days: deleted with their receipt photos.
-      const expired = c.filter((x) => x.status === 'draft' && draftDaysLeft(x) <= 0)
+      const expired = c.filter((x) => x.status === 'draft' && !x.topup_request_id && draftDaysLeft(x) <= 0)
       if (expired.length) {
         const gone = new Set()
         for (const x of expired) {
@@ -56,7 +57,7 @@ export default function DieselClaims() {
             /* the nightly clean-up in the database takes it */
           }
         }
-        c = c.filter((x) => !gone.has(x.id) && !(x.status === 'draft' && draftDaysLeft(x) <= 0))
+        c = c.filter((x) => !gone.has(x.id) && !(x.status === 'draft' && !x.topup_request_id && draftDaysLeft(x) <= 0))
         ls = ls.filter((l) => !gone.has(l.claim_id))
       }
       setDocs(await listPaymentDocs(c.filter((x) => x.status === 'paid').map((x) => x.id)).catch(() => ({})))
@@ -278,6 +279,7 @@ export default function DieselClaims() {
 
 /** "12 days left" next to a draft; red in the last 5 days. */
 export function DraftCountdown({ claim }) {
+  if (claim.topup_request_id) return null // a draft from an approved top-up request is kept
   const left = Math.max(draftDaysLeft(claim), 0)
   const label = left <= 1 ? 'Last day' : `${left} days left`
   return (
