@@ -21,8 +21,8 @@ export const FUEL_TYPES = [
 ]
 export const CLAIM_STATUS = {
   draft: { label: 'Draft', color: 'slate' },
-  pending: { label: 'Pending', color: 'amber' },
-  approved: { label: 'Approved', color: 'green' },
+  pending: { label: 'Pending for approval', color: 'amber' },
+  approved: { label: 'Pending for reimbursement', color: 'green' },
   rejected: { label: 'Rejected', color: 'red' },
   paid: { label: 'Paid', color: 'blue' }
 }
@@ -386,6 +386,44 @@ export async function openReceipt(path) {
   window.open(data.signedUrl, '_blank', 'noopener')
 }
 
+// ---- payment documents of a paid claim (bank slip etc.; migration 20261216) ----
+const PAY_DOCS = 'machinery_claim_payment_docs'
+
+/** Payment documents of these claims: { claimId: [{ id, path, file_name }] }; {} before the migration. */
+export async function listPaymentDocs(claimIds) {
+  if (!claimIds?.length) return {}
+  const out = {}
+  for (let i = 0; i < claimIds.length; i += 200) {
+    const { data, error } = await supabase.from(PAY_DOCS).select('id, claim_id, path, file_name, created_at').in('claim_id', claimIds.slice(i, i + 200)).order('created_at')
+    if (error) return out
+    for (const d of data || []) (out[d.claim_id] ||= []).push(d)
+  }
+  return out
+}
+
+/** Accountant: attach one payment document to an approved / paid claim. */
+export async function addPaymentDoc(claim, file) {
+  const upload = file.type.startsWith('image/') ? await compressReceipt(file) : file
+  if (upload.size > 10 * 1024 * 1024) throw new Error(`${file.name} is too big (max 10 MB).`)
+  const ext = upload.type === 'application/pdf' ? 'pdf' : upload.type === 'image/png' ? 'png' : upload.type === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${claim.company_id}/${claim.id}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(PAY_DOCS).upload(path, upload, { contentType: upload.type })
+  if (error) throw new Error(/bucket|not found/i.test(error.message) ? 'Run the SQL migration 20261216 (payment documents) first.' : `Could not upload ${file.name}.`)
+  const { data: me } = await supabase.auth.getUser()
+  const { error: e2 } = await supabase.from(PAY_DOCS).insert({ claim_id: claim.id, company_id: claim.company_id, path, file_name: file.name.slice(0, 200), uploaded_by: me?.user?.id })
+  if (e2) {
+    supabase.storage.from(PAY_DOCS).remove([path]).catch(() => {})
+    throw friendly(e2)
+  }
+}
+
+/** Signed link (10 min) to a payment document. */
+export async function paymentDocUrl(path) {
+  const { data, error } = await supabase.storage.from(PAY_DOCS).createSignedUrl(path, 600)
+  if (error || !data) throw new Error('Could not open the document.')
+  return data.signedUrl
+}
+
 // ---- fuel usage records (fuel issued to machines from the company tank) --------
 const FUEL_RECORDS = 'machinery_fuel_records'
 const RECORDS_SQL = { '42P01': 'Database not up to date. Run the SQL migration …fuel_usage_records.sql in Supabase.', PGRST205: 'Database not up to date. Run the SQL migration …fuel_usage_records.sql in Supabase.' }
@@ -524,8 +562,8 @@ export async function deleteCard(id) {
 // claimed on a fuel claim. See migration 20261206120000_fleet_card_topup_requests.sql.
 export const TOPUPS = 'machinery_fleet_topup_requests'
 export const TOPUP_STATUS = {
-  pending: { label: 'Pending', color: 'amber' },
-  approved: { label: 'Approved', color: 'green' },
+  pending: { label: 'Pending for approval', color: 'amber' },
+  approved: { label: 'Pending for reimbursement', color: 'green' },
   rejected: { label: 'Rejected', color: 'red' },
   cancelled: { label: 'Cancelled', color: 'slate' },
   topped_up: { label: 'Topped up', color: 'blue' }

@@ -9,6 +9,7 @@ import {
   deleteClaim,
   getClaim,
   getClaimLines,
+  listPaymentDocs,
   isReload,
   listClaimCards,
   listPeople,
@@ -25,6 +26,7 @@ import {
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { DraftCountdown, claimNo } from './DieselClaims.jsx'
+import { MarkPaidModal, PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
 
 // One fuel claim: title (claim no., created date, status), the receipt rows
 // and the totals. Top right: the claimant gets Print / Submit / Edit / Delete;
@@ -48,12 +50,15 @@ export default function ClaimView() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [rejecting, setRejecting] = useState(false)
+  const [paying, setPaying] = useState(false)
+  const [docs, setDocs] = useState([])
   const printedOnLoad = useRef(false)
 
   const load = useCallback(async () => {
     try {
       const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), listPeople(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
       if (!c) throw new Error('Claim not found (or you have no access to it).')
+      setDocs(c.status === 'paid' ? (await listPaymentDocs([c.id]).catch(() => ({})))[c.id] || [] : [])
       setClaim(c)
       setLines(ls)
       setVehicles(v)
@@ -144,7 +149,7 @@ export default function ClaimView() {
   ) : claim.status === 'approved' ? (
     <>
       {canPay && (
-        <Button disabled={busy} onClick={() => review('paid')}>
+        <Button disabled={busy} onClick={() => setPaying(true)}>
           Mark paid
         </Button>
       )}
@@ -183,6 +188,7 @@ export default function ClaimView() {
                 <span className="text-sm font-normal text-slate-500">Created on {day(claim.submitted_on || claim.fill_date)}</span>
                 <StatusBadge status={claim.status} />
                 {claim.status === 'draft' && <DraftCountdown claim={claim} />}
+                {claim.status === 'paid' && <PaymentDocsButton docs={docs} />}
               </span>
               </span>
             ) : (
@@ -353,6 +359,20 @@ export default function ClaimView() {
             )}
           </Card>
         </>
+      )}
+
+      {paying && (
+        <MarkPaidModal
+          claims={[claim]}
+          payableOf={() => payable}
+          claimNo={claimNo}
+          nameOf={() => claimantName}
+          onPaid={async () => {
+            await review('paid')
+            await load()
+          }}
+          onClose={() => setPaying(false)}
+        />
       )}
 
       {rejecting && (

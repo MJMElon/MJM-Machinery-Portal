@@ -5,8 +5,9 @@ import { Button, Card } from '../../components/ui.jsx'
 import { IconBell, IconClock, IconEye, IconPencil, IconPlus, IconPrint, IconTrash } from '../../components/icons.jsx'
 import { Empty, ErrorBox, Loading, StatusBadge } from '../../components/diesel/shared.jsx'
 import { FuelDashboard } from '../../components/diesel/FuelDashboard.jsx'
-import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPeople, listVehicles, personLabel, remindApprovers, removeReceipt } from '../../lib/diesel.js'
+import { CLAIM_STATUS, deleteClaim, isReload, listClaimCards, listClaimLines, listClaims, listPaymentDocs, listPeople, listVehicles, personLabel, remindApprovers, removeReceipt } from '../../lib/diesel.js'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
+import { PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
@@ -36,6 +37,7 @@ export default function DieselClaims() {
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [toReview, setToReview] = useState(0)
+  const [docs, setDocs] = useState({}) // payment documents of paid claims
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +59,7 @@ export default function DieselClaims() {
         c = c.filter((x) => !gone.has(x.id) && !(x.status === 'draft' && draftDaysLeft(x) <= 0))
         ls = ls.filter((l) => !gone.has(l.claim_id))
       }
+      setDocs(await listPaymentDocs(c.filter((x) => x.status === 'paid').map((x) => x.id)).catch(() => ({})))
       setClaims(c)
       setLines(ls)
       setVehicles(v)
@@ -207,12 +210,12 @@ export default function DieselClaims() {
           <Empty>No claims yet. Press New claim after filling up.</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-sm">
+            <table className="w-full min-w-[1040px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-20 py-2.5 pl-5 pr-3">No.</th>
                   <th className="w-32 px-3 py-2.5">Date</th>
-                  <th className="w-40 px-3 py-2.5">Status</th>
+                  <th className="w-56 px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Description</th>
                   <th className="w-24 px-3 py-2.5 text-right">Litre</th>
                   <th className="w-32 px-3 py-2.5 text-right">Total fuel expenses</th>
@@ -238,6 +241,7 @@ export default function DieselClaims() {
                         <span className="inline-flex items-center gap-2">
                           <StatusBadge status={c.status} />
                           {c.status === 'draft' && <DraftCountdown claim={c} />}
+                          {c.status === 'paid' && <PaymentDocsButton docs={docs[c.id]} />}
                         </span>
                       </td>
                       <td className="px-3 py-3 align-middle">
