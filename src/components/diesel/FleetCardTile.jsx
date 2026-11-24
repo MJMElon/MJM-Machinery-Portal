@@ -63,6 +63,9 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to, co
               <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
             </div>
           )}
+          {card.auto_topup && card.auto_topup_below != null && (
+            <p className="text-[10px] font-medium text-emerald-700">Auto top-up below {money(card.auto_topup_below)}</p>
+          )}
           {balance != null && (
             <div className="flex justify-between gap-2">
               <span>Card balance</span>

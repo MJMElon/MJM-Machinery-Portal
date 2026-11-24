@@ -7,7 +7,7 @@ import { FleetCardTile } from '../../components/diesel/FleetCardTile.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
 import { StatementImportModal } from '../../components/diesel/StatementImport.jsx'
 import { NewTopupModal } from '../../components/diesel/TopupRequests.jsx'
-import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
+import { CARD_CHECKLIST, autoTopupCheck, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
 import { thisMonth } from '../../lib/format.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -63,6 +63,8 @@ export default function FleetCardManage() {
   const load = useCallback(async () => {
     try {
       const list = [company, ...(showAll ? sisters : [])]
+      // automatic top-up requests that are due go out now (quietly; also every hour in the database)
+      await Promise.all(list.map((co) => autoTopupCheck(co.id)))
       const [im, ...loaded] = await Promise.all([lastImports(company.id), ...list.map(loadCompany)])
       setImports(im)
       setGroups(loaded)

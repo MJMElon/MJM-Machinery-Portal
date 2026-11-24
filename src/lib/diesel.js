@@ -556,6 +556,25 @@ export async function deleteCard(id) {
   if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Inactive instead (Edit in Fleet card details).' })
 }
 
+// ---- automatic top-up requests (migration 20261220) ------------------------------
+/** Procurement: switch a card's automatic top-up request on / off with its amounts. */
+export async function setAutoTopup(cardId, on, below, amount) {
+  const { error } = await supabase.rpc('machinery_set_auto_topup', {
+    p_card: cardId,
+    p_on: on,
+    p_below: below === '' || below == null ? null : round(below, 2),
+    p_amount: amount === '' || amount == null ? null : round(amount, 2)
+  })
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migration 20261220 (automatic top-up) first.')
+    throw friendly(error)
+  }
+}
+/** Check the cards of a company and send the automatic top-up requests that are due (quietly). */
+export function autoTopupCheck(companyId) {
+  return supabase.rpc('machinery_auto_topup_check', { p_company: companyId }).then(({ data }) => data || 0, () => 0)
+}
+
 // ---- fleet card top-up requests ----------------------------------------------
 // Request (Pending) → an approver of the requester approves / rejects → the
 // approved request is printed for the office → Topped up → the reload is
