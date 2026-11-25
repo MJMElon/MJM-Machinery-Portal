@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Select, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { MACHINE_STATUS, coverState, deleteMachine, listMachines, listPortalPeople, machineNo, machineStatus, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
+import { coverState, deleteMachine, listMachines, listPortalPeople, machineNo, machineStatus, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
 import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -12,6 +12,20 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 // the vehicles for claims, fleet cards and fill-ups. Each row opens a full
 // profile page (particulars, insurance / road tax / Puspakom, photos, files,
 // drivers). Rows marked "general use" are offered to everyone in fuel claims.
+// Listing tabs. Active machines are split by the "HQ vehicle" tick.
+const LIST_TABS = {
+  estate: { label: 'Estate machinery' },
+  hq: { label: 'HQ vehicle' },
+  inactive: { label: 'Inactive' },
+  insurance_only: { label: 'Insurance only' }
+}
+function inListTab(m, tab) {
+  const st = machineStatus(m)
+  if (tab === 'estate') return st === 'active' && !m.hq_vehicle
+  if (tab === 'hq') return st === 'active' && Boolean(m.hq_vehicle)
+  return st === tab
+}
+
 export default function MachineryProfile() {
   const { current } = useCompany()
   const navigate = useNavigate()
@@ -21,7 +35,9 @@ export default function MachineryProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState('active') // active | inactive | insurance_only, like the old CMMS tabs
+  // Tabs: Estate machinery (active, not HQ) · HQ vehicle (active, HQ vehicle tick)
+  // · Inactive (estate and HQ together) · Insurance only
+  const [tab, setTab] = useState('estate')
   const [locations, setLocations] = useState([])
   const [loc, setLoc] = useState('') // '' = all, 'none' = without a location, else a location id
   const [busyId, setBusyId] = useState(null)
@@ -55,10 +71,10 @@ export default function MachineryProfile() {
   const locationName = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations])
   const countIn = (id) => rows.filter((m) => (id === 'none' ? !locationName.has(m.location_id) : m.location_id === id)).length
 
-  const countStatus = (s) => rows.filter((m) => machineStatus(m) === s).length
+  const countStatus = (k) => rows.filter((m) => inListTab(m, k)).length
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    const inTab = rows.filter((m) => machineStatus(m) === tab)
+    const inTab = rows.filter((m) => inListTab(m, tab))
     const inLoc = !loc || !hasLocations ? inTab : inTab.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
     if (!t) return inLoc
     return inLoc.filter((m) =>
@@ -116,9 +132,9 @@ export default function MachineryProfile() {
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
       <Card className="overflow-hidden">
-        {/* Status tabs, like the old CMMS: Active / Inactive / Insurance Only */}
-        <div className="flex border-b border-slate-200 bg-slate-50/60">
-          {Object.entries(MACHINE_STATUS).map(([k, v]) => (
+        {/* Tabs: Estate machinery / HQ vehicle / Inactive / Insurance only */}
+        <div className="flex flex-wrap border-b border-slate-200 bg-slate-50/60">
+          {Object.entries(LIST_TABS).map(([k, v]) => (
             <button
               key={k}
               type="button"
@@ -155,7 +171,7 @@ export default function MachineryProfile() {
             <Spinner className="h-7 w-7" />
           </div>
         ) : shown.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (q.trim() ? 'Nothing matches the search.' : loc ? 'No machines or vehicles in this location.' : `No ${MACHINE_STATUS[tab].label.toLowerCase()} machines or vehicles.`) : 'No machines or vehicles yet.'}</p>
+          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (q.trim() ? 'Nothing matches the search.' : loc ? 'No machines or vehicles in this location.' : `Nothing under ${LIST_TABS[tab].label}.`) : 'No machines or vehicles yet.'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1120px] text-sm">
