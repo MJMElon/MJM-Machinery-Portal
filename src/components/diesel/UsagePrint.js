@@ -186,19 +186,36 @@ function usageVehicleHtml({ title, lines, groups, receipts }) {
   const all = groups.flatMap((g) => g.rows)
   const cols = '<colgroup><col style="width:12%" /><col style="width:13%" /><col style="width:10%" /><col style="width:9%" /><col style="width:13%" /><col /></colgroup>'
   const head = '<tr class="h"><th>Receipt date</th><th>Receipt no.</th><th class="r">Litre</th><th class="r">RM/L</th><th class="r">Total amount (RM)</th><th>Remark</th></tr>'
+  // after a vehicle's last section: its totals per Bill to company (when it has any)
+  const vehicleBillTo = (key, title) => {
+    const rows = groups.filter((x) => x.vehicle?.key === key).flatMap((x) => x.rows)
+    if (!rows.some((r) => r.billTo)) return ''
+    const m = new Map()
+    for (const r of rows) {
+      const k = r.billTo || ''
+      const t = m.get(k) || { name: r.billTo || 'Not billed to another company', n: 0, litres: 0, amount: 0 }
+      t.n++; t.litres += r.litres; t.amount += r.amount
+      m.set(k, t)
+    }
+    const list = [...m.entries()].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))).map(([, t]) => t)
+    return `<table class="t vb"><colgroup><col /><col style="width:14%" /><col style="width:16%" /><col style="width:20%" /></colgroup>
+    <thead><tr class="sec"><th colspan="4">${esc(title || '')} · total by company</th></tr></thead><tbody>${list
+      .map((t) => `<tr><td>${t.name.startsWith('Not billed') ? esc(t.name) : `<b>${esc(t.name)}</b>`}</td><td class="r">${t.n}</td><td class="r">${fmt(t.litres, 2)} L</td><td class="r b">RM ${fmt(t.amount, 2)}</td></tr>`)
+      .join('')}<tr class="sub"><td>Vehicle total</td><td class="r">${rows.length}</td><td class="r">${fmt(sum(rows, 'litres'), 2)} L</td><td class="r">RM ${fmt(sum(rows, 'amount'), 2)}</td></tr></tbody></table>`
+  }
   const body = groups
     .map(
-      (g) => `${g.first ? `<h2>${esc(g.vehicle?.title || '')}${g.vehicle?.name ? ` <span>${esc(g.vehicle.name)}</span>` : ''}</h2>` : ''}
+      (g, gi) => `${g.first ? `<h2>${esc(g.vehicle?.title || '')}${g.vehicle?.name ? ` <span>${esc(g.vehicle.name)}</span>` : ''}</h2>` : ''}
   <table class="t ${g.kind === 'cash' ? 'cash' : 'card'}">${cols}
     <thead><tr class="sec"><th colspan="6">${esc(g.title)} <span>· ${g.rows.length} receipt${g.rows.length === 1 ? '' : 's'}</span></th></tr>${head}</thead>
     <tbody>${g.rows
       .map(
         (r) =>
-          `<tr><td>${esc(dd(r.date))}</td><td>${esc(r.receipt || '–')}</td><td class="r">${fmt(r.litres, 2)}</td><td class="r">${perL(r.litres, r.amount)}</td><td class="r b">${fmt(r.amount, 2)}</td><td>${r.billTo ? `<b>Bill to ${esc(r.billTo)}</b><br />` : ''}${r.remark ? `${esc(r.remark)}<br />` : ''}${r.from ? `<i>${esc(r.from)}</i>` : ''}</td></tr>`
+          `<tr><td>${esc(dd(r.date))}</td><td>${esc(r.receipt || '–')}</td><td class="r">${fmt(r.litres, 2)}</td><td class="r">${perL(r.litres, r.amount)}</td><td class="r b">${fmt(r.amount, 2)}</td><td>${r.from ? `<i>${esc(r.from)}</i><br />` : ''}${r.billTo ? `<b>Bill to ${esc(r.billTo)}</b><br />` : ''}${r.remark ? esc(r.remark) : ''}</td></tr>`
       )
       .join('')}
     <tr class="sub"><td colspan="2" class="r">Subtotal</td><td class="r">${fmt(sum(g.rows, 'litres'), 2)}</td><td class="r">${perL(sum(g.rows, 'litres'), sum(g.rows, 'amount'))}</td><td class="r">${fmt(sum(g.rows, 'amount'), 2)}</td><td></td></tr></tbody>
-  </table>`
+  </table>${groups[gi + 1]?.vehicle?.key !== g.vehicle?.key ? vehicleBillTo(g.vehicle?.key, g.vehicle?.title) : ''}`
     )
     .join('')
   return `<!doctype html>
@@ -222,6 +239,8 @@ h2 span { font-size: 9px; font-weight: 500; color: #6b7280; }
 .t tr.sec th span { font-weight: 500; color: #4b5563; }
 .t.card tr.sec th { background: #e0f2fe; color: #0c4a6e; }
 .t.cash tr.sec th { background: #fef3c7; color: #78350f; }
+.t.vb { width: 62%; margin-left: auto; }
+.t.vb tr.sec th { background: #f1f5f9; color: #334155; }
 .t tr.h th { font-weight: 600; color: #475569; border-bottom: 1px solid #cbd5e1; }
 .t td { border-bottom: 1px solid #e5e7eb; }
 .t .r { text-align: right; font-variant-numeric: tabular-nums; }

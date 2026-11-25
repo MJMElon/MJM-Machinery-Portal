@@ -416,7 +416,6 @@ export default function DieselUsage() {
   // no., litre, RM/L, total amount and the remark (the receipt's own remark,
   // e.g. the other company to charge, then company · claim no. · claimant).
   // Estate: every diesel record, grouped by machine type.
-  const coShort = company.short_name || company.code || company.name
   const detailGroups = (() => {
     const groups = new Map()
     const add = (key, title, order, row) => {
@@ -448,7 +447,8 @@ export default function DieselUsage() {
         row.cardNo = c?.card_no || ''
         // Bill to company chosen on the claim receipt (migration 20261229)
         row.billTo = f.bill_to_company_id ? billName(f.bill_to_company_id) : ''
-        row.from = f.fromClaim ? [coShort, f.claimNo ? `Claim ${f.claimNo}` : '', row.who].filter(Boolean).join(' · ') : f.driver ? row.who : ''
+        // no company name (the printout has the letterhead): claimed by the driver and the claim no.
+        row.from = f.fromClaim ? [`Claimed by ${row.who}`, f.claimNo ? `Claim ${f.claimNo}` : ''].filter(Boolean).join(' · ') : f.driver ? `Driver ${row.who}` : ''
         // one group per vehicle and kind: fleet card first, then cash
         const vk = f.vehicle_id || ''
         const vOrder = v ? `a${regOf(v)}` : 'zz'
@@ -922,7 +922,7 @@ function VehicleTable({ groups, total }) {
   if (!groups.length) return <Empty>No fuel usage for this filter.</Empty>
   return (
     <div className="space-y-4 p-4">
-      {groups.map((g) => (
+      {groups.map((g, gi) => (
         <div key={g.key}>
           {g.first && (
             <h3 className="mb-2 mt-2 flex items-baseline gap-2 border-b-2 border-slate-800 pb-1 first:mt-0">
@@ -954,11 +954,10 @@ function VehicleTable({ groups, total }) {
                     <td className="px-3 py-2 text-right tabular-nums text-slate-600">{perL(r)}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">{n2(r.amount)}</td>
                     <td className="break-words px-3 py-2">
-                      {r.billTo && (
-                        <span className="mb-0.5 inline-block rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-white">Bill to {r.billTo}</span>
-                      )}
-                      {r.remark && <span className="block text-slate-800">{r.remark}</span>}
+                      {/* claimed by · claim no., then the Bill to company and the note, as plain text */}
                       {r.from && <span className="block text-xs text-slate-500">{r.from}</span>}
+                      {r.billTo && <span className="block font-semibold text-slate-800">Bill to {r.billTo}</span>}
+                      {r.remark && <span className="block text-slate-700">{r.remark}</span>}
                     </td>
                   </tr>
                 ))}
@@ -974,6 +973,8 @@ function VehicleTable({ groups, total }) {
               </tbody>
             </table>
           </div>
+          {/* after the vehicle's last section: its totals per Bill to company */}
+          {groups[gi + 1]?.vehicle?.key !== g.vehicle?.key && <VehicleBillTo rows={groups.filter((x) => x.vehicle?.key === g.vehicle?.key).flatMap((x) => x.rows)} title={g.vehicle?.title} />}
         </div>
       ))}
       <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold">
@@ -984,6 +985,49 @@ function VehicleTable({ groups, total }) {
         <span className="tabular-nums">RM {n2(total.amount)}</span>
       </div>
       <BillToSummary rows={groups.flatMap((g) => g.rows)} />
+    </div>
+  )
+}
+
+// One vehicle: total per Bill to company (receipts without one = this company),
+// and the vehicle total. Only when some receipt of the vehicle has a Bill to.
+function VehicleBillTo({ rows, title }) {
+  if (!rows.some((r) => r.billTo)) return null
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const m = new Map()
+  for (const r of rows) {
+    const k = r.billTo || ''
+    const t = m.get(k) || { name: r.billTo || 'Not billed to another company', n: 0, litres: 0, amount: 0 }
+    t.n += 1
+    t.litres += r.litres
+    t.amount += r.amount
+    m.set(k, t)
+  }
+  const list = [...m.entries()].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))).map(([, t]) => t)
+  const all = list.reduce((t, x) => ({ n: t.n + x.n, litres: t.litres + x.litres, amount: t.amount + x.amount }), { n: 0, litres: 0, amount: 0 })
+  return (
+    <div className="mt-2 ml-auto max-w-xl overflow-hidden rounded-xl border border-slate-300 text-sm">
+      <p className="bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600">{title} · total by company</p>
+      <table className="w-full">
+        <tbody>
+          {list.map((t) => (
+            <tr key={t.name} className="border-t border-slate-100">
+              <td className={`px-3 py-1.5 ${t.name.startsWith('Not billed') ? 'text-slate-500' : 'font-semibold text-slate-800'}`}>{t.name}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
+                {t.n} {t.n === 1 ? 'receipt' : 'receipts'}
+              </td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{n2(t.litres)} L</td>
+              <td className="px-3 py-1.5 text-right font-semibold tabular-nums">RM {n2(t.amount)}</td>
+            </tr>
+          ))}
+          <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+            <td className="px-3 py-1.5">Vehicle total</td>
+            <td className="px-3 py-1.5 text-right tabular-nums">{all.n}</td>
+            <td className="px-3 py-1.5 text-right tabular-nums">{n2(all.litres)} L</td>
+            <td className="px-3 py-1.5 text-right tabular-nums">RM {n2(all.amount)}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   )
 }
