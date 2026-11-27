@@ -7,6 +7,7 @@ import { FleetCardTile } from '../../components/diesel/FleetCardTile.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
 import { StatementImportModal } from '../../components/diesel/StatementImport.jsx'
 import { NewTopupModal } from '../../components/diesel/TopupRequests.jsx'
+import { ReloadModal } from '../../components/diesel/CardModals.jsx'
 import { CARD_CHECKLIST, autoTopupCheck, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
 import { thisMonth } from '../../lib/format.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
@@ -48,6 +49,7 @@ export default function FleetCardManage() {
   const [imports, setImports] = useState(null) // statement import available (migration 20261212)
   const [importing, setImporting] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [opening, setOpening] = useState(false) // Opening balance: the card's RM balance when Fuel Manage starts
   const [sent, setSent] = useState('')
 
   const { companies } = useCompany()
@@ -154,6 +156,11 @@ export default function FleetCardManage() {
                 <IconConsolidate width={20} height={20} />
               </button>
             )}
+            {access.can('cards', 'add') && (
+              <Button variant="secondary" onClick={() => setOpening(true)} title="Enter a fleet card's balance on the day you start using Fuel Manage">
+                Opening balance
+              </Button>
+            )}
             {/* Only Procurement (and super admins) request top-ups */}
             {access.procurement && (
               <Button variant="secondary" onClick={() => setAsking(true)}>
@@ -166,6 +173,19 @@ export default function FleetCardManage() {
       <ErrorBox>{error}</ErrorBox>
       {sent && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-800">{sent}</p>}
       {importing && <StatementImportModal company={company} onClose={() => setImporting(false)} onDone={load} />}
+      {opening && (
+        <ReloadModal
+          company={company}
+          cards={mineGroup ? mineGroup.cards : []}
+          title="Opening balance"
+          reference="Opening balance"
+          onClose={() => setOpening(false)}
+          onSaved={() => {
+            setSent('Opening balance saved.')
+            load()
+          }}
+        />
+      )}
       {asking && (
         <NewTopupModal
           company={company}

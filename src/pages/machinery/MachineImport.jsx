@@ -50,7 +50,7 @@ const HEADINGS = {
 const TEMPLATE = [
   'Code', 'Registration No', 'Type', 'Brand', 'Model', 'Status', 'Serial No', 'Chasis No', 'Engine No', 'Market Value', 'ACC Code', 'Year Made',
   'Date Purchase', 'Purchase Price', 'Remarks', 'Ideal Fuel Consumption', 'Possible Working Units', 'Service Unit', 'Insurance From', 'Insurance To',
-  'Road Tax From', 'Road Tax To', 'Puspakom From', 'Puspakom To', 'Fuel', 'Tank Capacity', 'KPDN Diesel Subsidy', 'General Used Car'
+  'Road Tax From', 'Road Tax To', 'Puspakom From', 'Puspakom To', 'Fuel', 'Tank Capacity', 'KPDN Diesel Subsidy', 'General Used Car', 'HQ Vehicle'
 ]
 
 const norm = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -136,6 +136,15 @@ function rowToMachine(headers, row) {
   if (m.service_unit && /hour|hr/i.test(m.service_unit)) m.service_unit = 'Liter/Hour'
   else if (m.service_unit) m.service_unit = 'Liter/Km'
   if (m.year_made && (m.year_made < 1950 || m.year_made > 2100)) m.year_made = null
+  // Only the columns the file has: a column that is not in the file keeps what the machine already has
+  // (otherwise re-importing a file without "HQ Vehicle" would untick every HQ vehicle, etc.)
+  const has = (f) => headers.includes(f)
+  for (const k of Object.keys(m)) {
+    if (k === 'name') continue
+    const base = k.replace(/_(from|to)$/, '')
+    const inFile = has(k) || has(base) || (k === 'is_active' && has('status'))
+    if (!inFile) delete m[k]
+  }
   return m
 }
 

@@ -103,13 +103,14 @@ export function CardModal({ company, card, vehicles, onClose, onSaved }) {
   )
 }
 
-export function ReloadModal({ company, cards, onClose, onSaved }) {
+// title / reference: e.g. "Opening balance" at go-live (the card's real RM balance on that date)
+export function ReloadModal({ company, cards, onClose, onSaved, title = 'Record reload', reference = '', date }) {
   const usable = cards.filter((c) => !['cancelled', 'inactive'].includes(c.status))
-  const [f, setF] = useState({ card_id: usable[0]?.id || '', reload_date: today(), amount: '', reference: '' })
+  const [f, setF] = useState({ card_id: usable[0]?.id || '', reload_date: date || today(), amount: '', reference })
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
   const { busy, error, run } = useRun(onSaved, onClose)
   return (
-    <Modal open onClose={onClose} title="Record reload">
+    <Modal open onClose={onClose} title={title}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
