@@ -68,8 +68,11 @@ export function companiesWithIcon(d: MasterData): string[] {
 async function ensureUsers(db: any, users: IntranetUser[]): Promise<Map<string, string>> {
   const ids = new Map<string, string>()
   // Everyone who already has a portal row, in one query (the table is small)
-  const { data: rows } = await db.from('machinery_portal_admins').select('user_id, email, full_name')
-  const byEmail = new Map<string, { user_id: string; full_name: string | null }>()
+  let { data: rows, error: readErr } = await db.from('machinery_portal_admins').select('user_id, email, full_name, intranet_user_id')
+  if (readErr) ({ data: rows } = await db.from('machinery_portal_admins').select('user_id, email, full_name'))
+  const byEmail = new Map<string, { user_id: string; full_name: string | null; intranet_user_id?: string | null }>()
+  // Intranet accounts that already own a login here
+  const pinned = new Set<string>((rows ?? []).map((r: { intranet_user_id?: string | null }) => r.intranet_user_id).filter(Boolean) as string[])
   for (const r of rows ?? []) if (r.email) byEmail.set(String(r.email).trim().toLowerCase(), r)
   const upserts: { user_id: string; email: string; full_name: string | null }[] = []
   for (const u of users) {
@@ -98,6 +101,17 @@ async function ensureUsers(db: any, users: IntranetUser[]): Promise<Map<string, 
       ;({ error } = await db.from('machinery_portal_admins').upsert(upserts.map(({ user_id, email }) => ({ user_id, email })), { onConflict: 'user_id' }))
     }
     if (error) throw new Error(`portal users: ${error.message}`)
+  }
+  // Tie each login to its Intranet account now (not only at the first sign-in), so the
+  // sign-in check can refuse a different Intranet account that later shows the same e-mail.
+  if (!readErr) {
+    for (const u of users) {
+      const userId = ids.get(u.id)
+      const have = byEmail.get((u.email || '').trim().toLowerCase())
+      if (!userId || !u.id || pinned.has(u.id) || have?.intranet_user_id) continue
+      const { error } = await db.from('machinery_portal_admins').update({ intranet_user_id: u.id }).eq('user_id', userId).is('intranet_user_id', null)
+      if (!error) pinned.add(u.id)
+    }
   }
   return ids
 }

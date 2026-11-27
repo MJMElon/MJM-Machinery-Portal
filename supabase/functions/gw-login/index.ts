@@ -98,11 +98,8 @@ Deno.serve(async (req) => {
 
     async checkLink(email, intranetId) {
       const { data, error } = await db.rpc('machinery_check_intranet_login', { p_email: email, p_intranet_id: intranetId })
-      // Before migration 20261213 the check does not exist yet: sign in as before.
-      if (error) {
-        if (/machinery_check_intranet_login|PGRST202|42883/.test(`${error.code} ${error.message}`)) return 'ok'
-        throw error
-      }
+      // No check = no sign-in (it needs migration 20261213); never let someone in unchecked.
+      if (error) throw error
       return data === 'mismatch' || data === 'moved' ? data : 'ok'
     },
 
