@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Button, Card } from '../../components/ui.jsx'
-import { IconPlus } from '../../components/icons.jsx'
+import { IconConsolidate, IconPlus } from '../../components/icons.jsx'
 import { FleetCardTile } from '../../components/diesel/FleetCardTile.jsx'
 import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
 import { StatementImportModal } from '../../components/diesel/StatementImport.jsx'
-import { CARD_CHECKLIST, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
-import { useCompany } from '../../lib/CompanyContext.jsx'
-import { companyLabel } from '../../lib/companies.js'
+import { NewTopupModal } from '../../components/diesel/TopupRequests.jsx'
+import { ReloadModal } from '../../components/diesel/CardModals.jsx'
+import { CARD_CHECKLIST, autoTopupCheck, cardBalances, cardLedger, checklistDone, lastImports, listCardData, listVehicles } from '../../lib/diesel.js'
 import { thisMonth } from '../../lib/format.js'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 
-// Fleet Card Manage: every fleet card drawn as a small card (number, fuel
+// Fleet Card Manage (tabs Active / Inactive: inactive and cancelled cards are
+// kept for their history and listed apart): every fleet card drawn as a small card (number, fuel
 // station, vehicle, status) with this month's litres against the subsidy
 // quota and the RM balance; click a card to open it. The dashed card with
-// "+" starts a new fleet card application. "Consolidate" shows the cards of
-// every company under the same business (those the person may see), each
-// company on its own row; cards of another company open read-only.
+// "+" starts a new fleet card. "Request top up" opens the New Top Up Request
+// pop-up; the requests are approved in Claims Approval → Pending approval.
+// Procurement (Fuel Manage role) also gets "Consolidate": the fleet cards of
+// every company of the same business on one page, each card with the
+// company's short name in front of its number; cards of another company
+// open read-only (?co=).
 
 const CONSOLIDATE_KEY = 'fuel.cards.consolidate'
 const readFlag = () => {
@@ -38,29 +43,30 @@ async function loadCompany(co) {
 
 export default function FleetCardManage() {
   const { company, access } = useOutletContext()
-  const { companies } = useCompany()
-  const navigate = useNavigate()
-  const [groups, setGroups] = useState([]) // [{ company, cards, usage, vehicles, ledger }], this company first
+  const [groups, setGroups] = useState([]) // [{ company, cards, usage, vehicles, ledger }]
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [imports, setImports] = useState(null) // statement import available (migration 20261212)
   const [importing, setImporting] = useState(false)
-  const [consolidate, setConsolidate] = useState(readFlag)
+  const [asking, setAsking] = useState(false)
+  const [opening, setOpening] = useState(false) // Opening balance: the card's RM balance when Fuel Manage starts
+  const [sent, setSent] = useState('')
 
+  const { companies } = useCompany()
+  const [consolidate, setConsolidate] = useState(readFlag)
   // Companies under the same business as this one (active, with Fuel Manage)
-  const sisters = companies.filter(
-    (c) =>
-      c.id !== company.id &&
-      c.is_active !== false &&
-      c.diesel_enabled &&
-      (c.business_ids || []).some((b) => (company.business_ids || []).includes(b))
+  const sisters = (companies || []).filter(
+    (c) => c.id !== company.id && c.is_active !== false && c.diesel_enabled && (c.business_ids || []).some((b) => (company.business_ids || []).includes(b))
   )
   const sisterKey = sisters.map((c) => c.id).join(',')
-  const showAll = consolidate && sisters.length > 0
+  const canConsolidate = Boolean(access.procurement) && sisters.length > 0
+  const showAll = canConsolidate && consolidate
 
   const load = useCallback(async () => {
     try {
       const list = [company, ...(showAll ? sisters : [])]
+      // automatic top-up requests that are due go out now (quietly; also every hour in the database)
+      await Promise.all(list.map((co) => autoTopupCheck(co.id)))
       const [im, ...loaded] = await Promise.all([lastImports(company.id), ...list.map(loadCompany)])
       setImports(im)
       setGroups(loaded)
@@ -72,11 +78,6 @@ export default function FleetCardManage() {
     }
   }, [company, showAll, sisterKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    setLoading(true)
-    load()
-  }, [load])
-
   function toggle(on) {
     setConsolidate(on)
     try {
@@ -86,6 +87,15 @@ export default function FleetCardManage() {
     }
   }
 
+  useEffect(() => {
+    setLoading(true)
+    load()
+  }, [load])
+
+  // Tabs: Active (in use, applying, blocked) | Inactive (inactive or cancelled cards, kept for their history)
+  const [view, setView] = useState('active')
+  const isOff = (c) => ['inactive', 'cancelled'].includes(c.status)
+  const inView = (c) => (view === 'inactive' ? isOff(c) : !isOff(c))
   const month = thisMonth()
   const canAdd = access.can('cards', 'add')
   const grid = 'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-7'
@@ -98,31 +108,30 @@ export default function FleetCardManage() {
       g.ledger
         ? g.ledger.filter((r) => r.card_id === cid && r.kind === 'usage' && r.month === month).reduce((s, r) => s + Number(r.litres || 0), 0)
         : g.usage.filter((u) => u.card_id === cid && u.fill_date.startsWith(month)).reduce((s, u) => s + Number(u.litres || 0), 0)
-    const cards = [...g.cards].sort(
-      (a, b) =>
-        ['cancelled', 'inactive'].includes(a.status) - ['cancelled', 'inactive'].includes(b.status) ||
-        String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz'))
-    )
+    const cards = g.cards.filter(inView).sort((a, b) => String(a.card_no || 'zz').localeCompare(String(b.card_no || 'zz')))
     return (
       <div className={grid}>
         {cards.map((c) => (
           <FleetCardTile
             key={c.id}
             card={c}
-            to={own ? `/diesel/cards/${c.id}` : `/diesel/cards/${c.id}?co=${g.company.id}`}
+            to={own ? `/diesel/cards/${c.id}${showAll ? '?cons=1' : ''}` : `/diesel/cards/${c.id}?co=${g.company.id}&cons=1`}
+            companyTag={showAll ? shortName(g.company) : null}
             vehicle={c.vehicle_id ? vById.get(c.vehicle_id)?.reg_no || vById.get(c.vehicle_id)?.name : null}
             usedL={usedLitres(c.id)}
             balance={g.ledger ? balance[c.id] || 0 : null}
             checklist={`${checklistDone(c)} / ${CARD_CHECKLIST.length}`}
           />
         ))}
-        {own && canAdd && <AddCardTile />}
+        {own && canAdd && view === 'active' && <AddCardTile />}
       </div>
     )
   }
 
   const mineGroup = groups.find((g) => g.company.id === company.id)
-  const others = groups.filter((g) => g.company.id !== company.id && g.cards.length)
+  const others = groups.filter((g) => g.company.id !== company.id && g.cards.some(inView))
+  const count = (pick) => groups.reduce((n, g) => n + g.cards.filter(pick).length, 0)
+  const mineShown = mineGroup ? mineGroup.cards.filter(inView).length : 0
 
   return (
     <div className="space-y-5">
@@ -134,57 +143,105 @@ export default function FleetCardManage() {
                 Import statement
               </Button>
             )}
-            <Button variant="secondary" onClick={() => navigate('/diesel/cards/topup')}>
-              <IconPlus width={18} height={18} /> Request top up
-            </Button>
+            {/* Consolidate: an icon button that shows the fleet cards of every company of this business too */}
+            {canConsolidate && (
+              <button
+                type="button"
+                onClick={() => toggle(!showAll)}
+                aria-pressed={showAll}
+                title={showAll ? 'Consolidate is on: fleet cards of every company. Click to show this company only' : 'Consolidate: show the fleet cards of every company'}
+                aria-label="Consolidate"
+                className={`flex h-12 w-12 items-center justify-center rounded-xl border ${showAll ? 'border-brand bg-brand text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+              >
+                <IconConsolidate width={20} height={20} />
+              </button>
+            )}
+            {access.can('cards', 'add') && (
+              <Button variant="secondary" onClick={() => setOpening(true)} title="Enter a fleet card's balance on the day you start using Fuel Manage">
+                Opening balance
+              </Button>
+            )}
+            {/* Only Procurement (and super admins) request top-ups */}
+            {access.procurement && (
+              <Button variant="secondary" onClick={() => setAsking(true)}>
+                <IconPlus width={18} height={18} /> Request top up
+              </Button>
+            )}
           </div>
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {sent && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-800">{sent}</p>}
       {importing && <StatementImportModal company={company} onClose={() => setImporting(false)} onDone={load} />}
+      {opening && (
+        <ReloadModal
+          company={company}
+          cards={mineGroup ? mineGroup.cards : []}
+          title="Opening balance"
+          reference="Opening balance"
+          onClose={() => setOpening(false)}
+          onSaved={() => {
+            setSent('Opening balance saved.')
+            load()
+          }}
+        />
+      )}
+      {asking && (
+        <NewTopupModal
+          company={company}
+          companies={showAll ? [company, ...sisters] : null}
+          onClose={() => setAsking(false)}
+          onSent={(msg) => {
+            setSent(msg)
+            load()
+          }}
+        />
+      )}
 
       <Card className="p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold text-slate-800">Fleet cards</h3>
-          {sisters.length > 0 && (
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 text-sm" role="group" aria-label="Which fleet cards">
-              {[
-                [false, companyLabel(company)],
-                [true, 'Consolidate']
-              ].map(([on, label]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => toggle(on)}
-                  aria-pressed={showAll === on}
-                  className={`rounded-lg px-3 py-1 font-medium ${showAll === on ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 text-sm" role="tablist" aria-label="Which fleet cards">
+            {[
+              ['active', 'Active', count((c) => !isOff(c))],
+              ['inactive', 'Inactive', count(isOff)]
+            ].map(([k, label, n]) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={view === k}
+                onClick={() => setView(k)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-medium ${view === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {label}
+                <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${view === k ? 'bg-slate-100 text-slate-600' : 'text-slate-400'}`}>{n}</span>
+              </button>
+            ))}
+          </div>
         </div>
         {loading ? (
           <Loading />
         ) : (
           <div className="space-y-6">
-            {mineGroup && (mineGroup.cards.length || canAdd) ? (
+            {mineGroup && (mineShown || (canAdd && view === 'active')) ? (
               <section>
-                {showAll && <GroupTitle name={mineGroup.company.name} count={mineGroup.cards.length} />}
+                {showAll && <GroupTitle company={mineGroup.company} />}
                 {tiles(mineGroup, true)}
               </section>
             ) : (
-              <Empty>No fleet cards in {company.name}.</Empty>
+              <Empty>{view === 'inactive' ? `No inactive fleet cards in ${company.name}.` : `No fleet cards in ${company.name}.`}</Empty>
             )}
             {showAll &&
               others.map((g) => (
                 <section key={g.company.id}>
-                  <GroupTitle name={g.company.name} count={g.cards.length} />
+                  <GroupTitle company={g.company} />
                   {tiles(g, false)}
                 </section>
               ))}
-            {showAll && others.length === 0 && <p className="text-sm text-slate-400">No fleet cards you can see in the other companies of this business.</p>}
+            {showAll && others.length === 0 && (
+              <p className="text-sm text-slate-400">No {view === 'inactive' ? 'inactive ' : ''}fleet cards you can see in the other companies of this business.</p>
+            )}
           </div>
         )}
       </Card>
@@ -192,24 +249,26 @@ export default function FleetCardManage() {
   )
 }
 
-function GroupTitle({ name, count }) {
-  return (
-    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-      {name} <span className="font-normal normal-case tracking-normal text-slate-400">· {count} card{count === 1 ? '' : 's'}</span>
-    </p>
-  )
+const shortName = (c) => c.short_name || c.code || c.name
+
+// Consolidate view: just the company name above its cards.
+function GroupTitle({ company }) {
+  return <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{company.name}</p>
 }
 
-// A dashed, see-through card with "+": starts a new fleet card application.
+// A dashed, see-through card with "+": starts a new fleet card.
 function AddCardTile() {
   return (
     <Link
       to="/diesel/cards/new"
       className="group flex aspect-[1.586] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 bg-white/40 text-slate-400 transition hover:border-brand hover:bg-brand/5 hover:text-brand"
-      title="New fleet card application"
+      title="New fleet card"
     >
-      <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-current text-2xl leading-none">+</span>
-      <span className="px-2 text-center text-[11px] font-semibold">New fleet card application</span>
+      {/* a drawn plus, so it sits exactly in the middle of the circle (a "+" letter does not) */}
+      <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-current">
+        <IconPlus width={18} height={18} strokeWidth={2.5} />
+      </span>
+      <span className="px-2 text-center text-[11px] font-semibold">New fleet card</span>
     </Link>
   )
 }

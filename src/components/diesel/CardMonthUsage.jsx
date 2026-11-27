@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Card } from '../ui.jsx'
 import { DRIVER_COLORS, DriverShare } from './CardCharts.jsx'
+import { Button } from '../ui.jsx'
+import { IconEye } from '../icons.jsx'
+import { CardUsageGrid, colKey, mismatch } from './CardUsageGrid.jsx'
 import { Empty } from './shared.jsx'
 import { cardMonthUsage } from '../../lib/diesel.js'
 import { day, monthLabel, thisMonth } from '../../lib/format.js'
 
-// Left: a fleet card's usage in one month (‹ › to change month): date, driver,
-// vehicle, litres, amount, and whether the driver has claimed it — a
-// fleet-card receipt on a fuel claim (with the receipt photo or not, and
-// "Setel ✓" when the station statement has the same fill), or a purchase on
-// the station statement (daily import) that no claim covers yet.
+// Left: a fleet card's usage in one month (‹ › to change month), week by
+// week side by side (Week 1 = 1–7, 2 = 8–14, 3 = 15–21, 4 = 22–28, 5 =
+// 29–end): each driver with their litres, the week's total at the bottom. View (top right) opens the date ×
+// driver grid (CardUsageGrid.jsx), where fill-ups can also be added by hand.
 // Right: the same month's total by driver, the subsidy volume = 100%.
-export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = [] }) {
+export function CardMonthUsage({ company, cardId, card, title, drivers: cardDrivers = [], canAdd = false, canDelete = false, refresh, quota, driverNames = [] }) {
+  const [viewing, setViewing] = useState(false)
+  const [tick, setTick] = useState(0)
   const [month, setMonth] = useState(thisMonth())
   const [rows, setRows] = useState(undefined) // undefined loading · null not available
   useEffect(() => {
@@ -22,7 +25,7 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
     return () => {
       live = false
     }
-  }, [company.id, cardId, month, refresh])
+  }, [company.id, cardId, month, refresh, tick])
 
   const move = (d) => {
     const [y, m] = month.split('-').map(Number)
@@ -52,6 +55,31 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
     color: DRIVER_COLORS[i % DRIVER_COLORS.length]
   }))
 
+  // Week 1 = 1–7, 2 = 8–14, 3 = 15–21, 4 = 22–28, 5 = 29 to the end of the month
+  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
+  const mon = monthLabel(month).split(' ')[0]
+  const weeks = [1, 2, 3, 4, 5]
+    .map((n) => ({ n, from: (n - 1) * 7 + 1, to: n === 5 ? lastDay : n * 7 }))
+    .filter((w) => w.from <= lastDay)
+    .map((w) => {
+      const rs = list.filter((r) => {
+        const d = Number(String(r.date).slice(8, 10))
+        return d >= w.from && d <= w.to
+      })
+      const byDriver = new Map()
+      for (const r of rs) {
+        const k = colKey(r)
+        const t = byDriver.get(k) || { name: r.driver || 'No driver recorded', litres: 0, flag: false }
+        byDriver.set(k, { ...t, litres: t.litres + Number(r.litres || 0), flag: t.flag || mismatch(r) })
+      }
+      return {
+        n: w.n,
+        range: `${w.from}–${w.to} ${mon}`,
+        drivers: [...byDriver.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        total: rs.reduce((t, r) => t + Number(r.litres || 0), 0)
+      }
+    })
+
   const nav = (
     <div className="flex items-center gap-1">
       <button type="button" onClick={() => move(-1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="Previous month">
@@ -77,6 +105,11 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
           <h3 className="font-semibold text-slate-800">Usage</h3>
           {nav}
           <span className="flex-1" />
+          {card && (
+            <Button size="sm" variant="secondary" onClick={() => setViewing(true)} className="order-last">
+              <IconEye width={15} height={15} /> View
+            </Button>
+          )}
           {rows && (
             <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
               <span>
@@ -102,68 +135,44 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
         ) : list.length === 0 ? (
           <Empty>No usage on this card in {monthLabel(month)}.</Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-2">Date</th>
-                  <th className="px-2 py-2">Driver</th>
-                  <th className="px-2 py-2">Vehicle</th>
-                  <th className="px-2 py-2 text-right">Litres</th>
-                  <th className="px-2 py-2 text-right">RM</th>
-                  <th className="px-3 py-2">Claimed</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {list.map((r, i) => (
-                  <tr key={i} className={r.source === 'card' ? 'bg-amber-50/40' : ''}>
-                    <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-                      {day(r.date)}
-                      {r.time && <span className="ml-1 text-xs text-slate-400">{r.time}</span>}
-                    </td>
-                    <td className="px-2 py-2 text-slate-800">{r.driver || '—'}</td>
-                    <td className="whitespace-nowrap px-2 py-2 text-slate-600">{r.vehicle || '—'}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{n2(r.litres)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{n2(r.amount)}</td>
-                    <td className="px-3 py-2 text-xs">
-                      {r.source === 'claim' ? (
-                        <span className="inline-flex flex-wrap items-center gap-1">
-                          <Link to={`/diesel/claims/${r.claim_id}`} className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800 hover:underline">
-                            Claim {String(r.claim_no ?? '').padStart(3, '0')}
-                          </Link>
-                          <span className={r.has_receipt ? 'text-slate-500' : 'text-red-600'} title={r.has_receipt ? 'Receipt photo uploaded' : 'No receipt photo'}>
-                            {r.has_receipt ? 'receipt ✓' : 'no photo'}
+          <div className="p-3">
+            {/* one column per week: each driver's litres, the week total at the bottom */}
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}>
+              {weeks.map((w) => (
+                <div key={w.n} className="flex min-w-0 flex-col rounded-xl border border-slate-200">
+                  <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                    <p className="text-xs font-bold text-slate-800">Week {w.n}</p>
+                    <p className="text-[11px] text-slate-400">{w.range}</p>
+                  </div>
+                  <div className="flex-1 space-y-1 px-2.5 py-2 text-xs">
+                    {w.drivers.length === 0 ? (
+                      <p className="text-slate-400">No usage</p>
+                    ) : (
+                      w.drivers.map((d) => (
+                        <div key={d.name} className="flex items-baseline justify-between gap-2">
+                          <span className="min-w-0 truncate text-slate-700" title={d.name}>
+                            {d.name}
+                            {d.flag && (
+                              <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800" title="A claim amount differs from the Fuel Station Portal">
+                                !
+                              </span>
+                            )}
                           </span>
-                          {r.on_statement && (
-                            <span className="text-emerald-700" title="The fuel station statement has the same fill">
-                              · Setel ✓{Math.abs(Number(r.statement_amount) - Number(r.amount)) >= 0.01 ? ` (RM ${n2(r.statement_amount)})` : ''}
-                            </span>
-                          )}
-                        </span>
-                      ) : r.claim_status === 'draft' ? (
-                        <Link to={`/diesel/claims/${r.claim_id}`} className="rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-700 hover:underline">
-                          Draft {String(r.claim_no ?? '').padStart(3, '0')}
-                        </Link>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800" title={r.on_statement ? 'On the Setel statement, no claim yet' : ''}>
-                          Not claimed
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
-                  <td colSpan={3} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
-                    Total · {list.length} {list.length === 1 ? 'purchase' : 'purchases'}
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{n2(totL)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{n2(totRM)}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                          <span className="shrink-0 tabular-nums font-medium text-slate-900">{n2(d.litres)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 border-t border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold">
+                    <span className="text-slate-500">Total</span>
+                    <span className="tabular-nums text-slate-900">{w.drivers.length ? `${n2(w.total)} L` : '—'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-right text-sm font-semibold text-slate-700">
+              {monthLabel(month)} total <span className="ml-2 tabular-nums text-slate-900">{n2(totL)} L</span>
+            </p>
           </div>
         )}
       </Card>
@@ -174,6 +183,19 @@ export function CardMonthUsage({ company, cardId, refresh, quota, driverNames = 
         </h3>
         {rows ? <DriverShare month={month} quota={quota} drivers={drivers} /> : <p className="py-6 text-center text-sm text-slate-400">{rows === undefined ? 'Loading…' : '—'}</p>}
       </Card>
+      {viewing && card && (
+        <CardUsageGrid
+          company={company}
+          card={card}
+          title={title || card.card_no}
+          drivers={cardDrivers}
+          startMonth={month}
+          canAdd={canAdd}
+          canDelete={canDelete}
+          onClose={() => setViewing(false)}
+          onChanged={() => setTick((t) => t + 1)}
+        />
+      )}
     </div>
   )
 }

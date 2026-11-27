@@ -5,7 +5,9 @@
 // claim as it is now in the database, not on what the browser says:
 //   pending,  called by the claimant  → "New fuel claim to approve" to the
 //                                        claimant's approvers (Claim approval
-//                                        setting → Claims approved by)
+//                                        setting → Claims approved by);
+//                                        { remind: true } (the bell in My
+//                                        Claims) → a reminder, once a day
 //   approved, called by the reviewer  → "approved" to the claimant, and
 //                                        "ready to pay" to the accountants
 //   rejected, called by the reviewer  → "rejected" (with the reason) to the claimant
@@ -24,7 +26,7 @@ const env = (k: string) => (Deno.env.get(k) ?? '').trim()
 const CORS = {
   // Only our own site may call this from a browser (override with the ALLOWED_ORIGIN secret)
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? 'https://mjmelon.github.io',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-application-name, x-region, x-supabase-api-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 const reply = (body: unknown, status = 200) =>
@@ -68,8 +70,11 @@ Deno.serve(async (req) => {
   if (!me) return reply({ error: 'Not signed in' }, 401)
 
   let claimId = ''
+  let remind = false
   try {
-    claimId = String((await req.json())?.claim_id ?? '')
+    const body = await req.json()
+    claimId = String(body?.claim_id ?? '')
+    remind = body?.remind === true
   } catch {
     // empty body
   }
@@ -77,13 +82,16 @@ Deno.serve(async (req) => {
 
   const { data: claim } = await db.from('machinery_diesel_claims').select('*').eq('id', claimId).maybeSingle()
   if (!claim) return reply({ error: 'Claim not found' }, 404)
+  // Sample data for trying the pages out: never emailed.
+  if (String(claim.notes ?? '').startsWith('[SAMPLE]')) return reply({ sent: 0, skipped: 'sample claim' })
 
   // Which message, and is the caller the one who caused it?
   let event = ''
   let stamp = ''
   if (claim.status === 'pending' && claim.claimant_id === me.id) {
     event = 'submitted'
-    stamp = String(claim.created_at)
+    // The claimant's bell in My Claims: a reminder to the approvers, once a day.
+    stamp = remind ? `reminder:${new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)}` : String(claim.created_at)
   } else if (['approved', 'rejected', 'paid'].includes(claim.status) && claim.reviewed_by === me.id) {
     event = claim.status
     stamp = String(claim.reviewed_at)
@@ -133,8 +141,15 @@ Deno.serve(async (req) => {
       .map((r) => r.user_id)
     mails.push([
       approvers,
-      `New fuel claim #${no} from ${claimant} to approve`,
-      page({ company: companyName, heading: 'New fuel claim to approve', intro: `${claimant} has submitted a fuel claim. You are their approver.`, rows, button: 'Review claim', link: link(`/diesel/claims/${claimId}?from=review`) }),
+      remind ? `Reminder: fuel claim #${no} from ${claimant} is waiting for your approval` : `New fuel claim #${no} from ${claimant} to approve`,
+      page({
+        company: companyName,
+        heading: remind ? 'Fuel claim waiting for your approval' : 'New fuel claim to approve',
+        intro: remind ? `${claimant} is asking you to approve this fuel claim. You are their approver.` : `${claimant} has submitted a fuel claim. You are their approver.`,
+        rows,
+        button: 'Review claim',
+        link: link(`/diesel/claims/${claimId}?from=review`),
+      }),
     ])
   } else {
     const by = nameOf(claim.reviewed_by)
@@ -191,5 +206,6 @@ Deno.serve(async (req) => {
     }
   }
   if (logged?.[0]?.id) await db.from('machinery_claim_notifications').update({ recipients: to, errors: failed.length ? failed : null }).eq('id', logged[0].id)
-  return reply({ sent, failed })
+  // Only the count goes back to the browser (addresses and mail-server errors stay in machinery_claim_notifications)
+  return reply({ sent, failed: failed.length })
 })

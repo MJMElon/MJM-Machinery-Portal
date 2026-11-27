@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
+import { PageErrorBoundary, lazyPage } from './lib/lazyPage.jsx'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext.jsx'
 import DevLogin from './auth/DevLogin.jsx'
@@ -11,35 +12,34 @@ import DieselLayout from './pages/diesel/DieselLayout.jsx'
 
 // Pages load when first opened (smaller first download; each module window
 // only fetches what it shows).
-const WorkManage = lazy(() => import('./pages/machinery/WorkManage.jsx'))
-const RepairMobile = lazy(() => import('./pages/machinery/RepairMobile.jsx'))
-const WorkConsolidated = lazy(() => import('./pages/machinery/WorkConsolidated.jsx'))
-const CaseDetail = lazy(() => import('./pages/machinery/CaseDetail.jsx'))
-const MachineryProfile = lazy(() => import('./pages/machinery/MachineryProfile.jsx'))
-const MachinePage = lazy(() => import('./pages/machinery/MachinePage.jsx'))
-const CmmsHome = lazy(() => import('./pages/machinery/CmmsHome.jsx'))
-const MachineImport = lazy(() => import('./pages/machinery/MachineImport.jsx'))
-const MachineryRenewal = lazy(() => import('./pages/machinery/MachineryRenewal.jsx'))
-const SupplierList = lazy(() => import('./pages/machinery/SupplierList.jsx'))
-const CmmsUsers = lazy(() => import('./pages/machinery/CmmsUsers.jsx'))
-const UserAccessEdit = lazy(() => import('./pages/machinery/UserAccessEdit.jsx'))
-const CompanySettings = lazy(() => import('./pages/settings/CompanySettings.jsx'))
-const DieselHome = lazy(() => import('./pages/diesel/DieselHome.jsx'))
-const DieselClaims = lazy(() => import('./pages/diesel/DieselClaims.jsx'))
-const ClaimEdit = lazy(() => import('./pages/diesel/ClaimEdit.jsx'))
-const ClaimView = lazy(() => import('./pages/diesel/ClaimView.jsx'))
-const ClaimReview = lazy(() => import('./pages/diesel/ClaimReview.jsx'))
-const DieselUsage = lazy(() => import('./pages/diesel/DieselUsage.jsx'))
-const FuelRecords = lazy(() => import('./pages/diesel/FuelRecords.jsx'))
-const FuelRecordMobile = lazy(() => import('./pages/diesel/FuelRecordMobile.jsx'))
-const FleetCardManage = lazy(() => import('./pages/diesel/FleetCardManage.jsx'))
-const FleetCardPage = lazy(() => import('./pages/diesel/FleetCardPage.jsx'))
-const TopupPage = lazy(() => import('./pages/diesel/TopupPage.jsx'))
-const DieselUsers = lazy(() => import('./pages/diesel/DieselUsers.jsx'))
-const WorkerFuel = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerFuel })))
-const WorkerHome = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerHome })))
-const WorkerService = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerService })))
-const WorkerShell = lazy(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerShell })))
+const WorkManage = lazyPage(() => import('./pages/machinery/WorkManage.jsx'))
+const RepairMobile = lazyPage(() => import('./pages/machinery/RepairMobile.jsx'))
+const WorkConsolidated = lazyPage(() => import('./pages/machinery/WorkConsolidated.jsx'))
+const CaseDetail = lazyPage(() => import('./pages/machinery/CaseDetail.jsx'))
+const MachineryProfile = lazyPage(() => import('./pages/machinery/MachineryProfile.jsx'))
+const MachinePage = lazyPage(() => import('./pages/machinery/MachinePage.jsx'))
+const CmmsHome = lazyPage(() => import('./pages/machinery/CmmsHome.jsx'))
+const MachineImport = lazyPage(() => import('./pages/machinery/MachineImport.jsx'))
+const MachineryRenewal = lazyPage(() => import('./pages/machinery/MachineryRenewal.jsx'))
+const SupplierList = lazyPage(() => import('./pages/machinery/SupplierList.jsx'))
+const CmmsUsers = lazyPage(() => import('./pages/machinery/CmmsUsers.jsx'))
+const UserAccessEdit = lazyPage(() => import('./pages/machinery/UserAccessEdit.jsx'))
+const CompanySettings = lazyPage(() => import('./pages/settings/CompanySettings.jsx'))
+const DieselHome = lazyPage(() => import('./pages/diesel/DieselHome.jsx'))
+const DieselClaims = lazyPage(() => import('./pages/diesel/DieselClaims.jsx'))
+const ClaimEdit = lazyPage(() => import('./pages/diesel/ClaimEdit.jsx'))
+const ClaimView = lazyPage(() => import('./pages/diesel/ClaimView.jsx'))
+const ClaimReview = lazyPage(() => import('./pages/diesel/ClaimReview.jsx'))
+const DieselUsage = lazyPage(() => import('./pages/diesel/DieselUsage.jsx'))
+const FuelRecords = lazyPage(() => import('./pages/diesel/FuelRecords.jsx'))
+const FuelRecordMobile = lazyPage(() => import('./pages/diesel/FuelRecordMobile.jsx'))
+const FleetCardManage = lazyPage(() => import('./pages/diesel/FleetCardManage.jsx'))
+const FleetCardPage = lazyPage(() => import('./pages/diesel/FleetCardPage.jsx'))
+const DieselUsers = lazyPage(() => import('./pages/diesel/DieselUsers.jsx'))
+const WorkerFuel = lazyPage(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerFuel })))
+const WorkerHome = lazyPage(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerHome })))
+const WorkerService = lazyPage(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerService })))
+const WorkerShell = lazyPage(() => import('./pages/worker/WorkerApp.jsx').then((m) => ({ default: m.WorkerShell })))
 
 export default function App() {
   const { ready, user } = useAuth()
@@ -47,6 +47,7 @@ export default function App() {
   if (!ready) return <FullSpinner />
 
   return (
+    <PageErrorBoundary>
     <Suspense fallback={<FullSpinner />}>
     <Routes>
       {import.meta.env.DEV && <Route path="/login" element={user ? <Navigate to="/" replace /> : <DevLogin />} />}
@@ -93,7 +94,7 @@ export default function App() {
             <Route path="records" element={<FuelRecords />} />
             <Route path="records/mobile" element={<Navigate to="/app/fuel" replace />} />
             <Route path="cards" element={<FleetCardManage />} />
-            <Route path="cards/topup" element={<TopupPage />} />
+            <Route path="cards/topup" element={<Navigate to="/diesel/claims/review?tab=pending" replace />} />
             <Route path="cards/new" element={<FleetCardPage key="new" mode="new" />} />
             <Route path="cards/:id" element={<FleetCardPage key="view" mode="view" />} />
             <Route path="cards/:id/edit" element={<FleetCardPage key="edit" mode="edit" />} />
@@ -111,6 +112,7 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </Suspense>
+    </PageErrorBoundary>
   )
 }
 

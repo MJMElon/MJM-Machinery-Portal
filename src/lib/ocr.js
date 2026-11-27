@@ -4,8 +4,14 @@
 // a DRAFT the person checks and corrects before saving.
 
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'
-const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'
+const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+// Subresource Integrity: the browser refuses the file if the CDN ever serves something else
+// (hashes of the exact files in the npm packages; change them together with the version)
+const SRI = {
+  [TESSERACT_URL]: 'sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F',
+  [PDFJS_URL]: 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+}
 
 export function loadScript(src, ready) {
   if (ready()) return Promise.resolve()
@@ -13,6 +19,10 @@ export function loadScript(src, ready) {
     const s = document.createElement('script')
     s.src = src
     s.async = true
+    if (SRI[src]) {
+      s.integrity = SRI[src]
+      s.crossOrigin = 'anonymous'
+    }
     s.onload = () => (ready() ? resolve() : reject(new Error('Script did not load: ' + src)))
     s.onerror = () => reject(new Error('Could not load the reader (no internet?).'))
     document.head.appendChild(s)
@@ -35,7 +45,8 @@ async function loadPdfJs() {
  */
 async function pdfToTextOrCanvas(file) {
   const pdfjs = await loadPdfJs()
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
+  // isEvalSupported: false = a PDF with a crafted font cannot run code (CVE-2024-4367)
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise
   const page = await doc.getPage(1)
   const content = await page.getTextContent()
   // Group text items into lines by their vertical position. pdf.js often
@@ -695,7 +706,11 @@ export function parseReceipt(text) {
     if (amounts.length) out.amount = Math.max(...amounts)
   }
   // If we have litres and unit price but no amount (or vice versa), fill the gap
-  if (out.litres && out.unit_price && !out.amount) out.amount = Math.round(out.litres * out.unit_price * 100) / 100
+  if (out.unit_price) out.pump_price = out.unit_price // as printed (on a subsidised receipt: the pump price)
+  if (out.litres && out.unit_price && !out.amount) {
+    out.amount = Math.round(out.litres * out.unit_price * 100) / 100
+    out.amount_from_price = true // a guess: wrong for a subsidised fleet card fill-up
+  }
   if (out.litres && out.amount && !out.unit_price) out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
   // Subsidised receipts (MySubsidy / KPDN) print the pump price but charge
   // less: the claim keeps the price actually paid.

@@ -2,14 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Modal } from '../../components/ui.jsx'
-import { IconCheck, IconPencil, IconPrint, IconTrash, IconX } from '../../components/icons.jsx'
+import { IconBuilding, IconCheck, IconPencil, IconPrint, IconTrash, IconX } from '../../components/icons.jsx'
 import { ErrorBox, Loading, StatusBadge, inputCls } from '../../components/diesel/shared.jsx'
 import { printClaim } from '../../components/diesel/ClaimPrint.js'
 import {
   deleteClaim,
   getClaim,
   getClaimLines,
+  payableLine,
+  listPaymentDocs,
   isReload,
+  isSubsidisedFill,
+  linePrice,
   listClaimCards,
   listPeople,
   listVehicles,
@@ -24,12 +28,17 @@ import {
 } from '../../lib/diesel.js'
 import { day, money, num } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
-import { claimNo } from './DieselClaims.jsx'
+import { useCompany } from '../../lib/CompanyContext.jsx'
+import { DraftCountdown, claimNo } from './DieselClaims.jsx'
+import { MarkPaidModal, PaymentDocsButton } from '../../components/diesel/PaymentDocs.jsx'
+import { useNotice } from '../../components/Notice.jsx'
 
-// One fuel claim: header, the receipt rows, totals, the receipts, and (for
-// people with the right) approve / reject / mark paid. Print opens the print
-// dialog in place with the claim form (cash receipts only); ?print=1 does so
-// as soon as the claim has loaded.
+// One fuel claim: title (claim no., created date, status), the receipt rows
+// and the totals. Top right: the claimant gets Print / Submit / Edit / Delete;
+// an approver or accountant looking at someone else's claim gets only the
+// review buttons there (Approve / Reject, Mark paid, …). Print opens the
+// print dialog in place with the claim form (cash receipts only); ?print=1
+// does so as soon as the claim has loaded.
 export default function ClaimView() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
@@ -46,12 +55,15 @@ export default function ClaimView() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [rejecting, setRejecting] = useState(false)
+  const [paying, setPaying] = useState(false)
+  const [docs, setDocs] = useState([])
   const printedOnLoad = useRef(false)
 
   const load = useCallback(async () => {
     try {
-      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), access.viewAll || access.admin || access.pay ? listPeople(company.id).catch(() => []) : [], listClaimCards(company.id).catch(() => [])])
+      const [c, ls, v, p, cs] = await Promise.all([getClaim(id), getClaimLines(id), listVehicles(company.id), listPeople(company.id).catch(() => []), listClaimCards(company.id).catch(() => [])])
       if (!c) throw new Error('Claim not found (or you have no access to it).')
+      setDocs(c.status === 'paid' ? (await listPaymentDocs([c.id]).catch(() => ({})))[c.id] || [] : [])
       setClaim(c)
       setLines(ls)
       setVehicles(v)
@@ -66,7 +78,7 @@ export default function ClaimView() {
     } finally {
       setLoading(false)
     }
-  }, [id, company.id, access.viewAll, access.admin, access.pay])
+  }, [id, company.id])
 
   useEffect(() => {
     load()
@@ -76,29 +88,37 @@ export default function ClaimView() {
   const vById = new Map(vehicles.map((v) => [v.id, v]))
   const cById = new Map(cards.map((c) => [c.id, c]))
   const own = claim?.claimant_id === user.id
+  // An approver / accountant looking at someone else's claim sees only what is paid back
+  // (cash receipts and fleet card reloads); fleet card fill-ups need no approval.
+  const shownLines = own ? lines : lines.filter(payableLine)
+  const hiddenFills = lines.length - shownLines.length
+  const { companies } = useCompany()
+  const billName = (id) => {
+    const c = (companies || []).find((x) => x.id === id)
+    return c ? c.short_name || c.name : 'another company'
+  }
   const claimantName = own ? user.fullName || user.email : personLabel(person.get(claim?.claimant_id))
 
   const print = () =>
-    act(() => printClaim({ company, claim, lines, vehicles, cards, claimantName }))
+    act(() => printClaim({ company, claim, lines, vehicles, cards, claimantName, companies }))
 
   useEffect(() => {
-    if (!loading && claim && params.get('print') === '1' && !printedOnLoad.current) {
+    if (!loading && claim && params.get('print') === '1' && !['draft', 'rejected'].includes(claim.status) && !printedOnLoad.current) {
       printedOnLoad.current = true
       print()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, claim, params])
   const canEdit = claim && own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'edit')
-  const canDelete = claim && ((own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'delete')) || isSuperAdmin)
+  const canDelete = claim && own && ['pending', 'draft'].includes(claim.status) && access.can('claims', 'delete')
   const canSubmit = claim && own && claim.status === 'draft' && access.can('claims', 'edit')
   // Approve / reject: an approver named for this claimant. Mark paid: an
   // accountant, on approved claims. Nobody approves their own claim.
   const canApprove = claim && !own && access.approves(claim.claimant_id)
   const canPay = claim && access.pay && (!own || isSuperAdmin)
-  const canReview = canApprove || canPay
-  const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
-  const payable = lines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
-  const litres = lines.reduce((s, l) => s + Number(l.litres || 0), 0)
+  const total = shownLines.reduce((s, l) => s + Number(l.amount || 0), 0)
+  const payable = shownLines.filter((l) => l.payment === 'cash').reduce((s, l) => s + Number(l.amount || 0), 0)
+  const litres = shownLines.reduce((s, l) => s + Number(l.litres || 0), 0)
 
   async function act(fn) {
     setBusy(true)
@@ -111,10 +131,22 @@ export default function ClaimView() {
       setBusy(false)
     }
   }
+  const [notice, notify] = useNotice()
   const review = (status, note) =>
     act(async () => {
       const data = await reviewClaim(claim.id, status, note ?? claim.review_note)
       setClaim((c) => ({ ...c, ...data }))
+      const word = { approved: 'approved', rejected: 'rejected', paid: 'marked paid', pending: 'back to pending' }[status] || 'saved'
+      const back = status === 'paid' ? 'approved' : 'pending'
+      notify(`Claim ${claimNo(claim, 0)} ${word}`, `${claimantName || ''}${claimantName ? ' · ' : ''}${money(payable)}`, status === 'rejected' ? 'red' : status === 'paid' ? 'blue' : 'green', async () => {
+        try {
+          const undone = await reviewClaim(claim.id, back, null)
+          setClaim((c) => ({ ...c, ...undone }))
+          notify(`Claim ${claimNo(claim, 0)}: undone`, back === 'approved' ? 'Back to Pending for reimbursement.' : 'Back to Pending for approval.', 'blue')
+        } catch (e) {
+          setError(e.message)
+        }
+      })
     })
   const remove = () =>
     window.confirm('Delete this claim? This cannot be undone.') &&
@@ -130,73 +162,77 @@ export default function ClaimView() {
   const box = 'flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm text-slate-800'
   const cell = `${box} h-9`
   const tall = `${box} h-[78px] items-start py-2 leading-snug`
-  const showApproval = access.admin || access.pay
-
-  const approval = !claim ? null : !canReview ? (
-    <p className="text-xs text-slate-500">{own ? 'Your own claim' : claim.status === 'paid' ? 'Paid' : 'Not your approvee'}</p>
-  ) : claim.status === 'pending' ? (
-    canApprove ? (
-      <div className="flex flex-col gap-2">
-        <Button size="sm" disabled={busy} onClick={() => review('approved')}>
-          <IconCheck width={16} height={16} /> Approve
-        </Button>
-        <Button size="sm" variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
-          <IconX width={16} height={16} /> Reject
-        </Button>
-      </div>
-    ) : (
-      <p className="text-xs text-slate-500">Waiting for approval</p>
-    )
+  // Someone else's claim: only the review buttons (approver: approve / reject; accountant: mark paid).
+  const reviewButtons = !claim || own ? null : claim.status === 'pending' && canApprove ? (
+    <>
+      <Button disabled={busy} onClick={() => review('approved')}>
+        <IconCheck width={18} height={18} /> Approve
+      </Button>
+      <Button variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(true)}>
+        <IconX width={18} height={18} /> Reject
+      </Button>
+    </>
   ) : claim.status === 'approved' ? (
-    <div className="flex flex-col gap-2">
+    <>
       {canPay && (
-        <Button size="sm" disabled={busy} onClick={() => review('paid')}>
+        <Button disabled={busy} onClick={() => setPaying(true)}>
           Mark paid
         </Button>
       )}
       {canApprove && (
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending')}>
+        <Button variant="secondary" disabled={busy} onClick={() => review('pending')}>
           Back to pending
         </Button>
       )}
-    </div>
+    </>
   ) : claim.status === 'rejected' && canApprove ? (
-    <Button size="sm" variant="ghost" disabled={busy} onClick={() => review('pending', null)}>
+    <Button variant="secondary" disabled={busy} onClick={() => review('pending', null)}>
       Back to pending
     </Button>
   ) : claim.status === 'paid' && canPay ? (
-    <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold text-brand-dark">Paid</p>
-      <Button size="sm" variant="ghost" disabled={busy} onClick={() => window.confirm('Undo paid? The claim goes back to Approved.') && review('approved')}>
-        Undo paid
-      </Button>
-    </div>
-  ) : (
-    <p className="text-xs text-slate-500">{claim.status === 'paid' ? 'Paid' : '—'}</p>
-  )
+    <Button variant="secondary" disabled={busy} onClick={() => window.confirm('Undo paid? The claim goes back to Approved.') && review('approved')}>
+      Undo paid
+    </Button>
+  ) : null
 
   return (
     <div className="space-y-4">
       <div>
         <PageHeader
           backTo={params.get('from') === 'review' ? '/diesel/claims/review' : '/diesel/claims'}
-          backLabel={params.get('from') === 'review' ? 'Back to review' : 'Back to claim list'}
+          backLabel={params.get('from') === 'review' ? 'Back to Claims Approval' : 'Back to My Claims'}
           title={
             claim ? (
-              <span className="inline-flex flex-wrap items-center gap-3">
+              <span className="block">
+                {!own && (
+                  <span className="mb-1 block text-sm font-medium text-slate-500">
+                    Claimant : <b className="font-semibold text-slate-800">{claimantName || 'Unknown user'}</b>
+                  </span>
+                )}
+              <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
                 Fuel claim #{claimNo(claim, 0)}
+                <span className="text-sm font-normal text-slate-500">Created on {day(claim.submitted_on || claim.fill_date)}</span>
                 <StatusBadge status={claim.status} />
+                {claim.status === 'draft' && <DraftCountdown claim={claim} />}
+                {claim.status === 'paid' && <PaymentDocsButton docs={docs} />}
+              </span>
               </span>
             ) : (
               'Fuel claim'
             )
           }
           right={
-            claim && (
+            claim &&
+            (!own ? (
+              reviewButtons && <div className="flex flex-wrap gap-2">{reviewButtons}</div>
+            ) : (
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" disabled={busy} onClick={print}>
-                  <IconPrint width={18} height={18} /> Print
-                </Button>
+                {/* a draft or a rejected claim is not printed */}
+                {!['draft', 'rejected'].includes(claim.status) && (
+                  <Button variant="secondary" disabled={busy} onClick={print}>
+                    <IconPrint width={18} height={18} /> Print
+                  </Button>
+                )}
                 {canSubmit && (
                   <Button
                     disabled={busy}
@@ -222,23 +258,18 @@ export default function ClaimView() {
                   </Button>
                 )}
               </div>
-            )
+            ))
           }
         />
+        {notice}
         <ErrorBox>{error}</ErrorBox>
       </div>
 
       {claim && (
         <>
           <Card className="overflow-hidden">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-sm text-slate-600">
-              <span>Created date: <b className="text-slate-800">{day(claim.submitted_on || claim.fill_date)}</b></span>
-              <span>Total amount: <b className="text-slate-800">{money(total)}</b></span>
-              <span>Payable amount: <b className="text-brand-dark">{money(payable)}</b></span>
-              <span>Total litres: <b className="text-slate-800">{num(litres, 2)} L</b></span>
-            </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-t border-slate-200 text-sm">
+              <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <th className="w-10 px-3 py-2.5">#</th>
@@ -251,11 +282,10 @@ export default function ClaimView() {
                     <th className="w-40 px-2 py-2.5">Payment method</th>
                     <th className="w-44 px-2 py-2.5">Remark</th>
                     <th className="w-40 px-2 py-2.5">Attachment</th>
-                    {showApproval && <th className="w-36 px-2 py-2.5">Approval</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {lines.map((l, i) => (
+                  {shownLines.map((l, i) => (
                     <tr key={l.id} className="align-top">
                       <td className="px-3 py-3 text-slate-500">{i + 1}</td>
                       <td className="px-2 py-3">
@@ -287,10 +317,15 @@ export default function ClaimView() {
                             <span>{l.litres != null ? num(l.litres, 2) : '—'}</span>
                             <span className="text-xs text-slate-400">L</span>
                           </div>
-                          <div className={`${cell} justify-between tabular-nums`}>
-                            <span>{l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</span>
+                          <div className={`${cell} justify-between tabular-nums`} title={isSubsidisedFill(l) ? 'Subsidised RM/L = Amount ÷ Litres' : 'Unit price'}>
+                            <span>{linePrice(l) || '—'}</span>
                             <span className="text-xs text-slate-400">RM/L</span>
                           </div>
+                          {isSubsidisedFill(l) && (
+                            <p className="text-right text-[10px] font-medium text-emerald-700">
+                              Subsidised RM/L{l.pump_price != null ? ` · pump ${Number(l.pump_price).toFixed(3)}` : ''}
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-3">
@@ -302,13 +337,23 @@ export default function ClaimView() {
                       <td className="px-2 py-3">
                         <div className="space-y-1.5">
                           <div className={cell}>{l.payment === 'fleet_card' ? 'Fleet card' : 'Cash'}</div>
-                          <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${isReload(l) ? 'bg-sky-50 text-sky-700' : l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                            {isReload(l) ? 'Card top-up · paid back' : l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
-                          </p>
+                          {!isReload(l) && (
+                            <p className={`flex h-9 items-center rounded-lg px-2 text-xs font-medium ${l.payment === 'fleet_card' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                              {l.payment === 'fleet_card' ? 'KPDN subsidy' : 'Non-subsidised'}
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className={`${tall} overflow-hidden text-slate-600`}>{l.remark || '—'}</div>
+                        <div className={`${tall} overflow-hidden text-slate-600`}>
+                          {l.bill_to_company_id && (
+                            <span className="mb-1 inline-flex max-w-full items-center gap-1 rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                              <IconBuilding width={12} height={12} className="shrink-0" />
+                              <span className="truncate">Bill to {billName(l.bill_to_company_id)}</span>
+                            </span>
+                          )}
+                          <span className="block">{l.remark || (l.bill_to_company_id ? '' : '—')}</span>
+                        </div>
                       </td>
                       <td className="px-2 py-3">
                         {l.receipt_path ? (
@@ -328,28 +373,22 @@ export default function ClaimView() {
                           <div className={`${tall} justify-center text-xs text-red-500`}>No receipt</div>
                         )}
                       </td>
-                      {showApproval && i === 0 && (
-                        <td className="px-2 py-3" rowSpan={lines.length}>
-                          {approval}
-                        </td>
-                      )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/60 text-sm font-semibold text-slate-800">
-                    <td className="px-3 py-2.5" colSpan={4}>
-                      Total
-                    </td>
+                    <td className="px-3 py-2.5" colSpan={3} />
+                    <td className="px-2 py-2.5 text-right">Total :</td>
                     <td className="px-2 py-2.5 text-right">{num(litres, 2)} L</td>
                     <td className="px-2 py-2.5 text-right">{money(total)}</td>
                     <td className="px-2 py-2.5 text-right text-brand-dark">{money(payable)}</td>
-                    <td colSpan={showApproval ? 4 : 3} />
+                    <td colSpan={3} />
                   </tr>
                 </tfoot>
               </table>
             </div>
-            {(claim.notes || claim.reviewed_at || payable === 0) && (
+            {(claim.notes || claim.reviewed_at || payable === 0 || hiddenFills > 0) && (
               <div className="space-y-1 px-4 py-3 text-sm text-slate-600">
                 {claim.notes && <p>Notes: {claim.notes}</p>}
                 {claim.reviewed_at && (
@@ -358,11 +397,30 @@ export default function ClaimView() {
                     {claim.review_note ? ` · ${claim.review_note}` : ''}
                   </p>
                 )}
+                {hiddenFills > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {hiddenFills} fleet card fill-up{hiddenFills === 1 ? '' : 's'} on this claim {hiddenFills === 1 ? 'is' : 'are'} not shown: fleet card usage needs no approval.
+                  </p>
+                )}
                 {payable === 0 && <Badge>Nothing to pay back — fleet card only</Badge>}
               </div>
             )}
           </Card>
         </>
+      )}
+
+      {paying && (
+        <MarkPaidModal
+          claims={[claim]}
+          payableOf={() => payable}
+          claimNo={claimNo}
+          nameOf={() => claimantName}
+          onPaid={async () => {
+            await review('paid')
+            await load()
+          }}
+          onClose={() => setPaying(false)}
+        />
       )}
 
       {rejecting && (

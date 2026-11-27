@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Select, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
-import { MACHINE_STATUS, coverState, deleteMachine, listMachines, listPortalPeople, machineNo, machineStatus, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
+import { MultiPick } from '../../components/diesel/MultiPick.jsx'
+import { coverState, deleteMachine, listMachines, listPortalPeople, machineNo, machineStatus, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
 import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
 
@@ -12,16 +13,25 @@ import { useCompany } from '../../lib/CompanyContext.jsx'
 // the vehicles for claims, fleet cards and fill-ups. Each row opens a full
 // profile page (particulars, insurance / road tax / Puspakom, photos, files,
 // drivers). Rows marked "general use" are offered to everyone in fuel claims.
-// On top: a big count per type for the tab below (each clickable as a
-// filter), then tabs Active / Inactive / Insurance only / KPDN subsidy,
-// and filters by location, type and brand next to the search.
+// Listing tabs. Active machines are split by the "HQ vehicle" tick.
+const LIST_TABS = {
+  estate: { label: 'Estate machinery' },
+  hq: { label: 'HQ vehicle' },
+  inactive: { label: 'Inactive' },
+  insurance_only: { label: 'Insurance only' }
+}
+// The value a column filter looks at
+function colValue(m, k) {
+  const v = k === 'type' ? m.machine_type : k === 'brand' ? m.brand : k === 'model' ? m.model : m.reg_no || m.name
+  return String(v || '').trim()
+}
+function inListTab(m, tab) {
+  const st = machineStatus(m)
+  if (tab === 'estate') return st === 'active' && !m.hq_vehicle
+  if (tab === 'hq') return st === 'active' && Boolean(m.hq_vehicle)
+  return st === tab
+}
 
-// Type and brand are typed freely (and imported from Excel), so they are
-// compared without case or extra spaces: "Heavy machine" = "HEAVY MACHINE".
-const norm = (v) => String(v || '').trim().replace(/\s+/g, ' ').toUpperCase()
-const typeKey = (m) => norm(m.machine_type) || '—'
-const brandKey = (m) => norm(m.brand) || '—'
-const TABS = { ...MACHINE_STATUS, kpdn: { label: 'KPDN subsidy' } }
 export default function MachineryProfile() {
   const { current } = useCompany()
   const navigate = useNavigate()
@@ -31,9 +41,11 @@ export default function MachineryProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState('active') // active | inactive | insurance_only (like the old CMMS tabs) | kpdn
-  const [typeF, setTypeF] = useState('') // '' = all types, else a typeKey
-  const [brandF, setBrandF] = useState('') // '' = all brands, else a brandKey
+  // Tabs: Estate machinery (active, not HQ) · HQ vehicle (active, HQ vehicle tick)
+  // · Inactive (estate and HQ together) · Insurance only
+  const [tab, setTab] = useState('estate')
+  // Column filters (click Type / Brand / Model / Reg. no. in the header): several values per column, and columns combine
+  const [colF, setColF] = useState({ type: [], brand: [], model: [], reg: [] })
   const [locations, setLocations] = useState([])
   const [loc, setLoc] = useState('') // '' = all, 'none' = without a location, else a location id
   const [busyId, setBusyId] = useState(null)
@@ -67,54 +79,20 @@ export default function MachineryProfile() {
   const locationName = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations])
   const countIn = (id) => rows.filter((m) => (id === 'none' ? !locationName.has(m.location_id) : m.location_id === id)).length
 
-  // The tab, then location, type and brand, then the search.
-  const inTab = (m) => (tab === 'kpdn' ? Boolean(m.kpdn_subsidy) : machineStatus(m) === tab)
-  const inLoc = (m) => !loc || !hasLocations || (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc)
-  const tabRows = useMemo(() => rows.filter(inTab), [rows, tab]) // eslint-disable-line react-hooks/exhaustive-deps
-  const countTab = (k) => rows.filter((m) => (k === 'kpdn' ? Boolean(m.kpdn_subsidy) : machineStatus(m) === k)).length
-
-  // Filter choices with their counts in this tab (and the other filters), so an empty choice never shows.
-  const choices = (key, pick) => {
-    const counts = new Map()
-    for (const m of tabRows) if (pick(m)) counts.set(key(m), (counts.get(key(m)) || 0) + 1)
-    return [...counts.entries()].sort((a, b) => (a[0] === '—') - (b[0] === '—') || a[0].localeCompare(b[0]))
-  }
-  const typeChoices = choices(typeKey, (m) => inLoc(m) && (!brandF || brandKey(m) === brandF))
-  const brandChoices = choices(brandKey, (m) => inLoc(m) && (!typeF || typeKey(m) === typeF))
-  // A type is shown as it is most often written in the profile (e.g. HEAVY MACHINE, FT15).
-  const typeLabel = useMemo(() => {
-    const seen = new Map()
-    for (const m of rows) {
-      const k = typeKey(m)
-      const spelt = seen.get(k) || new Map()
-      const v = String(m.machine_type || '').trim().replace(/\s+/g, ' ')
-      spelt.set(v, (spelt.get(v) || 0) + 1)
-      seen.set(k, spelt)
-    }
-    return new Map([...seen].map(([k, spelt]) => [k, [...spelt].sort((a, b) => b[1] - a[1])[0][0]]))
-  }, [rows])
-  const nice = (k) => (k === '—' ? 'No type' : typeLabel.get(k) || k)
-  // Summary by type: the current tab, all locations.
-  const byType = choices(typeKey, () => true).sort((a, b) => b[1] - a[1])
-
+  const countStatus = (k) => rows.filter((m) => inListTab(m, k)).length
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
-    const list = tabRows.filter((m) => inLoc(m) && (!typeF || typeKey(m) === typeF) && (!brandF || brandKey(m) === brandF))
-    if (!t) return list
-    return list.filter((m) =>
+    const inTab = rows.filter((m) => inListTab(m, tab))
+    const inLoc0 = !loc || !hasLocations ? inTab : inTab.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
+    const inLoc = inLoc0.filter((m) => Object.entries(colF).every(([k, vals]) => !vals.length || vals.includes(colValue(m, k))))
+    if (!t) return inLoc
+    return inLoc.filter((m) =>
       [machineNo(m), m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, locationName.get(m.location_id), ...drivers(m)].some((v) =>
         String(v || '').toLowerCase().includes(t)
       )
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabRows, q, people, loc, locationName, typeF, brandF])
-  const filtered = Boolean(loc || typeF || brandF || q.trim())
-  const clearFilters = () => {
-    setLoc('')
-    setTypeF('')
-    setBrandF('')
-    setQ('')
-  }
+  }, [rows, q, people, loc, locationName, tab, colF])
 
   async function remove(m) {
     if (!window.confirm(`Delete ${m.name}? This cannot be undone.`)) return
@@ -134,6 +112,16 @@ export default function MachineryProfile() {
   const canAdd = access.can('machines', 'add')
   const canEdit = access.can('machines', 'edit')
   const canDelete = access.can('machines', 'delete')
+  // Filter choices: the values found in this tab (blank shown as "(none)")
+  const tabRows = rows.filter((m) => inListTab(m, tab))
+  const optionsOf = (k) =>
+    [...new Set(tabRows.map((m) => colValue(m, k)))]
+      .sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+      .map((v) => ({ value: v, label: v || '(none)' }))
+  const filtering = Object.values(colF).some((v) => v.length)
+  const colHead = (k, label) => (
+    <MultiPick head searchable label={label} allLabel={`All`} options={optionsOf(k)} value={colF[k]} onChange={(v) => setColF((f) => ({ ...f, [k]: v }))} />
+  )
 
   return (
     <div className="space-y-4">
@@ -156,110 +144,46 @@ export default function MachineryProfile() {
       />
       {error && <p className="rounded-xl bg-red-100 p-3 text-sm text-red-700">{error}</p>}
 
-      {/* Summary: how many of each type, in the tab below (click a type to show only it) */}
-      {!loading && byType.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {byType.map(([k, n]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setTypeF(typeF === k ? '' : k)}
-              aria-pressed={typeF === k}
-              title={typeF === k ? 'Show all types' : `Show only ${nice(k)}`}
-              className={`rounded-2xl border-2 p-4 text-left shadow-sm transition ${
-                typeF === k ? 'border-brand bg-brand-light/60' : 'border-transparent bg-white hover:border-brand/40'
-              }`}
-            >
-              <span className="block font-display text-4xl font-extrabold tabular-nums text-slate-900">{n}</span>
-              <span className="mt-1 block text-sm font-semibold leading-tight text-slate-600">{nice(k)}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
       <Card className="overflow-hidden">
-        {/* Tabs: Active / Inactive / Insurance only (like the old CMMS), and KPDN subsidy */}
+        {/* Tabs: Estate machinery / HQ vehicle / Inactive / Insurance only */}
         <div className="flex flex-wrap border-b border-slate-200 bg-slate-50/60">
-          {Object.entries(TABS).map(([k, v]) => (
+          {Object.entries(LIST_TABS).map(([k, v]) => (
             <button
               key={k}
               type="button"
               onClick={() => setTab(k)}
               className={`relative px-6 py-3 text-sm font-bold transition ${
-                tab === k
-                  ? 'bg-white text-brand'
-                  : k === 'inactive'
-                    ? 'text-red-600 hover:bg-white/60'
-                    : k === 'insurance_only'
-                      ? 'text-sky-700 hover:bg-white/60'
-                      : k === 'kpdn'
-                        ? 'text-emerald-700 hover:bg-white/60'
-                        : 'text-slate-600 hover:bg-white/60'
+                tab === k ? 'bg-white text-brand' : k === 'inactive' ? 'text-red-600 hover:bg-white/60' : k === 'insurance_only' ? 'text-sky-700 hover:bg-white/60' : 'text-slate-600 hover:bg-white/60'
               }`}
             >
               {v.label}
-              <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{countTab(k)}</span>
+              <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{countStatus(k)}</span>
               {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
             </button>
           ))}
         </div>
-        {tab === 'kpdn' && (
-          <p className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-800">
-            Vehicles ticked “KPDN diesel subsidy” (any status). Their fleet card applications are in{' '}
-            <Link to="/diesel/cards" className="font-semibold underline">
-              Fleet Card Manage
-            </Link>
-            .
-          </p>
-        )}
-        <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 px-5 py-3">
-          {hasLocations && (
-            <Filter label="Location">
-              <Select value={loc} onChange={(e) => setLoc(e.target.value)} className="h-10" aria-label="Location">
-                <option value="">All locations</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} ({tabRows.filter((m) => m.location_id === l.id).length})
-                  </option>
-                ))}
-                <option value="none">No location ({tabRows.filter((m) => !locationName.has(m.location_id)).length})</option>
-              </Select>
-            </Filter>
-          )}
-          <Filter label="Type">
-            <Select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="h-10" aria-label="Type">
-              <option value="">All types</option>
-              {typeF && !typeChoices.some(([k]) => k === typeF) && <option value={typeF}>{nice(typeF)} (0)</option>}
-              {typeChoices.map(([k, n]) => (
-                <option key={k} value={k}>
-                  {nice(k)} ({n})
-                </option>
-              ))}
-            </Select>
-          </Filter>
-          <Filter label="Brand">
-            <Select value={brandF} onChange={(e) => setBrandF(e.target.value)} className="h-10" aria-label="Brand">
-              <option value="">All brands</option>
-              {brandF && !brandChoices.some(([k]) => k === brandF) && <option value={brandF}>{brandF === '—' ? 'No brand' : brandF} (0)</option>}
-              {brandChoices.map(([k, n]) => (
-                <option key={k} value={k}>
-                  {k === '—' ? 'No brand' : k} ({n})
-                </option>
-              ))}
-            </Select>
-          </Filter>
-          <Filter label="Search" grow>
-            <TextInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search code, plate, type, brand, driver…" className="h-10" />
-          </Filter>
-          <div className="flex h-10 items-center gap-3 text-sm">
-            <span className="whitespace-nowrap text-slate-500">
-              {shown.length} of {tabRows.length}
-            </span>
-            {filtered && (
-              <button type="button" onClick={clearFilters} className="whitespace-nowrap font-medium text-brand hover:underline">
-                Clear filters
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-slate-800">Listing</h3>
+            {filtering && (
+              <button type="button" onClick={() => setColF({ type: [], brand: [], model: [], reg: [] })} className="text-sm font-medium text-brand hover:underline">
+                Clear filters ({shown.length} shown)
               </button>
             )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasLocations && (
+              <Select value={loc} onChange={(e) => setLoc(e.target.value)} className="h-10 sm:w-60" aria-label="Location">
+                <option value="">All locations ({rows.length})</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({countIn(l.id)})
+                  </option>
+                ))}
+                <option value="none">No location ({countIn('none')})</option>
+              </Select>
+            )}
+            <TextInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search code, plate, type, brand, driver…" className="h-10 sm:w-80" />
           </div>
         </div>
         {loading ? (
@@ -267,18 +191,18 @@ export default function MachineryProfile() {
             <Spinner className="h-7 w-7" />
           </div>
         ) : shown.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (filtered ? 'Nothing matches these filters.' : tab === 'kpdn' ? 'No vehicle is ticked for the KPDN diesel subsidy.' : `No ${TABS[tab].label.toLowerCase()} machines or vehicles.`) : 'No machines or vehicles yet.'}</p>
+          <p className="px-5 py-10 text-center text-sm text-slate-500">{rows.length ? (q.trim() ? 'Nothing matches the search.' : loc ? 'No machines or vehicles in this location.' : `Nothing under ${LIST_TABS[tab].label}.`) : 'No machines or vehicles yet.'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1120px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-24 px-5 py-2.5">No.</th>
-                  <th className="px-3 py-2.5">Code / Reg. no.</th>
+                  <th className="px-3 py-2.5">{colHead('reg', 'Code / Reg. no.')}</th>
                   {hasLocations && <th className="px-3 py-2.5">Location</th>}
-                  <th className="px-3 py-2.5">Type</th>
-                  <th className="px-3 py-2.5">Brand</th>
-                  <th className="px-3 py-2.5">Model</th>
+                  <th className="px-3 py-2.5">{colHead('type', 'Type')}</th>
+                  <th className="px-3 py-2.5">{colHead('brand', 'Brand')}</th>
+                  <th className="px-3 py-2.5">{colHead('model', 'Model')}</th>
                   <th className="px-3 py-2.5">Driver</th>
                   <th className="px-3 py-2.5">Fuel</th>
                   <th className="px-3 py-2.5">Cover</th>
@@ -296,7 +220,6 @@ export default function MachineryProfile() {
                           {m.name}
                         </Link>
                         {m.reg_no && m.reg_no.trim().toUpperCase() !== m.name.trim().toUpperCase() && <span className="block text-xs text-slate-500">{m.reg_no}</span>}
-                        {m.acc_code && <span className="block text-xs text-slate-400">{m.acc_code}</span>}
                       </td>
                       {hasLocations && <td className="px-3 py-3 text-slate-700">{locationName.get(m.location_id) || '—'}</td>}
                       <td className="px-3 py-3 text-slate-700">
@@ -334,15 +257,6 @@ export default function MachineryProfile() {
         )}
       </Card>
     </div>
-  )
-}
-
-function Filter({ label, grow, children }) {
-  return (
-    <label className={`block ${grow ? 'min-w-[220px] flex-1' : 'w-full sm:w-48'}`}>
-      <span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span>
-      {children}
-    </label>
   )
 }
 

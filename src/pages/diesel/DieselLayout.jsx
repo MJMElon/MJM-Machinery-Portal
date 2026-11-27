@@ -14,17 +14,17 @@ import { EMBEDDED } from '../../components/Shell.jsx'
 // gets depends on their Diesel access for the selected company (set under
 // Settings → User setting).
 export const DIESEL_MODULES = [
-  { to: '/diesel/claims', label: 'Fuel Receipt Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
+  { to: '/diesel/claims', label: 'Fuel Claims', Icon: IconReceipt, need: (a) => a.can('claims', 'view'), hint: 'Cash fuel claims with receipt photos; review and payment' },
   {
     to: '/diesel/records',
-    label: 'Operational Diesel Records',
+    label: 'Estate Fuel Record',
     Icon: IconFuel,
     need: (a) => a.can('fuel_record', 'view') || a.can('fuel_record', 'add'),
     hint: 'Diesel issued to each machine from the company tank, listed'
   },
   {
     to: '/diesel/usage',
-    label: 'Fuel Usage Reports',
+    label: 'Reports',
     Icon: IconFuel,
     need: (a) => a.can('usage', 'view') || a.can('report', 'view'),
     hint: 'Monthly fuel usage by HQ vehicle and estate machine'
@@ -52,6 +52,12 @@ export default function DieselLayout() {
   const access = useDieselAccess(current?.diesel_enabled ? current.id : null)
   const landing = Boolean(useMatch({ path: '/diesel', end: true }))
   const back = () => navigate('/')
+  // Fuel Manage theme (index.css .fuel-theme): dark buttons, glowing tabs.
+  // On <html> so pop-ups (rendered outside this page) get it too.
+  useEffect(() => {
+    document.documentElement.classList.add('fuel-theme')
+    return () => document.documentElement.classList.remove('fuel-theme')
+  }, [])
 
   // Opened straight on a module (e.g. the Fuel Claims icon in MJM Intranet
   // links to #/diesel/claims): show the Fuel Manage page with that module in
@@ -112,7 +118,7 @@ export default function DieselLayout() {
   const nav = DIESEL_MODULES.filter((n) => n.need(access))
 
   // Landing page and every module: just "Back to CMMS main page" and the content.
-  // The top bar names the module (Fuel Receipt Claims, Operational Diesel Records, …).
+  // The top bar names the module (Fuel Claims, Estate Fuel Record, …).
   return (
     <div>
       <Outlet context={{ company: current, access }} />

@@ -17,7 +17,7 @@ const theme = (provider) => STATION_THEMES.find(([re]) => re.test(provider || ''
 // 7012345600019876 → 7012 3456 0001 9876
 const spaced = (no) => (/\s/.test(no) ? no : String(no).replace(/(.{4})(?=.)/g, '$1 '))
 
-export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to }) {
+export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to, companyTag }) {
   const st = CARD_STATUS[card.status] || CARD_STATUS.active
   const off = ['cancelled', 'inactive'].includes(card.status)
   const quota = card.subsidy_litres != null ? Number(card.subsidy_litres) : null
@@ -37,6 +37,8 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to }) 
             <span className="shrink-0 rounded-full bg-white/20 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide backdrop-blur">{st.label}</span>
           </div>
           <div className="mt-auto">
+            {/* Consolidate view: the company short name right before the number */}
+            {companyTag && <span className="mb-0.5 inline-block max-w-full truncate rounded bg-white/25 px-1 py-px text-[10px] font-bold tracking-wide">{companyTag}</span>}
             <p className="truncate font-mono text-[13px] font-semibold tracking-[0.08em] drop-shadow">
               {card.card_no ? spaced(card.card_no) : <span className="font-sans text-xs tracking-normal opacity-80">Not awarded yet</span>}
             </p>
@@ -60,6 +62,14 @@ export function FleetCardTile({ card, vehicle, usedL, balance, checklist, to }) 
             <div className="h-1 overflow-hidden rounded-full bg-slate-200">
               <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
             </div>
+          )}
+          {(card.auto_topup_below != null || card.auto_topup_max != null) && (
+            <p className={`text-[10px] font-medium ${card.auto_topup ? 'text-emerald-700' : 'text-slate-500'}`}>
+              {card.auto_topup_below != null && `Min ${money(card.auto_topup_below)}`}
+              {card.auto_topup_below != null && card.auto_topup_max != null && ' · '}
+              {card.auto_topup_max != null && `Max ${money(card.auto_topup_max)}`}
+              {card.auto_topup && card.auto_topup_amount != null ? ` · Auto ${money(card.auto_topup_amount)}` : ''}
+            </p>
           )}
           {balance != null && (
             <div className="flex justify-between gap-2">

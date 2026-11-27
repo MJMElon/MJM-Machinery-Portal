@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card } from '../ui.jsx'
-import { IconPlus, IconTrash } from '../icons.jsx'
+import { IconBuilding, IconNotebook, IconPlus, IconTrash } from '../icons.jsx'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 import { F, inputCls, opt } from './shared.jsx'
 import {
   PAYMENTS,
@@ -8,6 +9,8 @@ import {
   cardLabel,
   compressReceipt,
   createClaimWithLines,
+  getTopup,
+  topupNo,
   notifyClaim,
   isReload,
   removeReceipt,
@@ -23,6 +26,10 @@ import { money, num, today } from '../../lib/format.js'
 // a row, is read for a draft of the figures, and is attached to that row; rows
 // can also be typed by hand. Payable = cash rows only; fleet-card rows are
 // recorded for litres / cost but are not paid back.
+// Dropped files first fill the rows that have no receipt yet (e.g. the reload
+// row of a top-up claim), then make new rows; each row's Attachment box takes a
+// dropped file too. A TOP-UP CLAIM (made from an approved top-up request) can
+// only be submitted when its reload row is exactly the approved amount.
 // A row can also be a FLEET CARD RELOAD (chosen in the vehicle box): the
 // person topped up a fleet card with cash and claims that amount back. It has
 // a card instead of a vehicle, no litres, and is always payable.
@@ -35,6 +42,7 @@ const blankLine = (mine) => ({
   vehicle_id: mine?.id || '',
   litres: '',
   unit_price: '',
+  pump_price: '', // fleet card (KPDN subsidised): the printed pump price, reference only
   amount: '',
   payment: 'cash',
   subsidised: false,
@@ -48,6 +56,14 @@ const blankLine = (mine) => ({
 })
 
 // An input with its unit printed inside the box (right, or left for RM).
+// A fleet card fill-up = KPDN subsidised diesel: its RM/L is the amount ÷ litres, not the pump price.
+const subsidisedLine = (l) => !isReload(l) && l.payment === 'fleet_card'
+function subsidisedPrice(litres, amount) {
+  const L = Number(litres)
+  const A = Number(amount)
+  return L > 0 && A > 0 ? (Math.round((A / L) * 1000) / 1000).toFixed(3) : ''
+}
+
 function Unit({ unit, left, children }) {
   return (
     <div className="relative">
@@ -84,6 +100,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
           vehicle_id: l.vehicle_id || '',
           litres: l.litres ?? '',
           unit_price: l.unit_price ?? '',
+          pump_price: l.pump_price ?? '',
           amount: l.amount ?? '',
           receipt_no: l.receipt_no || '',
           station: l.station || '',
@@ -94,11 +111,42 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
         }))
       : [blankLine(mine)]
   )
+  // Bill to: the companies this person may open in Fuel Manage (one per receipt)
+  const { companies } = useCompany()
+  const billCos = useMemo(
+    () => (companies || []).filter((c) => c.is_active !== false && c.diesel_enabled).sort((a, b) => (a.short_name || a.name).localeCompare(b.short_name || b.name)),
+    [companies]
+  )
+  const coName = (id) => {
+    const c = (companies || []).find((x) => x.id === id)
+    return c ? c.short_name || c.name : 'Company'
+  }
+  const [textOpen, setTextOpen] = useState({}) // row key → remark box opened by the note button
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [rowDrag, setRowDrag] = useState(null) // key of the row a file is dragged over
+  // Top-up claim: the approved request (its card and amount)
+  const [topup, setTopup] = useState(null)
+  useEffect(() => {
+    let live = true
+    if (claim?.topup_request_id) getTopup(claim.topup_request_id).then((t) => live && setTopup(t))
+    return () => {
+      live = false
+    }
+  }, [claim?.topup_request_id])
+  const topupRow = topup ? lines.find((l) => isReload(l) && l.card_id === topup.card_id) : null
+  const sameAmount = (a, b) => Math.round(Number(a || 0) * 100) === Math.round(Number(b || 0) * 100)
+  const topupOk = !topup || Boolean(topupRow && sameAmount(topupRow.amount, topup.amount))
   const fileInput = useRef(null)
-  const vById = useMemo(() => Object.fromEntries(usable.map((v) => [v.id, v])), [usable])
+  // every vehicle of the company (a receipt can be for someone else's car, found with the search)
+  const vById = useMemo(() => Object.fromEntries(vehicles.map((v) => [v.id, v])), [vehicles])
+  // anyone else's vehicle (also one already on this claim): found with the search
+  const others = useMemo(
+    () => vehicles.filter((v) => !drives(v) && !v.general_use && (inUse(v) || initialLines?.some((l) => l.vehicle_id === v.id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vehicles, initialLines, user.id]
+  )
 
   const update = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const remove = (key) => setLines((ls) => ls.filter((l) => l.key !== key))
@@ -108,7 +156,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   // Litres and RM amounts are kept to 2 decimals, unit price to 3; the
   // browser refuses to submit a box whose value has more decimals than its
   // step, so rounding happens on autofill, on leaving the box and on save.
-  const DP = { litres: 2, unit_price: 3, amount: 2 }
+  const DP = { litres: 2, unit_price: 3, pump_price: 3, amount: 2 }
   const fixDp = (field, value) => {
     if (value === '' || value == null) return ''
     const n = Number(value)
@@ -122,6 +170,12 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   }
   const setNumber = (l, field, value) => {
     const patch = { [field]: value }
+    if (subsidisedLine(l)) {
+      // Fleet card (KPDN subsidy): litres and amount come from the receipt; the
+      // subsidised RM/L = amount ÷ litres. The pump price is only kept for reference.
+      if (field === 'litres' || field === 'amount') patch.unit_price = subsidisedPrice(field === 'litres' ? value : l.litres, field === 'amount' ? value : l.amount)
+      return update(l.key, patch)
+    }
     const L = field === 'litres' ? Number(value) : Number(l.litres)
     const P = field === 'unit_price' ? Number(value) : Number(l.unit_price)
     const A = field === 'amount' ? Number(value) : Number(l.amount)
@@ -140,19 +194,33 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   }
   const vehicleValue = (l) => (isReload(l) ? `card:${l.card_id}` : l.vehicle_id)
   // Fleet card = KPDN subsidised diesel; cash at the pump = non-subsidised.
-  const setPayment = (l, payment) => update(l.key, { payment, subsidised: payment === 'fleet_card' })
+  // To fleet card: the unit price becomes amount ÷ litres (a typed price is kept as the pump price);
+  // back to cash: the pump price, if any, becomes the unit price again (litres × unit price = amount).
+  const setPayment = (l, payment) => {
+    if (payment === 'fleet_card' && !isReload(l))
+      return update(l.key, { payment, subsidised: true, pump_price: l.pump_price || l.unit_price || '', unit_price: subsidisedPrice(l.litres, l.amount) })
+    return update(l.key, { payment, subsidised: payment === 'fleet_card', ...(l.payment === 'fleet_card' && l.pump_price ? { unit_price: l.pump_price } : {}), pump_price: '' })
+  }
 
   // Receipt files: one row per file, read for a draft, attached to the row.
   const readable = (f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
   async function addFiles(fileList) {
     const files = [...fileList].filter(Boolean)
     if (!files.length) return
-    const fresh = files.map((file) => ({ ...blankLine(mine), file, scan: readable(file) ? 'scanning' : null }))
-    setLines((ls) => {
-      const onlyBlank = ls.length === 1 && !ls[0].file && !ls[0].amount && !ls[0].litres && !ls[0].receipt_path
-      return onlyBlank ? fresh : [...ls, ...fresh]
-    })
-    for (const row of fresh) if (row.scan === 'scanning') await readRow(row)
+    // rows still without a receipt get the files first (the top-up reload row first), then new rows
+    const empty = lines.filter((l) => !l.file && !l.receipt_path).sort((a, b) => Number(b === topupRow) - Number(a === topupRow))
+    const filled = files.slice(0, empty.length).map((file, i) => ({ ...empty[i], file, scan: readable(file) ? 'scanning' : null }))
+    const fresh = files.slice(empty.length).map((file) => ({ ...blankLine(mine), file, scan: readable(file) ? 'scanning' : null }))
+    const byKey = new Map(filled.map((r) => [r.key, r]))
+    setLines((ls) => [...ls.map((l) => byKey.get(l.key) || l), ...fresh])
+    for (const row of [...filled, ...fresh]) if (row.scan === 'scanning') await readRow(row)
+  }
+  // A file chosen or dropped on one row's Attachment box: attached to that row and read.
+  async function attach(l, file) {
+    if (!file) return
+    const row = { ...l, file, scan: readable(file) ? 'scanning' : null }
+    update(l.key, { file, scan: row.scan })
+    if (row.scan === 'scanning') await readRow(row)
   }
 
   // Read one row's file and fill the draft figures (never overwrites typed values with blanks).
@@ -160,12 +228,27 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
     update(row.key, { scan: 'scanning' })
     const small = row.file.type.startsWith('image/') ? await compressReceipt(row.file) : row.file
     const draft = await scanReceipt(small)
+    // A reload row keeps its card: only the date, amount, receipt no. and station are read
+    if (isReload(row))
+      return update(row.key, {
+        scan: 'done',
+        ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
+        ...(draft.amount ? { amount: fixDp('amount', draft.amount) } : {}),
+        ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
+        ...(draft.station ? { station: draft.station } : {})
+      })
+    const card = (draft.payment || row.payment) === 'fleet_card'
+    const litres = draft.litres ? fixDp('litres', draft.litres) : row.litres
+    // a fleet card row: no amount guessed from litres × pump price (the card is charged less)
+    const amount = draft.amount && !(card && draft.amount_from_price) ? fixDp('amount', draft.amount) : row.amount
     update(row.key, {
       scan: 'done',
       ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
-      ...(draft.litres ? { litres: fixDp('litres', draft.litres) } : {}),
-      ...(draft.unit_price ? { unit_price: fixDp('unit_price', draft.unit_price) } : {}),
-      ...(draft.amount ? { amount: fixDp('amount', draft.amount) } : {}),
+      ...(draft.litres ? { litres } : {}),
+      ...(card
+        ? { unit_price: subsidisedPrice(litres, amount), ...(draft.pump_price || draft.unit_price ? { pump_price: fixDp('pump_price', draft.pump_price || draft.unit_price) } : {}) }
+        : draft.unit_price ? { unit_price: fixDp('unit_price', draft.unit_price) } : {}),
+      ...(amount !== row.amount ? { amount } : {}),
       ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
       // The person's own vehicle (driver in Machinery Profile) when the row has none yet
       ...(!row.vehicle_id && !row.card_id && mine ? { vehicle_id: mine.id, ...(draft.product ? {} : { description: fuelWord(mine) }) } : {}),
@@ -180,13 +263,19 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   const litres = lines.reduce((s, l) => s + (Number(l.litres) || 0), 0)
   const reading = lines.some((l) => l.scan === 'scanning')
   const valid =
+    topupOk &&
     lines.length > 0 &&
     lines.every((l) => l.fill_date && Number(l.amount) >= 0 && (isReload(l) ? l.card_id && Number(l.amount) > 0 : Number(l.amount) > 0 || Number(l.litres) > 0))
+  // A draft may be half filled: any row with something in it (a photo, a date,
+  // a figure); a reload row still needs its card. Blank dates save as today.
+  const filled = (l) => Boolean(l.file || l.receipt_path || Number(l.amount) > 0 || Number(l.litres) > 0 || l.receipt_no || l.station || l.vehicle_id)
+  const draftValid = lines.some(filled) && lines.every((l) => !isReload(l) || l.card_id)
 
   // status: 'draft' (Save as draft) or 'pending' (Submit). A pending claim being edited stays pending.
   async function save(e, status = 'pending') {
     e?.preventDefault?.()
-    if (!valid || busy) return
+    const asDraft = status === 'draft' && (!claim || claim.status === 'draft')
+    if (!(asDraft ? draftValid : valid) || busy) return
     setBusy(true)
     setError('')
     const uploaded = []
@@ -200,6 +289,20 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
           if (l.receipt_path) removeReceipt(l.receipt_path)
         }
         prepared.push({ ...l, company_id: company.id, receipt_path: receipt_path || null, id: l.id || undefined })
+      }
+      // A draft keeps its empty rows out, and blank figures as blanks.
+      if (asDraft) {
+        const kept = prepared.filter(filled)
+        prepared.length = 0
+        for (const l of kept)
+          prepared.push({
+            ...l,
+            fill_date: l.fill_date || today(),
+            amount: Number(l.amount) > 0 ? l.amount : 0,
+            litres: Number(l.litres) > 0 ? l.litres : '',
+            unit_price: Number(l.unit_price) >= 0 ? l.unit_price : '',
+            pump_price: Number(l.pump_price) > 0 ? l.pump_price : ''
+          })
       }
       const wasDraft = claim?.status === 'draft'
       const next = claim && !wasDraft ? undefined : status // only a new claim or a draft changes status here
@@ -222,7 +325,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
         Cancel
       </Button>
       {draftable && (
-        <Button type="button" variant="secondary" disabled={busy || !valid || reading} onClick={(e) => save(e, 'draft')}>
+        <Button type="button" variant="secondary" disabled={busy || !draftValid || reading} onClick={(e) => save(e, 'draft')}>
           {busy ? 'Saving…' : 'Save as draft'}
         </Button>
       )}
@@ -239,6 +342,16 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
     <form onSubmit={save} className="space-y-4">
       {error && <p className="rounded-lg bg-red-100 p-2.5 text-sm text-red-700">{error}</p>}
       {buttons}
+      {topup && (
+        <p className={`rounded-xl px-4 py-2.5 text-sm ${topupOk ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+          Top-up claim for request <b>{topupNo(topup)}</b>: approved <b>{money(topup.amount)}</b>.{' '}
+          {topupOk
+            ? 'The reload matches the approved amount.'
+            : topupRow
+              ? `The reload receipt must be ${money(topup.amount)} (now ${money(Number(topupRow.amount) || 0)}). Attach the matching receipt or correct the amount.`
+              : 'Keep the fleet card reload row for this card.'}
+        </p>
+      )}
 
       {/* Header */}
       <Card className="p-4 sm:p-5">
@@ -294,7 +407,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="w-10 px-3 py-2.5">#</th>
-                <th className="w-44 px-2 py-2.5">Vehicle no.</th>
+                <th className="w-44 px-2 py-2.5" title="Vehicle no., or the fleet card no. for a reload">Ref No.</th>
                 <th className="w-44 px-2 py-2.5">Receipt</th>
                 <th className="w-40 px-2 py-2.5">Description</th>
                 <th className="w-40 px-2 py-2.5">Fuel</th>
@@ -313,18 +426,16 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                   <tr key={l.key} className={l.scan === 'scanning' ? 'bg-amber-50/40' : ''}>
                     <td className="px-3 py-3 align-top pt-4 font-semibold text-slate-500">{i + 1}</td>
                     <td className="px-2 py-3">
-                      <select value={vehicleValue(l)} onChange={(e) => setVehicle(l, e.target.value)} className={`${tall} tracking-wide ${isReload(l) ? 'font-semibold text-emerald-700' : ''}`} title="Vehicle, or a fleet card to reload">
-                        {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
-                        {cards.length > 0 && (
-                          <optgroup label="Fleet card reload">
-                            {cards.map((c) => (
-                              <option key={c.id} value={`card:${c.id}`}>
-                                Reload · {cardLabel(c)}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
+                      <VehiclePick
+                        value={vehicleValue(l)}
+                        onChange={(v) => setVehicle(l, v)}
+                        mine={usable.filter(drives)}
+                        general={usable.filter((v) => !drives(v) && v.general_use)}
+                        others={others}
+                        cards={cards}
+                        vById={vById}
+                        className={`${tall} tracking-wide ${isReload(l) ? 'font-semibold text-emerald-700' : ''}`}
+                      />
                     </td>
                     <td className="px-2 py-3">
                       <div className="space-y-1.5">
@@ -340,15 +451,30 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                         <Unit unit="L">
                           <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Litre'} disabled={isReload(l)} value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} onBlur={() => blurNumber(l, 'litres')} className={`${cell} pr-8 text-right`} title="Litres" />
                         </Unit>
-                        <Unit unit="RM/L">
-                          <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Unit price'} disabled={isReload(l)} value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
-                        </Unit>
+                        {subsidisedLine(l) ? (
+                          <>
+                            <Unit unit="RM/L">
+                              <input value={l.unit_price} readOnly tabIndex={-1} placeholder="Amount ÷ litres" className={`${cell} cursor-default bg-emerald-50/60 pr-12 text-right`} title="Subsidised RM/L = Amount ÷ Litres (worked out, not typed)" />
+                            </Unit>
+                            <p className="-mt-1 text-right text-[10px] font-medium text-emerald-700">Subsidised RM/L</p>
+                            <Unit unit="RM/L">
+                              <input type="number" inputMode="decimal" min="0" step="any" placeholder="Pump price" value={l.pump_price} onChange={(e) => setNumber(l, 'pump_price', e.target.value)} onBlur={() => blurNumber(l, 'pump_price')} className={`${cell} pr-12 text-right text-slate-500`} title="Pump price printed on the receipt (reference only, not used in any sum)" />
+                            </Unit>
+                          </>
+                        ) : (
+                          <Unit unit="RM/L">
+                            <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Unit price'} disabled={isReload(l)} value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
+                          </Unit>
+                        )}
                       </div>
                     </td>
                     <td className="px-2 py-3">
                       <Unit unit="RM" left>
-                        <input type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} onBlur={() => blurNumber(l, 'amount')} className={`${tall} pl-10 text-right font-semibold`} title="Total fuel expenses" />
+                        <input type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setNumber(l, 'amount', e.target.value)} onBlur={() => blurNumber(l, 'amount')} className={`${tall} pl-10 text-right font-semibold ${l === topupRow && !topupOk ? 'border-red-400 ring-2 ring-red-200' : ''}`} title="Total fuel expenses" />
                       </Unit>
+                      {l === topupRow && (
+                        <p className={`mt-1 text-right text-[11px] font-medium ${topupOk ? 'text-emerald-700' : 'text-red-600'}`}>Approved {money(topup.amount)}</p>
+                      )}
                     </td>
                     <td className="px-2 py-3">
                       <Unit unit="RM" left>
@@ -366,12 +492,70 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                       </div>
                     </td>
                     <td className="px-2 py-3">
-                      <textarea value={l.remark} maxLength={300} placeholder="Remark" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${tall} resize-none py-2`} title="Remark" />
+                      {/* Remark: two buttons — Bill to company (one per receipt) and a text note */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <label
+                            className={`relative inline-flex h-8 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold ${
+                              l.bill_to_company_id ? 'border-brand bg-brand text-white' : 'border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800'
+                            }`}
+                            title={l.bill_to_company_id ? `Bill to ${coName(l.bill_to_company_id)} (click to change)` : 'Bill to company: which company this fuel is charged to later'}
+                          >
+                            <IconBuilding width={15} height={15} className="shrink-0" />
+                            <span className="truncate">{l.bill_to_company_id ? coName(l.bill_to_company_id) : 'Bill to'}</span>
+                            {/* the real drop-down sits invisibly on top, so it opens the phone / browser list */}
+                            <select
+                              value={l.bill_to_company_id || ''}
+                              onChange={(e) => update(l.key, { bill_to_company_id: e.target.value })}
+                              className="absolute inset-0 cursor-pointer opacity-0"
+                              aria-label="Bill to company"
+                            >
+                              <option value="">— Not charged to another company —</option>
+                              {billCos.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                  {c.short_name ? ` (${c.short_name})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setTextOpen((o) => ({ ...o, [l.key]: !(o[l.key] ?? Boolean(l.remark)) }))}
+                            className={`inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold ${
+                              l.remark ? 'border-slate-400 bg-slate-100 text-slate-800' : 'border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-800'
+                            }`}
+                            title={l.remark ? 'Remark text' : 'Add remark text'}
+                            aria-label="Remark text"
+                          >
+                            <IconNotebook width={15} height={15} className="shrink-0" />
+                            <span className="truncate">Note</span>
+                          </button>
+                        </div>
+                        {(textOpen[l.key] ?? Boolean(l.remark)) && (
+                          <textarea autoFocus={textOpen[l.key] === true && !l.remark} value={l.remark} maxLength={300} rows={2} placeholder="More details…" onChange={(e) => update(l.key, { remark: e.target.value })} className={`${cell} h-auto resize-none py-1.5`} title="Remark" />
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-3">
-                      <label className={`${tall} flex cursor-pointer flex-col items-center justify-center gap-1 border-dashed text-xs hover:border-brand`}>
-                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && update(l.key, { file: e.target.files[0], scan: null })} />
-                        <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-medium text-slate-700">Choose</span>
+                      <label
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setRowDrag(l.key)
+                        }}
+                        onDragLeave={() => setRowDrag((k) => (k === l.key ? null : k))}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setRowDrag(null)
+                          attach(l, e.dataTransfer.files?.[0])
+                        }}
+                        className={`${tall} flex cursor-pointer flex-col items-center justify-center gap-1 border-dashed text-xs hover:border-brand ${rowDrag === l.key ? 'border-brand bg-brand-light' : ''}`}
+                        title="Choose a file, or drop it here"
+                      >
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => (attach(l, e.target.files?.[0]), (e.target.value = ''))} />
+                        <span className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-medium text-slate-700">{rowDrag === l.key ? 'Drop here' : 'Choose or drop'}</span>
                         <span className="w-full truncate px-1 text-center text-slate-600" title={l.file ? l.file.name : l.receipt_path ? 'Attached' : ''}>
                           {l.scan === 'scanning' ? 'Reading…' : l.file ? l.file.name : l.receipt_path ? 'Attached' : 'No file'}
                         </span>
@@ -405,5 +589,114 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
 
       {buttons}
     </form>
+  )
+}
+
+// Ref No. of a receipt, two tabs:
+//   Vehicle     my own vehicles and the general-use cars; anyone else's vehicle is
+//               found by typing its reg. no. (e.g. fuel bought for a colleague
+//               driving another person's car)
+//   Fleet card  the fleet cards, to reload one
+function VehiclePick({ value, onChange, mine, general, others, cards, vById, className }) {
+  const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState('vehicle')
+  const [q, setQ] = useState('')
+  const [pos, setPos] = useState(null)
+  const btn = useRef(null)
+  const box = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e) => box.current && !box.current.contains(e.target) && btn.current && !btn.current.contains(e.target) && setOpen(false)
+    const esc = (e) => e.key === 'Escape' && setOpen(false)
+    const moved = (e) => box.current && !box.current.contains(e.target) && setOpen(false)
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    window.addEventListener('scroll', moved, true)
+    window.addEventListener('resize', moved)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', esc)
+      window.removeEventListener('scroll', moved, true)
+      window.removeEventListener('resize', moved)
+    }
+  }, [open])
+  const isCard = value.startsWith('card:')
+  const toggle = () => {
+    if (open) return setOpen(false)
+    const r = btn.current.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom
+    setPos({ left: r.left, width: Math.max(r.width, 280), ...(below < 340 ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) })
+    setQ('')
+    setTab(isCard ? 'card' : 'vehicle')
+    setOpen(true)
+  }
+  const pick = (v) => {
+    onChange(v)
+    setOpen(false)
+  }
+  const term = q.trim().toLowerCase()
+  const hit = (v) => !term || [v.reg_no, v.name, v.brand, v.model, v.machine_type].filter(Boolean).join(' ').toLowerCase().includes(term)
+  const card = isCard ? cards.find((c) => `card:${c.id}` === value) : null
+  const label = card ? `Reload · ${cardLabel(card)}` : value && vById[value] ? vehicleLabel(vById[value]) : '— None —'
+  const groups =
+    tab === 'vehicle'
+      ? [
+          ['My car', mine.filter(hit)],
+          ['General car', general.filter(hit)],
+          // other people's vehicles only when a reg. no. is typed
+          ...(term ? [['Other vehicles', others.filter(hit)]] : [])
+        ]
+      : [['Fleet card', cards.filter((c) => !term || cardLabel(c).toLowerCase().includes(term))]]
+  const item = (val, text, on) => (
+    <button
+      key={val || 'none'}
+      type="button"
+      onClick={() => pick(val)}
+      className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm ${on ? 'bg-brand/10 font-semibold text-brand-dark' : 'text-slate-700 hover:bg-slate-100'}`}
+    >
+      {text}
+    </button>
+  )
+  const tabBtn = (k, text) => (
+    <button
+      type="button"
+      onClick={() => {
+        setTab(k)
+        setQ('')
+      }}
+      className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold ${tab === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+    >
+      {text}
+    </button>
+  )
+  const nothing = groups.every(([, vs]) => !vs.length)
+  return (
+    <>
+      <button ref={btn} type="button" onClick={toggle} className={`${className} flex w-full items-center text-left`} title="Vehicle no., or a fleet card to reload">
+        <span className="line-clamp-2 flex-1">{label}</span>
+        <span className="ml-1 text-slate-400">▾</span>
+      </button>
+      {open && pos && (
+        <div ref={box} style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, zIndex: 60 }} className="rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+          <div className="mb-1.5 flex gap-1 rounded-lg bg-slate-100 p-0.5">
+            {tabBtn('vehicle', 'Vehicle')}
+            {cards.length > 0 && tabBtn('card', 'Fleet card')}
+          </div>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tab === 'vehicle' ? 'Key in reg. no. to find others' : 'Search card no.'} className={`${inputCls} mb-1.5 h-9 w-full px-2.5 text-sm`} />
+          {/* same height on both tabs (the window does not shrink on Fleet card) */}
+          <div className="h-64 overflow-y-auto">
+            {groups.map(([title, vs]) =>
+              vs.length ? (
+                <div key={title} className="mt-1">
+                  <p className="px-2.5 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+                  {tab === 'vehicle' ? vs.map((v) => item(v.id, vehicleLabel(v), v.id === value)) : vs.map((c) => item(`card:${c.id}`, `Reload · ${cardLabel(c)}`, `card:${c.id}` === value))}
+                </div>
+              ) : null
+            )}
+            {nothing && <p className="px-2.5 py-3 text-sm text-slate-400">{tab === 'vehicle' ? 'No vehicle found.' : 'No fleet card found.'}</p>}
+          </div>
+        </div>
+      )}
+    </>
   )
 }

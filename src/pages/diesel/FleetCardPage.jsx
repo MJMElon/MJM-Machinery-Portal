@@ -13,8 +13,8 @@ import {
 import { BalanceChart } from "../../components/diesel/CardCharts.jsx";
 import { CardMonthUsage } from "../../components/diesel/CardMonthUsage.jsx";
 import { FleetCardInUse } from "../../components/diesel/FleetCardInUse.jsx";
-import { RequestTopupModal } from "../../components/diesel/TopupRequests.jsx";
-import { PasswordField } from "../../components/diesel/CardPassword.jsx";
+import { NewTopupModal } from "../../components/diesel/TopupRequests.jsx";
+import { PasswordField, PasswordInput } from "../../components/diesel/CardPassword.jsx";
 import {
   CARD_CHECKLIST,
   CARD_STATUS,
@@ -77,6 +77,7 @@ export default function FleetCardPage({ mode }) {
   const [people, setPeople] = useState([]);
   const [ledger, setLedger] = useState(null); // null until the database has machinery_card_ledger
   const [askTopup, setAskTopup] = useState(false);
+  const [topupSent, setTopupSent] = useState("");
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -272,6 +273,7 @@ export default function FleetCardPage({ mode }) {
         ledger={ledger}
         reload={load}
         startEdit={mode === "edit"}
+        companyTag={params.get("cons") === "1" ? company.short_name || company.code || company.name : null}
       />
     );
 
@@ -515,7 +517,7 @@ export default function FleetCardPage({ mode }) {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {card && card.card_no && !["cancelled", "inactive", "application"].includes(card.status) && (
+              {access.procurement && card && card.card_no && !["cancelled", "inactive", "application"].includes(card.status) && (
                 <Button type="button" onClick={() => setAskTopup(true)}>
                   Request top up
                 </Button>
@@ -563,6 +565,7 @@ export default function FleetCardPage({ mode }) {
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {topupSent && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-800">{topupSent}</p>}
 
       {inUse ? (
         <div className="space-y-4">
@@ -678,8 +681,7 @@ export default function FleetCardPage({ mode }) {
                     />
                   </Row>
                   <Row label="Login password" ro={ro} show={<PasswordField cardId={id} has={Boolean(card?.login_password_set || card?.login_password)} canSee={access.procurement} />}>
-                    <input
-                      type="password"
+                    <PasswordInput
                       value={form.login_password}
                       onChange={set("login_password")}
                       maxLength={80}
@@ -937,8 +939,7 @@ export default function FleetCardPage({ mode }) {
                   />
                 </Row>
                 <Row label="Login Password" ro={ro} show={<PasswordField cardId={id} has={Boolean(card?.login_password_set || card?.login_password)} canSee={access.procurement} />}>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={form.login_password}
                     onChange={set("login_password")}
                     maxLength={80}
@@ -1063,14 +1064,11 @@ export default function FleetCardPage({ mode }) {
       )}
 
       {askTopup && card && (
-        <RequestTopupModal
+        <NewTopupModal
           company={company}
-          cards={[card]}
-          vById={vById}
-          balance={ledger ? cardBalances(ledger) : null}
-          cardId={card.id}
+          preselect={[card.id]}
           onClose={() => setAskTopup(false)}
-          onSaved={() => navigate("/diesel/cards/topup")}
+          onSent={(msg) => setTopupSent(msg)}
         />
       )}
     </form>

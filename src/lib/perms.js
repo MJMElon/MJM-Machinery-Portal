@@ -43,13 +43,13 @@ export const MODULES = [
     sections: [
       {
         key: 'claims',
-        label: 'Fuel Receipt Claims',
+        label: 'Fuel Claims',
         actions: ['view', 'add', 'edit', 'delete'],
         special: ['view_all', 'approve', 'pay'],
         hint: 'View / add / edit / delete apply to the person’s own claims'
       },
-      { key: 'usage', label: 'Fuel Usage Reports', actions: ['view', 'add', 'delete'], special: [] },
-      { key: 'fuel_record', label: 'Operational Diesel Records', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
+      { key: 'usage', label: 'Reports', actions: ['view', 'add', 'delete'], special: [] },
+      { key: 'fuel_record', label: 'Estate Fuel Record', actions: ['view', 'add', 'edit', 'delete'], special: [], hint: 'Fuel issued to machines from the company tank' },
       { key: 'cards', label: 'Fleet Card Manage', actions: ['view', 'add', 'edit', 'delete'], special: [] },
       { key: 'report', label: 'Report', actions: ['view'], special: [] }
     ]
@@ -101,7 +101,7 @@ export const ROLE_MODEL = [
     pages: [
       {
         section: 'claims',
-        label: 'Fuel Receipt Claims',
+        label: 'Fuel Claims',
         options: [
           { key: 'own', label: 'View own claims record (submit, edit, delete own claims)', actions: ['view', 'add', 'edit', 'delete'] },
           { key: 'all', label: 'View all users’ claims in this company', actions: ['view_all'] },
@@ -119,7 +119,7 @@ export const ROLE_MODEL = [
       },
       {
         section: 'usage',
-        label: 'Fuel Usage Reports',
+        label: 'Reports',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'manage', label: 'Record / delete card fill-ups', actions: ['add', 'delete'] }
@@ -127,7 +127,7 @@ export const ROLE_MODEL = [
       },
       {
         section: 'fuel_record',
-        label: 'Operational Diesel Records',
+        label: 'Estate Fuel Record',
         options: [
           { key: 'view', label: 'View page', actions: ['view'] },
           { key: 'add', label: 'Add records', actions: ['add'] },
@@ -135,28 +135,28 @@ export const ROLE_MODEL = [
           { key: 'delete', label: 'Delete records', actions: ['delete'] }
         ]
       },
-      { section: 'report', label: 'Report (old)', options: [{ key: 'view', label: 'View Fuel Usage Reports', actions: ['view'] }] }
+      { section: 'report', label: 'Report (old)', options: [{ key: 'view', label: 'View Reports', actions: ['view'] }] }
     ]
   }
 ]
 
 export const approveFor = (perms) => (Array.isArray(perms?.approve_for) ? perms.approve_for : [])
-// Fleet card top-up requests: perms.topup = ['approve'] and perms.topup_approve_for = [user ids] (none = everyone)
+// Fleet card top-up requests: perms.topup = ['approve'] and perms.topup_approve_for = [user ids].
+// Only the people named: an 'approve' tick with nobody named approves nobody (super admins: everyone).
 export const topupApproveFor = (perms) => (Array.isArray(perms?.topup_approve_for) ? perms.topup_approve_for : [])
 /** May the signed-in user approve / reject top-up requests of this person? */
 export const canApproveTopup = (perms, isSuper, requesterId) => {
   if (isSuper) return true
   if (!has(perms, 'topup', 'approve')) return false
-  const list = topupApproveFor(perms)
-  return list.length === 0 || list.includes(requesterId)
+  return topupApproveFor(perms).includes(requesterId)
 }
 
-/** May the signed-in user approve / reject claims of this claimant? (approver named for them, or approve-all) */
+/** May the signed-in user approve / reject claims of this claimant? Only when named as their approver
+ * (Fuel Manage → User setting); super admins approve everyone. */
 export const canApproveClaimant = (perms, isSuper, claimantId) => {
   if (isSuper) return true
   if (!has(perms, 'claims', 'approve')) return false
-  const list = approveFor(perms)
-  return list.length === 0 || list.includes(claimantId)
+  return approveFor(perms).includes(claimantId)
 }
 
 /** May the signed-in user open this claimant's claims for review? Approver of that person, or accountant. */
@@ -274,10 +274,14 @@ export async function removePerms(companyId, userId) {
 /** The signed-in user's matrix for a company: { loaded, perms, can(section, action), any(sections) } */
 export function usePerms(companyId) {
   const { user, isSuperAdmin } = useAuth()
-  const [state, setState] = useState({ loaded: false, perms: {}, error: '' })
+  // `key`: the company / person / super admin the loaded rights belong to. While
+  // they are being loaded for a new key the old ones do not count (loaded =
+  // false), so a page never shows "No access" for a moment before the real rights arrive.
+  const key = `${companyId || ''}|${user?.id || ''}|${isSuperAdmin ? 1 : 0}`
+  const [state, setState] = useState({ loaded: false, perms: {}, error: '', key: null })
   useEffect(() => {
-    if (!companyId || !user) return setState({ loaded: true, perms: {}, error: '' })
-    if (isSuperAdmin) return setState({ loaded: true, perms: {}, error: '' })
+    if (!companyId || !user) return setState({ loaded: true, perms: {}, error: '', key })
+    if (isSuperAdmin) return setState({ loaded: true, perms: {}, error: '', key })
     let active = true
     // Role setup + what the MJM Intranet icons give (machinery_my_perms); before
     // that migration, just the Role setup row.
@@ -288,14 +292,15 @@ export function usePerms(companyId) {
           return supabase.from(PERMS_TABLE).select('perms').eq('company_id', companyId).eq('user_id', user.id).maybeSingle().then((r) => ({ data: r.data?.perms, error: r.error }))
         return { data, error }
       })
-      .then(({ data, error }) => active && setState({ loaded: true, perms: data || {}, error: error ? friendly(error).message : '' }))
+      .then(({ data, error }) => active && setState({ loaded: true, perms: data || {}, error: error ? friendly(error).message : '', key }))
     return () => {
       active = false
     }
-  }, [companyId, user, isSuperAdmin])
+  }, [companyId, user, isSuperAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
   return useMemo(
     () => ({
       ...state,
+      loaded: state.loaded && state.key === key,
       super: isSuperAdmin,
       can: (section, action) => isSuperAdmin || has(state.perms, section, action),
       any: (sections) => isSuperAdmin || hasAny(state.perms, sections),
@@ -309,7 +314,7 @@ export function usePerms(companyId) {
       // Fuel Manage role (User setting): 'user' / 'accountant' / 'procurement'
       fuelRole: isSuperAdmin ? 'procurement' : fuelRole(state.perms)
     }),
-    [state, isSuperAdmin]
+    [state, isSuperAdmin, key]
   )
 }
 

@@ -9,8 +9,11 @@ portal (Setel) and sends them to CMMS 2. CMMS 2 does the rest:
 - matches it with the driver's fuel claim receipt for the same fill (same card, same
   day or a day either side, amount within RM 0.10, or the same receipt number). It is
   counted once: on the claim when there is one, otherwise as **Not claimed yet**.
-- shows it in Fleet Card Manage → the card → Usage, in My fleet card, the card balance
-  and Fuel Usage Reports.
+- shows it in Fleet Card Manage → the card → Usage (week by week; **View** gives the
+  date × driver grid, where these fill-ups are marked **P = Fuel Station Portal**), in
+  My fleet card, the card balance and Reports. They cannot be deleted by hand.
+- when a driver's claim has the same fill but another amount, the Usage box and the
+  grid mark it with **!** (claim amount differs from the Fuel Station Portal).
 
 ## One-time setup
 

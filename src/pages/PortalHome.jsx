@@ -10,7 +10,8 @@ import { usePerms } from '../lib/perms.js'
 
 // Portal main page: the selected company's modules in two boxes,
 // Operation (Machinery Manage, Fuel Manage, Worker CMMS) and HQ Admin
-// (Machinery Renewal, User Access).
+// (Machinery Renewal, User Access). Only modules the person has access to
+// (CMMS 2 User Access) are shown.
 export default function PortalHome() {
   const { isSuperAdmin } = useAuth()
   const { current, loaded, error } = useCompany()
@@ -18,9 +19,21 @@ export default function PortalHome() {
   const perms = usePerms(current?.id)
   // User Access: super admins, and module admins (for their module)
   const userAccess = isSuperAdmin || perms.adminModules.length > 0
+  // Only the modules the person has access to (User Access) are shown.
+  const can = (section, action) => perms.can(section, action)
+  const show = current
+    ? {
+        cmms: current.cmms_enabled && perms.any(['work', 'machines', 'suppliers']),
+        fuel: current.diesel_enabled && perms.any(['claims', 'usage', 'cards', 'report', 'fuel_record', 'topup']),
+        worker: (current.diesel_enabled && can('fuel_record', 'add')) || (current.cmms_enabled && can('work', 'add')),
+        renewal: current.cmms_enabled && can('machines', 'view')
+      }
+    : {}
+  const operation = show.cmms || show.fuel || show.worker
+  const hq = show.renewal || userAccess
   if (EMBEDDED) return <p className="p-6 text-center text-sm text-slate-500">This is the CMMS 2 main page. Close this window to go back to it.</p>
 
-  if (!loaded)
+  if (!loaded || (current && !perms.loaded))
     return (
       <div className="flex justify-center py-16 text-brand">
         <Spinner className="h-7 w-7" />
@@ -48,57 +61,55 @@ export default function PortalHome() {
       </Card>
     )
 
+  if (!operation && !hq)
+    return (
+      <Card className="mx-auto mt-6 max-w-lg p-8 text-center">
+        <p className="text-lg font-bold text-slate-800">No module access yet</p>
+        <p className="mt-1 text-sm text-slate-500">Ask your admin to give you access in CMMS 2 User Access for {current.name}.</p>
+      </Card>
+    )
+
   return (
     <div className="mx-auto flex max-w-5xl flex-wrap items-start justify-center gap-5 pt-4 sm:gap-6 sm:pt-10">
-      <Group title="Operation">
-        <TileGrid orderKey="home-operation">
-          <ModuleTile
-            key="cmms"
-            to="/cmms"
-            label="Machinery Manage"
-            Icon={MachineryIcon}
-            disabled={!current.cmms_enabled}
-            note={current.cmms_enabled ? null : 'Not enabled'}
-          />
-          <ModuleTile
-            key="diesel"
-            to="/diesel"
-            label="Fuel Manage"
-            Icon={DieselIcon}
-            disabled={!current.diesel_enabled}
-            note={current.diesel_enabled ? null : 'Not enabled'}
-          />
-          <ModuleTile
-            key="worker"
-            // Its own tab (a phone-style app, apart from the office pages); a fresh ?v= so it is never a cached copy.
-            onClick={current.cmms_enabled || current.diesel_enabled ? () => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank') : undefined}
-            label="Worker CMMS"
-            Icon={WorkerIcon}
-            disabled={!current.cmms_enabled && !current.diesel_enabled}
-            note={current.cmms_enabled || current.diesel_enabled ? null : 'Not enabled'}
-          />
-        </TileGrid>
-      </Group>
-      <Group title="HQ Admin">
-        <TileGrid orderKey="home-hq">
-          <ModuleTile
-            key="renewal"
-            onClick={current.cmms_enabled ? () => open({ key: 'renewal', label: 'Machinery\nRenewal', Icon: RenewalIcon, path: '/renewal' }) : undefined}
-            label={'Machinery\nRenewal'}
-            Icon={RenewalIcon}
-            disabled={!current.cmms_enabled}
-            note={current.cmms_enabled ? null : 'Not enabled'}
-          />
-          {userAccess && (
-            <ModuleTile
-              key="users"
-              onClick={() => open({ key: 'users', label: 'User Access', Icon: UserAccessIcon, path: '/settings/users' })}
-              label="User Access"
-              Icon={UserAccessIcon}
-            />
-          )}
-        </TileGrid>
-      </Group>
+      {operation && (
+        <Group title="Operation">
+          <TileGrid orderKey="home-operation">
+            {show.cmms && <ModuleTile key="cmms" to="/cmms" label="Machinery Manage" Icon={MachineryIcon} />}
+            {show.fuel && <ModuleTile key="diesel" to="/diesel" label="Fuel Manage" Icon={DieselIcon} />}
+            {show.worker && (
+              <ModuleTile
+                key="worker"
+                // Its own tab (a phone-style app, apart from the office pages); a fresh ?v= so it is never a cached copy.
+                onClick={() => window.open(`${window.location.pathname}?v=${Date.now()}#/app`, '_blank')}
+                label="Worker CMMS"
+                Icon={WorkerIcon}
+              />
+            )}
+          </TileGrid>
+        </Group>
+      )}
+      {hq && (
+        <Group title="HQ Admin">
+          <TileGrid orderKey="home-hq">
+            {show.renewal && (
+              <ModuleTile
+                key="renewal"
+                onClick={() => open({ key: 'renewal', label: 'Machinery\nRenewal', Icon: RenewalIcon, path: '/renewal' })}
+                label={'Machinery\nRenewal'}
+                Icon={RenewalIcon}
+              />
+            )}
+            {userAccess && (
+              <ModuleTile
+                key="users"
+                onClick={() => open({ key: 'users', label: 'User Access', Icon: UserAccessIcon, path: '/settings/users' })}
+                label="User Access"
+                Icon={UserAccessIcon}
+              />
+            )}
+          </TileGrid>
+        </Group>
+      )}
     </div>
   )
 }

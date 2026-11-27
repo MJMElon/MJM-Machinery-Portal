@@ -16,8 +16,9 @@ import { useAuth } from '../../auth/AuthContext.jsx'
 //   Fuel limit (Litre)   a number per person (perms.fuel_limit = [litres]),
 //                        for the dashboards and reports
 // "+ Add approver" opens a list of names to add from.
-// Changes stay on the page until Update (Cancel throws them away). The bar
-// with the search, Cancel and Update stays on top while scrolling. Module
+// Changes stay on the page until Update (Cancel throws them away); Cancel and
+// Update only show while there are changes. The bar with the search, Cancel
+// and Update stays on top while scrolling. Module
 // admins are set in CMMS 2 user access, not here.
 export default function DieselUsers() {
   const { company, access } = useOutletContext()
@@ -31,6 +32,7 @@ export default function DieselUsers() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
+  const [done, setDone] = useState(false) // "Updated" for a moment after saving
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +127,8 @@ export default function DieselUsers() {
         await savePerms(company.id, uid, perms[uid] || {}, isSuperAdmin ? {} : { modules: ['fuel'] })
         setSaved((s) => ({ ...s, [uid]: perms[uid] || {} }))
       }
+      setDone(true)
+      setTimeout(() => setDone(false), 2500)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -149,15 +153,18 @@ export default function DieselUsers() {
         <span className="w-full sm:w-72">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name…" className={`${inputCls} h-10`} />
         </span>
-        {canEdit && (
+        {/* Cancel / Update only while there are changes; after Update they go away */}
+        {canEdit && (dirty || saving) ? (
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" disabled={!dirty || saving} onClick={cancel}>
+            <Button variant="secondary" size="sm" disabled={saving} onClick={cancel}>
               Cancel
             </Button>
-            <Button size="sm" disabled={!dirty || saving} onClick={update}>
+            <Button size="sm" disabled={saving} onClick={update}>
               {saving ? 'Updating…' : 'Update'}
             </Button>
           </div>
+        ) : (
+          done && <span className="text-sm font-semibold text-emerald-700">Updated ✓</span>
         )}
       </div>
       <ErrorBox>{error}</ErrorBox>

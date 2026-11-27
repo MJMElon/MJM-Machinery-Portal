@@ -1,5 +1,5 @@
 import { supabase, DIESEL } from './supabase.js'
-import { FUEL_SECTIONS, usePerms } from './perms.js'
+import { FUEL_SECTIONS, topupApproveFor, usePerms } from './perms.js'
 
 // Diesel Manage: vehicles, cash fuel claims (receipt photos), fleet cards
 // (reloads + card fill-ups), reports and user access — all per company.
@@ -21,8 +21,10 @@ export const FUEL_TYPES = [
 ]
 export const CLAIM_STATUS = {
   draft: { label: 'Draft', color: 'slate' },
-  pending: { label: 'Pending', color: 'amber' },
-  approved: { label: 'Approved', color: 'green' },
+  pending: { label: 'Pending for approval', color: 'amber' },
+  // fleet card fill-ups only: nothing to pay back, no approval (migration 20261224)
+  recorded: { label: 'Recorded', color: 'slate' },
+  approved: { label: 'Pending for reimbursement', color: 'green' },
   rejected: { label: 'Rejected', color: 'red' },
   paid: { label: 'Paid', color: 'blue' }
 }
@@ -50,7 +52,8 @@ export function useDieselAccess(companyId) {
     error: p.error,
     can: p.can,
     use: p.any(FUEL_SECTIONS),
-    admin: p.can('claims', 'approve'),
+    // Approver = named as the approver of somebody in User setting (a bare 'approve' tick is not enough)
+    admin: p.super || (p.can('claims', 'approve') && p.approveFor.length > 0),
     pay: p.can('claims', 'pay'),
     claim: p.can('claims', 'add'),
     report: p.can('report', 'view') || p.can('claims', 'view_all'),
@@ -60,7 +63,7 @@ export function useDieselAccess(companyId) {
     fuelAdmin: p.adminOf('fuel'),
     approveFor: p.approveFor,
     approvesTopup: p.approvesTopup,
-    topupApprover: p.can('topup', 'approve'),
+    topupApprover: p.super || (p.can('topup', 'approve') && topupApproveFor(p.perms).length > 0),
     // Procurement role: may see fleet card web login passwords (eye button)
     procurement: p.fuelRole === 'procurement'
   }
@@ -125,6 +128,17 @@ export async function receiptUrl(path, seconds = 600) {
   return data.signedUrl
 }
 
+/** Signed links (10 min) for many receipts at once: { path: url }; PDFs and failures are left out. */
+export async function receiptUrls(paths, seconds = 600) {
+  const list = [...new Set((paths || []).filter((p) => p && !/\.pdf$/i.test(p)))]
+  const out = {}
+  for (let i = 0; i < list.length; i += 100) {
+    const { data } = await supabase.storage.from(DIESEL.bucket).createSignedUrls(list.slice(i, i + 100), seconds)
+    for (const d of data || []) if (d.signedUrl && !d.error) out[d.path] = d.signedUrl
+  }
+  return out
+}
+
 /** Last odometer reading recorded for a vehicle before a date (claims + card fill-ups). */
 export async function lastOdometer(vehicleId, beforeDate) {
   const pick = (table) =>
@@ -179,6 +193,16 @@ export function notifyClaim(id) {
   supabase.functions.invoke('claim-notify', { body: { claim_id: id } }).catch(() => {})
 }
 
+/** The claimant's bell: remind the approvers of a pending claim (once a day). Returns 'sent' / 'already' / 'none' / 'off'. */
+export async function remindApprovers(id) {
+  const { data, error } = await supabase.functions.invoke('claim-notify', { body: { claim_id: id, remind: true } })
+  if (error) throw new Error('Could not send the reminder. Please try again.')
+  if (data?.skipped === 'already sent') return 'already'
+  if (String(data?.skipped || '').startsWith('email not set up')) return 'off'
+  if (data?.error) throw new Error(data.error)
+  return data?.sent > 0 ? 'sent' : 'none'
+}
+
 // ---- claim lines (one per receipt) ----------------------------------------------
 
 const round = (v, dp) => Math.round(Number(v) * 10 ** dp) / 10 ** dp
@@ -192,6 +216,13 @@ export const PAYMENT_NOTE = { cash: 'Non-subsidised', fleet_card: 'KPDN subsidy'
 // A line is a fill-up (receipt for fuel) or a fleet card reload: the person
 // paid cash to top up a fleet card and claims it back (payable, no litres).
 export const isReload = (l) => l?.line_kind === 'reload'
+/** A fleet card fill-up (KPDN subsidised diesel): its RM/L is amount ÷ litres, not the printed pump price. */
+export const isSubsidisedFill = (l) => !isReload(l) && l?.payment === 'fleet_card'
+/** The RM/L to show for a claim row ('' when there is none). */
+export const linePrice = (l) =>
+  isSubsidisedFill(l)
+    ? Number(l.litres) > 0 ? (Number(l.amount || 0) / Number(l.litres)).toFixed(3) : ''
+    : l?.unit_price != null && l.unit_price !== '' ? Number(l.unit_price).toFixed(3) : ''
 export const cardLabel = (c) => (c ? [c.card_no, c.provider].filter(Boolean).join(' · ') : '—')
 export const reloadLabel = (c) => `Fleet card reload · ${c?.card_no || '—'}`
 
@@ -257,7 +288,9 @@ export async function createClaimWithLines(companyId, userId, header, lines) {
       submitted_on: header.submitted_on,
       fill_date: header.submitted_on,
       notes: header.notes || null,
-      status: header.status === 'draft' ? 'draft' : 'pending',
+      // saved as a draft first; submitted after its receipts are in (a claim with
+      // nothing to pay back then becomes Recorded instead of Pending)
+      status: 'draft',
       amount: 0
     })
     .select('id')
@@ -265,6 +298,7 @@ export async function createClaimWithLines(companyId, userId, header, lines) {
   if (error) throw friendly(error)
   try {
     await replaceLines(data.id, lines)
+    if (header.status !== 'draft') await setClaimStatus(data.id, 'pending')
   } catch (e) {
     await supabase.from(DIESEL.claims).delete().eq('id', data.id)
     throw e
@@ -279,14 +313,29 @@ export async function updateClaimWithLines(claimId, header, lines) {
     .update({ submitted_on: header.submitted_on, fill_date: header.submitted_on, notes: header.notes || null })
     .eq('id', claimId)
   if (error) throw friendly(error)
+  // back to Draft first, then the rows (a submitted top-up claim's rows can only change as a draft)
+  if (header.status === 'draft') await setClaimStatus(claimId, 'draft')
   await replaceLines(claimId, lines)
-  if (header.status) await setClaimStatus(claimId, header.status)
+  if (header.status && header.status !== 'draft') await setClaimStatus(claimId, header.status)
+  // a pending claim whose receipts changed: checked again (nothing to pay back → Recorded)
+  else await supabase.from(DIESEL.claims).update({ status: 'pending' }).eq('id', claimId).eq('status', 'pending')
 }
+
+/** The payable part of a claim: cash receipts and fleet card reloads (what an approver looks at). */
+export const payableLine = (l) => l.payment !== 'fleet_card' || l.line_kind === 'reload'
 
 /** The claimant: submit a draft (→ Pending) or keep it as Draft. */
 export async function setClaimStatus(claimId, status) {
   const { error } = await supabase.from(DIESEL.claims).update({ status }).eq('id', claimId)
-  if (error) throw friendly(error, { '23514': 'Run the Fuel SQL migration 20261208 (claim drafts) to save drafts.' })
+  if (error && /status_check/.test(error.message || '')) throw new Error('Run the SQL 20261221 (repair claim drafts) to save drafts.')
+  if (error) throw friendly(error)
+}
+
+/** The top-up request a claim was made from ({ id, request_no, card_id, amount }); null if it cannot be read. */
+export async function getTopup(id) {
+  if (!id) return null
+  const { data } = await supabase.from('machinery_fleet_topup_requests').select('id, request_no, card_id, amount, status').eq('id', id).maybeSingle()
+  return data || null
 }
 
 async function replaceLines(claimId, lines) {
@@ -297,8 +346,10 @@ async function replaceLines(claimId, lines) {
     const { error } = await supabase.from(LINES).delete().in('id', gone)
     if (error) throw friendly(error)
   }
+  // Every row carries its own id: in one bulk upsert, rows without an id would be sent
+  // as id: null (the columns are shared by all rows), so new rows get a uuid here.
   const rows = lines.map((l, i) => ({
-    ...(l.id ? { id: l.id } : {}),
+    id: l.id || crypto.randomUUID(),
     claim_id: claimId,
     company_id: l.company_id,
     line_no: i + 1,
@@ -308,7 +359,14 @@ async function replaceLines(claimId, lines) {
     card_id: isReload(l) ? l.card_id || null : null,
     vehicle_id: isReload(l) ? null : l.vehicle_id || null,
     litres: isReload(l) || l.litres === '' || l.litres == null ? null : round(l.litres, 2),
-    unit_price: isReload(l) || l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
+    // Fleet card (KPDN subsidised) fill: RM/L = amount ÷ litres (the database works it out the same way);
+    // the printed pump price is kept apart, for reference only.
+    unit_price: isReload(l)
+      ? null
+      : (l.payment || 'cash') === 'fleet_card'
+        ? Number(l.litres) > 0 ? round(Number(l.amount || 0) / Number(l.litres), 3) : null
+        : l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
+    pump_price: !isReload(l) && (l.payment || 'cash') === 'fleet_card' && Number(l.pump_price) > 0 ? round(l.pump_price, 3) : null,
     amount: round(l.amount || 0, 2),
     payment: isReload(l) ? 'cash' : l.payment || 'cash',
     subsidised: !isReload(l) && (l.payment || 'cash') === 'fleet_card',
@@ -317,10 +375,23 @@ async function replaceLines(claimId, lines) {
     odometer_km: l.odometer_km === '' || l.odometer_km == null ? null : Number(l.odometer_km),
     description: l.description || null,
     remark: l.remark || null,
-    receipt_path: l.receipt_path || null
+    receipt_path: l.receipt_path || null,
+    // Bill to company (migration 20261229); only sent when one is chosen, so older databases still save
+    ...(l.bill_to_company_id ? { bill_to_company_id: l.bill_to_company_id } : 'bill_to_company_id' in l ? { bill_to_company_id: null } : {})
   }))
   if (!rows.length) return
-  const { error } = await supabase.from(LINES).upsert(rows, { onConflict: 'id' })
+  // Columns an older database may not have yet: saved without them (pump price = reference only)
+  let send = rows
+  let { error } = await supabase.from(LINES).upsert(send, { onConflict: 'id' })
+  for (let i = 0; i < 2 && error && ['PGRST204', '42703'].includes(error.code); i++) {
+    const msg = error.message || ''
+    if (/bill_to/.test(msg)) {
+      if (send.some((r) => r.bill_to_company_id)) throw new Error('Bill to company needs the SQL migration 20261229 in the database first.')
+      send = send.map(({ bill_to_company_id, ...r }) => r) // eslint-disable-line no-unused-vars
+    } else if (/pump_price/.test(msg)) send = send.map(({ pump_price, ...r }) => r) // eslint-disable-line no-unused-vars
+    else break
+    ;({ error } = await supabase.from(LINES).upsert(send, { onConflict: 'id' }))
+  }
   if (error) throw friendly(error)
 }
 
@@ -363,6 +434,44 @@ export async function openReceipt(path) {
   const { data, error } = await supabase.storage.from(DIESEL.bucket).createSignedUrl(path, 60)
   if (error || !data) throw new Error('Could not open the receipt.')
   window.open(data.signedUrl, '_blank', 'noopener')
+}
+
+// ---- payment documents of a paid claim (bank slip etc.; migration 20261217) ----
+const PAY_DOCS = 'machinery_claim_payment_docs'
+
+/** Payment documents of these claims: { claimId: [{ id, path, file_name }] }; {} before the migration. */
+export async function listPaymentDocs(claimIds) {
+  if (!claimIds?.length) return {}
+  const out = {}
+  for (let i = 0; i < claimIds.length; i += 200) {
+    const { data, error } = await supabase.from(PAY_DOCS).select('id, claim_id, path, file_name, created_at').in('claim_id', claimIds.slice(i, i + 200)).order('created_at')
+    if (error) return out
+    for (const d of data || []) (out[d.claim_id] ||= []).push(d)
+  }
+  return out
+}
+
+/** Accountant: attach one payment document to an approved / paid claim. */
+export async function addPaymentDoc(claim, file) {
+  const upload = file.type.startsWith('image/') ? await compressReceipt(file) : file
+  if (upload.size > 10 * 1024 * 1024) throw new Error(`${file.name} is too big (max 10 MB).`)
+  const ext = upload.type === 'application/pdf' ? 'pdf' : upload.type === 'image/png' ? 'png' : upload.type === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${claim.company_id}/${claim.id}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(PAY_DOCS).upload(path, upload, { contentType: upload.type })
+  if (error) throw new Error(/bucket|not found/i.test(error.message) ? 'Run the SQL migration 20261217 (payment documents) first.' : `Could not upload ${file.name}.`)
+  const { data: me } = await supabase.auth.getUser()
+  const { error: e2 } = await supabase.from(PAY_DOCS).insert({ claim_id: claim.id, company_id: claim.company_id, path, file_name: file.name.slice(0, 200), uploaded_by: me?.user?.id })
+  if (e2) {
+    supabase.storage.from(PAY_DOCS).remove([path]).catch(() => {})
+    throw friendly(e2)
+  }
+}
+
+/** Signed link (10 min) to a payment document. */
+export async function paymentDocUrl(path) {
+  const { data, error } = await supabase.storage.from(PAY_DOCS).createSignedUrl(path, 600)
+  if (error || !data) throw new Error('Could not open the document.')
+  return data.signedUrl
 }
 
 // ---- fuel usage records (fuel issued to machines from the company tank) --------
@@ -494,7 +603,34 @@ export async function saveCard(companyId, { id, ...fields }) {
 }
 export async function deleteCard(id) {
   const { error } = await supabase.from(DIESEL.cards).delete().eq('id', id)
-  if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Cancelled instead.' })
+  if (error) throw friendly(error, { '23503': 'This card has fill-ups or reloads recorded, so it cannot be deleted. Set it to Inactive instead (Edit in Fleet card details).' })
+}
+
+// ---- automatic top-up requests (migration 20261220) ------------------------------
+/** Procurement: switch a card's automatic top-up request on / off with its amounts and the
+ * requestor (the Procurement person the requests are sent as; migration 20261228). */
+export async function setAutoTopup(cardId, on, min, max, requester, amount) {
+  const num = (v) => (v === '' || v == null ? null : round(v, 2))
+  const args = { p_card: cardId, p_on: on, p_min: num(min), p_max: num(max), p_requester: requester || null, p_amount: num(amount) }
+  const { error } = await supabase.rpc('machinery_set_auto_topup', args)
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migrations 20261229 (card min / max balance) and 20261230 (top-up amount) first.')
+    throw friendly(error)
+  }
+}
+/** The Procurement people of a company (user ids); null before migration 20261228. */
+export async function procurementPeople(companyId) {
+  const { data, error } = await supabase.rpc('machinery_procurement_people', { p_company: companyId })
+  return error ? null : (data || []).map((r) => r.user_id)
+}
+/** Why a card's automatic top-up request was / was not sent: { balance, card_status, waiting }; null before migration 20261226. */
+export async function autoTopupStatus(cardId) {
+  const { data, error } = await supabase.rpc('machinery_auto_topup_status', { p_card: cardId })
+  return error ? null : data
+}
+/** Check the cards of a company and send the automatic top-up requests that are due (quietly). */
+export function autoTopupCheck(companyId) {
+  return supabase.rpc('machinery_auto_topup_check', { p_company: companyId }).then(({ data }) => data || 0, () => 0)
 }
 
 // ---- fleet card top-up requests ----------------------------------------------
@@ -503,8 +639,8 @@ export async function deleteCard(id) {
 // claimed on a fuel claim. See migration 20261206120000_fleet_card_topup_requests.sql.
 export const TOPUPS = 'machinery_fleet_topup_requests'
 export const TOPUP_STATUS = {
-  pending: { label: 'Pending', color: 'amber' },
-  approved: { label: 'Approved', color: 'green' },
+  pending: { label: 'Pending for approval', color: 'amber' },
+  approved: { label: 'Pending for reimbursement', color: 'green' },
   rejected: { label: 'Rejected', color: 'red' },
   cancelled: { label: 'Cancelled', color: 'slate' },
   topped_up: { label: 'Topped up', color: 'blue' }
@@ -525,6 +661,13 @@ export async function myFleetCards(companyId) {
   return data || []
 }
 
+/** Fuel Manage task bar: reminders worked out in the database ({ unclaimed_fills }); {} before migration 20261216. */
+export async function myFuelTasks(companyId) {
+  const { data, error } = await supabase.rpc('machinery_my_fuel_tasks', { p_company: companyId })
+  if (error) return {}
+  return data || {}
+}
+
 /** The top-up requests the signed-in user may see (own, as approver, card managers); null before the migration. */
 export async function listTopups(companyId) {
   const { data, error } = await supabase.from(TOPUPS).select('*').eq('company_id', companyId).order('requested_at', { ascending: false }).limit(500)
@@ -542,7 +685,16 @@ export async function requestTopup(companyId, { card_id, amount, needed_by, reas
 }
 export async function decideTopup(id, approve, note) {
   const { error } = await supabase.rpc('machinery_topup_decide', { p_id: id, p_approve: approve, p_note: note || null })
+  if (error && /status_check/.test(error.message || '')) throw new Error('The database does not accept Draft claims yet: run the SQL 20261221 (repair claim drafts), then approve again.')
   if (error) throw friendly(error)
+}
+/** Undo an approve / reject of a top-up request (back to Pending; an unsubmitted top-up claim is removed). */
+export async function undoTopup(id) {
+  const { error } = await supabase.rpc('machinery_topup_undo', { p_id: id })
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Run the SQL migration 20261225 (top-up undo) first.')
+    throw friendly(error)
+  }
 }
 export async function cancelTopup(id) {
   const { error } = await supabase.rpc('machinery_topup_cancel', { p_id: id })
@@ -558,6 +710,12 @@ export async function addReload(companyId, row) {
   if (error) throw friendly(error)
 }
 
+/** Change a fill-up added by hand (litres, RM). */
+export async function updateUsage(id, patch) {
+  const { error } = await supabase.from(DIESEL.usage).update(patch).eq('id', id)
+  if (error) throw friendly(error)
+}
+
 export async function addUsage(companyId, row) {
   const { error } = await supabase.from(DIESEL.usage).insert({ company_id: companyId, ...row })
   if (error) throw friendly(error)
@@ -566,6 +724,32 @@ export async function addUsage(companyId, row) {
 export async function deleteCardRecord(kind, id) {
   const { error } = await supabase.from(kind === 'reload' ? DIESEL.reloads : DIESEL.usage).delete().eq('id', id)
   if (error) throw friendly(error)
+}
+
+// ---- name-only fleet card drivers (no account yet; migration 20270107) ----------
+
+const NAMED = 'machinery_card_named_drivers'
+const needNamed = (error) => (['42P01', 'PGRST205'].includes(error?.code) ? new Error('Run the Fuel SQL migration 20270107 (name-only drivers) first.') : friendly(error))
+
+/** The card's name-only drivers [{ id, name, phone }]; [] before migration 20270107. */
+export async function listNamedDrivers(cardId) {
+  const { data, error } = await supabase.from(NAMED).select('id, name, phone, created_at').eq('card_id', cardId).order('created_at')
+  if (error) return []
+  return data || []
+}
+export async function addNamedDriver(companyId, cardId, { name, phone }) {
+  const { error } = await supabase.from(NAMED).insert({ company_id: companyId, card_id: cardId, name: name.trim(), phone: phone?.trim() || null })
+  if (error) throw needNamed(error)
+}
+export async function deleteNamedDriver(id) {
+  const { error } = await supabase.from(NAMED).delete().eq('id', id)
+  if (error) throw needNamed(error)
+}
+/** Move a name-only driver's fill-ups to a user (and match them with the user's claims); returns how many moved. */
+export async function linkNamedDriver(id, userId) {
+  const { data, error } = await supabase.rpc('machinery_link_named_driver', { p_named: id, p_user: userId })
+  if (error) throw needNamed(error)
+  return data || 0
 }
 
 // ---- helpers -------------------------------------------------------------------

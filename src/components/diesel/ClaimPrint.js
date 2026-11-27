@@ -1,4 +1,4 @@
-import { receiptUrl, vehicleLabel } from '../../lib/diesel.js'
+import { isSubsidisedFill, linePrice, listPeople, personLabel, receiptUrl, vehicleLabel } from '../../lib/diesel.js'
 import { day } from '../../lib/format.js'
 import { printHtml } from '../../lib/printFrame.js'
 
@@ -11,9 +11,10 @@ import { printHtml } from '../../lib/printFrame.js'
 // no new tab or page. This works whether the module runs on its own or
 // inside a module window (iframe) of CMMS 2.
 //
-// Only the receipts paid in cash go on the form: those are the ones the
-// company pays back, so the total is exactly what the claimant receives.
-// Fleet-card (KPDN) receipts stay off the form.
+// Every receipt goes on the form, cash and fleet card (KPDN). Ref No. is the
+// vehicle no., or the fleet card no. for a reload. Fleet-card receipts are
+// marked "Fleet card" and are not paid back: TOTAL PAYABLE is the cash only,
+// exactly what the claimant receives.
 //
 // The page margins are zero (that is what stops the browser printing its own
 // header and footer: the date, the "CMMS 2" title, the address and "1/1").
@@ -60,13 +61,15 @@ table { border-collapse: collapse; font-size: 11px; }
 .sum .box table { width: 100%; }
 .sum .box td { padding: 3px 0; font-weight: 700; }
 .sum .box .r { text-align: right; font-variant-numeric: tabular-nums; }
+.sum .box tr.sub td { font-weight: 400; color: #374151; }
 .notes { margin-top: 10px; color: #374151; }
 .sign { width: 100%; margin-top: 40px; break-inside: avoid; }
-.sign td { width: 33.33%; padding: 0 14px 0 0; vertical-align: top; }
+.sign td { width: 50%; padding: 0 24px 0 0; vertical-align: top; }
 .sign .label { font-weight: 700; }
 .sign .space { height: 46px; }
 .sign .line { width: 85%; border-bottom: 1px solid #111827; padding: 0 2px 3px; min-height: 14px; }
 .sign .role { padding-top: 4px; }
+.sign .date { padding-top: 2px; color: #374151; }
 .receipts { break-before: page; }
 .receipts h2 { font-size: 11px; font-weight: 700; margin: 0 0 8px; letter-spacing: .04em; text-transform: uppercase; color: ${GREEN}; }
 .receipts table { width: 100%; }
@@ -76,21 +79,30 @@ table { border-collapse: collapse; font-size: 11px; }
 `
 
 /** The claim form as a complete HTML document (string). */
-export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, images = {} }) {
+export function claimFormHtml({ company, claim, lines, vehicles, cards = [], claimantName, approverName = '', images = {}, companies = [] }) {
+  const billTo = (id) => companies.find((c) => c.id === id)?.name || ''
+  const approved = ['approved', 'paid'].includes(claim.status) && Boolean(claim.reviewed_at)
   const vById = new Map((vehicles || []).map((v) => [v.id, v]))
   const cById = new Map((cards || []).map((c) => [c.id, c]))
-  const total = lines.reduce((s, l) => s + Number(l.amount || 0), 0)
+  const fleet = (l) => l.payment === 'fleet_card' && l.line_kind !== 'reload'
+  const total = lines.filter((l) => !fleet(l)).reduce((s, l) => s + Number(l.amount || 0), 0)
+  const fleetTotal = lines.filter(fleet).reduce((s, l) => s + Number(l.amount || 0), 0)
+  const allTotal = total + fleetTotal
+  const rm = (v) => v.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const no = padNo(claim)
   const contact = [company.phone && `Tel: ${company.phone}`, company.fax && `Fax: ${company.fax}`, company.email && `Email: ${company.email}`]
     .filter(Boolean)
     .join('    ')
 
-  // "Diesel - Petronas Senai, JPB 1234": what was bought and where, then the vehicle.
+  // Ref No.: the vehicle no., or the fleet card no. for a reload
+  const ref = (l) =>
+    l.line_kind === 'reload' ? cById.get(l.card_id)?.card_no || 'Fleet card' : l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : '—'
+  // "Diesel - Petronas Senai": what was bought and where
   const describe = (l) => {
-    if (l.line_kind === 'reload') return `Fleet card reload - ${esc(cById.get(l.card_id)?.card_no || 'fleet card')}${l.station ? esc(' (' + l.station + ')') : ''}`
+    if (l.line_kind === 'reload') return `Fleet card reload${l.station ? esc(' (' + l.station + ')') : ''}`
     const what = [l.description, l.station].filter(Boolean).join(' - ')
-    const veh = l.vehicle_id ? vehicleLabel(vById.get(l.vehicle_id)) : ''
-    return `${esc(what || '—')}${veh ? `<span class="veh">, ${esc(veh)}</span>` : ''}`
+    const card = fleet(l) && l.card_id && cById.get(l.card_id)?.card_no
+    return `${esc(what || '—')}${fleet(l) ? `<span class="remark">Paid by fleet card${card ? ' ' + esc(card) : ''} (not paid back)</span>` : ''}`
   }
 
   const rows = lines
@@ -100,10 +112,11 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
         <td class="c">${i + 1}</td>
         <td>${esc(day(l.fill_date))}</td>
         <td class="wrap">${esc(l.receipt_no || '—')}</td>
-        <td>${describe(l)}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
+        <td>${esc(ref(l))}</td>
+        <td>${describe(l)}${l.bill_to_company_id && billTo(l.bill_to_company_id) ? `<span class="remark">Bill to: ${esc(billTo(l.bill_to_company_id))}</span>` : ''}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
         <td class="r">${l.litres != null ? Number(l.litres).toFixed(2) : '—'}</td>
-        <td class="r">${l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
-        <td class="r">${Number(l.amount || 0).toFixed(2)}</td>
+        <td class="r">${linePrice(l) || '—'}${isSubsidisedFill(l) ? '<span class="remark">subsidised</span>' : ''}</td>
+        <td class="r">${Number(l.amount || 0).toFixed(2)}${fleet(l) ? '<span class="remark">Fleet card</span>' : ''}</td>
       </tr>`
     )
     .join('')
@@ -144,30 +157,32 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
   </table>
   <table class="lines">
     <colgroup>
-      <col style="width:6%" /><col style="width:13%" /><col style="width:16%" /><col />
-      <col style="width:10%" /><col style="width:13%" /><col style="width:13%" />
+      <col style="width:5%" /><col style="width:11%" /><col style="width:12%" /><col style="width:16%" /><col />
+      <col style="width:8%" /><col style="width:11%" /><col style="width:12%" />
     </colgroup>
     <thead>
       <tr>
-        <th>No.</th><th>Receipt Date</th><th>Receipt No.</th><th>Description</th>
+        <th>No.</th><th>Receipt Date</th><th>Receipt No.</th><th>Ref No.</th><th>Description</th>
         <th>Litre</th><th>Unit Price (RM)</th><th>Amount (RM)</th>
       </tr>
     </thead>
     <tbody>
-      ${rows || '<tr><td colspan="7" class="c">No cash receipt on this claim.</td></tr>'}
+      ${rows || '<tr><td colspan="8" class="c">No receipt on this claim.</td></tr>'}
     </tbody>
   </table>
   <table class="sum"><tr><td>
     <div class="box"><table>
-      <tr><td>TOTAL PAYABLE (RM)</td><td class="r">${total.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
+      ${fleetTotal ? `<tr class="sub"><td>Total fuel (RM)</td><td class="r">${rm(allTotal)}</td></tr><tr class="sub"><td>Less fleet card (RM)</td><td class="r">(${rm(fleetTotal)})</td></tr>` : ''}
+      <tr><td>TOTAL PAYABLE (RM)</td><td class="r">${rm(total)}</td></tr>
     </table></div>
   </td></tr></table>
   ${claim.notes ? `<div class="notes">Notes: ${esc(claim.notes)}</div>` : ''}
   <table class="sign">
-    <tr><td class="label">Prepared By:</td><td class="label">Verified By:</td><td class="label">Approved By:</td></tr>
-    <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
-    <tr><td><div class="line">${esc(claimantName)}</div></td><td><div class="line"></div></td><td><div class="line"></div></td></tr>
-    <tr><td class="role">Claimant</td><td class="role">Account Department</td><td class="role">Department Head</td></tr>
+    <tr><td class="label">Prepared By:</td><td class="label">Approved By:</td></tr>
+    <tr><td class="space"></td><td class="space"></td></tr>
+    <tr><td><div class="line">${esc(claimantName)}</div></td><td><div class="line">${esc(approverName)}</div></td></tr>
+    <tr><td class="role">Claimant</td><td class="role">Department Head</td></tr>
+    <tr><td class="date">Submitted: ${esc(day(claim.submitted_on || claim.fill_date))}</td><td class="date">Date approved: ${approved ? esc(day(claim.reviewed_at.slice(0, 10))) : ''}</td></tr>
   </table>
   ${
     receiptRows.length
@@ -182,11 +197,11 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
 
 /**
  * Open the print dialog for a claim, in place. Resolves once the dialog has
- * been shown (Chrome and Firefox: once it closes). `lines` may include
- * fleet-card lines; only cash lines are printed.
+ * been shown (Chrome and Firefox: once it closes). Cash and fleet-card lines
+ * are all printed (fleet card marked, not in the total payable).
  */
-export async function printClaim({ company, claim, lines, vehicles, cards, claimantName }) {
-  const cash = (lines || []).filter((l) => l.payment !== 'fleet_card')
+export async function printClaim({ company, claim, lines, vehicles, cards, claimantName, companies = [] }) {
+  const cash = lines || []
   const images = {}
   await Promise.all(
     cash.map(async (l) => {
@@ -196,6 +211,13 @@ export async function printClaim({ company, claim, lines, vehicles, cards, claim
       }
     })
   )
-  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, images })
+  // The approver (Department Head) once the claim is approved: name from the people list
+  let approverName = ''
+  if (['approved', 'paid'].includes(claim.status) && claim.reviewed_by) {
+    const people = await listPeople(company.id).catch(() => [])
+    const p = people.find((x) => x.user_id === claim.reviewed_by)
+    approverName = p ? personLabel(p) : ''
+  }
+  const html = claimFormHtml({ company, claim, lines: cash, vehicles, cards, claimantName, approverName, images, companies })
   return printHtml(html)
 }

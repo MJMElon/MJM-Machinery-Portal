@@ -26,7 +26,9 @@ export const sum = (rows, key = 'amount') => rows.reduce((s, r) => s + Number(r[
  */
 export function downloadCsv(filename, columns, rows) {
   const cell = (v) => {
-    const s = v == null ? '' : String(v)
+    let s = v == null ? '' : String(v)
+    // Excel would run a cell starting with = + - @ as a formula: put ' in front so it stays text
+    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^-?\d[\d,]*(\.\d+)?$/.test(s)) s = "'" + s // (plain negative numbers stay numbers)
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const lines = [columns.map((c) => cell(c.header)).join(',')]

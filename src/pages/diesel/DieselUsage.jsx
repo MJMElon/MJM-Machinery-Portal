@@ -18,36 +18,45 @@ import {
   listPeople,
   listVehicles,
   personLabel,
+  receiptUrls,
   saveDieselPrice,
   vehicleLabel
 } from '../../lib/diesel.js'
 import { listLocations } from '../../lib/companies.js'
+import { useCompany } from '../../lib/CompanyContext.jsx'
 import { day, money, num, today } from '../../lib/format.js'
 
 // Fuel Usage Report: one row per vehicle with two small month charts (litres
 // and RM, fleet card vs cash). Tabs on top: HQ vehicle / Estate machine; each
-// tab has its own filters (tick as many as needed; none ticked = all):
-//   HQ vehicle:     fleet card (or cash), driver, vehicle, date from – to
-//   Estate machine: machine type, machine, date from – to
-// The report follows the filters straight away; Search loads the latest data
-// again (for when something looks out of date). Date defaults to the 1st of
+// tab has its own filters (tick as many as needed; none ticked = all), on the
+// column titles of the table (click a title to filter):
+//   HQ vehicle:     Type (fleet card or cash), driver, vehicle
+//   Estate machine: machine type, machine, location
+// The date range sits at the top left of the table with a search icon next to
+// it. The report follows the filters straight away; the search icon loads the
+// latest data again (for when something looks out of date). Date defaults to the 1st of
 // this month – today. Print = tables (Jan – Dec litres and RM per person or
 // machine, average price per litre), see UsagePrint.js.
-// With a driver or fleet card filter every vehicle with matching receipts is
-// listed (HQ or not), plus "No vehicle recorded" for receipts without one.
+// HQ Vehicle tab: only vehicles ticked "HQ vehicle" in Machinery Profile (and
+// their receipts); with a driver or fleet card filter, the HQ vehicles with
+// matching receipts.
 // HQ vehicle data = receipts: cash and fleet-card receipts on fuel claims (not
 // rejected) plus fill-ups typed on a card.
-// Estate machine data = Operational Diesel Records: diesel
+// Estate machine data = Estate Fuel Record: diesel
 // issued to each machine from the company tank. A record has litres only; its
 // RM is litres x the diesel price in force on its date (the "Diesel price"
 // button keeps the price list). A location filter shows when the company has
 // locations.
 // Print prints the charts with the filters in the heading.
 const ISSUED_COLOR = '#0d9488'
+// a date box only as wide as dd/mm/yyyy
+const dateCls = 'h-9 w-auto rounded-lg border border-slate-300 bg-white px-2 text-sm font-normal text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-300'
 /** 'RM 2.95 / L' (up to 3 decimals) */
 const perL = (v) => `RM ${Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} / L`
 export default function DieselUsage() {
   const { company, access } = useOutletContext()
+  const { companies } = useCompany()
+  const billName = (id) => (companies || []).find((c) => c.id === id)?.name || 'Another company'
   const [fills, setFills] = useState([])
   const [issued, setIssued] = useState([]) // fuel usage records, shaped like fills (estate tab)
   const [locations, setLocations] = useState([])
@@ -115,7 +124,17 @@ export default function DieselUsage() {
       const counted = lines.filter((l) => l.line_kind !== 'reload' && !['rejected', 'draft'].includes(claimById.get(l.claim_id)?.status))
       const countedIds = new Set(counted.map((l) => l.id))
       setFills([
-        ...counted.map((l) => ({ ...l, source: l.payment === 'fleet_card' ? 'card' : 'cash', driver: claimById.get(l.claim_id)?.claimant_id, fromClaim: true })),
+        ...counted.map((l) => {
+          const c = claimById.get(l.claim_id)
+          return {
+            ...l,
+            source: l.payment === 'fleet_card' ? 'card' : 'cash',
+            driver: c?.claimant_id,
+            fromClaim: true,
+            claimedOn: c?.submitted_on || c?.created_at?.slice(0, 10) || '',
+            claimNo: c?.claim_no != null ? String(c.claim_no).padStart(3, '0') : ''
+          }
+        }),
         // fuel station statement rows already matched to one of those receipts are that receipt (count once)
         ...cardData.usage
           .filter((u) => !u.claim_line_id || !countedIds.has(u.claim_line_id))
@@ -233,10 +252,11 @@ export default function DieselUsage() {
     return { value: v.id, label: vehicleLabel(v), group }
   }
   const vehicleOpts = [
-    ...generalCars.map((v) => opt(v, 'General cars')),
+    // HQ vehicles only (general cars and drivers' own cars that are ticked HQ)
+    ...generalCars.filter(isHq).map((v) => opt(v, 'General cars')),
     ...driverCarIds
       .map((id) => vById.get(id))
-      .filter((v) => v && !shownIds.has(v.id))
+      .filter((v) => v && isHq(v) && !shownIds.has(v.id))
       .sort(byReg)
       .map((v) => opt(v, "Ticked drivers' own cars")),
     ...hqVehicles.filter((v) => !isGeneral(v) && !shownIds.has(v.id)).map((v) => opt(v, 'HQ vehicles')),
@@ -275,32 +295,60 @@ export default function DieselUsage() {
     .filter((v) => (!typeF.length || typeF.includes(v.machine_type || 'No type')) && (!locF.length || locF.includes(locKey(v))))
     .map((v) => ({ value: v.id, label: vehicleLabel(v) }))
 
+  // ---- Filters sit on the column titles (click a title to filter)
+  const pickType = (v) => {
+    setTypeF(v)
+    setMachineF((m) => m.filter((id) => !v.length || v.includes(vById.get(id)?.machine_type || 'No type')))
+  }
+  const pickLoc = (v) => {
+    setLocF(v)
+    setMachineF((m) => m.filter((id) => !v.length || (vById.get(id) && v.includes(locKey(vById.get(id))))))
+  }
+  const F = {
+    card: (label = 'Type') => <MultiPick head label={label} allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={pickCards} />,
+    driver: (label = 'Driver') => <MultiPick head searchable searchPlaceholder="Search driver name…" label={label} allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />,
+    vehicle: (label = 'Vehicle') => <MultiPick head searchable searchPlaceholder="Search vehicle…" label={label} allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />,
+    type: (label = 'Type') => <MultiPick head label={label} allLabel="All types" options={typeOpts} value={typeF} onChange={pickType} />,
+    machine: (label = 'Machine') => <MultiPick head label={label} allLabel="All machines" options={machineOpts} value={machineF} onChange={setMachineF} />,
+    loc: (label = 'Location') => (locations.length ? <MultiPick head label={label} allLabel="All locations" options={locOpts} value={locF} onChange={pickLoc} /> : label)
+  }
+
   // ---- Receipts that pass the filters of the tab
   const A = draft
   const inRange = (d) => (!A.from || d >= A.from) && (!A.to || d <= A.to)
+  // HQ Vehicle tab: only receipts of vehicles ticked "HQ vehicle" in Machinery Profile
+  const hqIds = new Set(vehicles.filter(isHq).map((v) => v.id))
   const passHq = (f) =>
+    hqIds.has(f.vehicle_id) &&
     (!A.vehicleF.length || A.vehicleF.includes(f.vehicle_id)) &&
     (!A.driverF.length || A.driverF.includes(f.driver || 'none')) &&
     (!A.cardF.length || (f.source === 'cash' ? A.cardF.includes('cash') : A.cardF.includes(cardOf(f)?.id)))
   // HQ: receipts. Estate: fuel usage records.
   const rows = tab === 'hq' ? fills.filter((f) => inRange(f.fill_date) && passHq(f)) : issued.filter((f) => inRange(f.fill_date) && (!A.machineF.length || A.machineF.includes(f.vehicle_id)))
   const hasVehicle = new Set(rows.map((r) => r.vehicle_id))
+  // Why receipts may be missing (HQ tab): in the dates but on a vehicle not ticked HQ, or outside the dates
+  const hidden =
+    tab === 'hq'
+      ? {
+          notHq: fills.filter((f) => inRange(f.fill_date) && !hqIds.has(f.vehicle_id)).length,
+          outside: fills.filter((f) => !inRange(f.fill_date) && hqIds.has(f.vehicle_id)).length,
+          latest: fills.filter((f) => hqIds.has(f.vehicle_id)).reduce((m, f) => (f.fill_date > m ? f.fill_date : m), '')
+        }
+      : null
 
   // Vehicles listed: HQ with a card / driver filter → the vehicles with
   // receipts in it (and the chosen cards' own vehicles); a vehicle filter →
   // those vehicles. Estate: by type and machine.
   const hqFiltered = A.cardF.length > 0 || A.driverF.length > 0
   const chosenCardVehicles = new Set(A.cardF.map((id) => cardById.get(id)?.vehicle_id).filter(Boolean))
-  const NO_VEHICLE = { id: '', name: 'No vehicle recorded', machine_type: '' }
   const listed =
     tab === 'hq'
       ? hqFiltered
         ? // every vehicle with matching receipts (HQ or not), the chosen cards' own vehicles, then receipts without a vehicle
           [
             ...vehicles
-              .filter((v) => (hasVehicle.has(v.id) || chosenCardVehicles.has(v.id)) && (!A.vehicleF.length || A.vehicleF.includes(v.id)))
-              .sort(byReg),
-            ...(rows.some((r) => !r.vehicle_id) && !A.vehicleF.length ? [NO_VEHICLE] : [])
+              .filter((v) => hqIds.has(v.id) && (hasVehicle.has(v.id) || chosenCardVehicles.has(v.id)) && (!A.vehicleF.length || A.vehicleF.includes(v.id)))
+              .sort(byReg)
           ]
         : hqVehicles.filter((v) => !A.vehicleF.length || A.vehicleF.includes(v.id))
       : estateMachines.filter(
@@ -360,12 +408,13 @@ export default function DieselUsage() {
         ]
       : [
           `Machine type: ${names(A.typeF, typeOpts, 'all')} · Machine: ${names(A.machineF, machineOpts, 'all')}${locations.length ? ` · Location: ${names(A.locF, locOpts, 'all')}` : ''}`,
-          `Diesel issued, from Operational Diesel Records · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
+          `Diesel issued, from Estate Fuel Record · RM = litres x diesel price${prices[0] ? ` (now ${perL(prices[0].price)})` : ' (no price set)'}`
         ]
 
-  // Table view: every receipt in the filters, grouped by fleet card (HQ:
-  // which driver used the card for which vehicle, litres, RM and the remark,
-  // e.g. the other company to charge at month end), cash claims last.
+  // Table view. HQ: by vehicle (reg no. once as the title), each vehicle with
+  // a Fleet card section, then a Cash claim section: receipt date, receipt
+  // no., litre, RM/L, total amount and the remark (the receipt's own remark,
+  // e.g. the other company to charge, then company · claim no. · claimant).
   // Estate: every diesel record, grouped by machine type.
   const detailGroups = (() => {
     const groups = new Map()
@@ -383,20 +432,36 @@ export default function DieselUsage() {
           who: f.driver ? who(f.driver) : 'No driver recorded',
           vehicle: v ? regOf(v) : 'No vehicle',
           general: Boolean(v?.general_use),
+          type: f.source === 'cash' ? 'Cash' : 'Fleet card',
           receipt: f.receipt_no || '',
           litres: Number(f.litres || 0),
           amount: Number(f.amount || 0),
-          remark: f.remark || f.notes || ''
+          remark: f.remark || f.notes || '',
+          // for the receipt pages of the printout (receipts on fuel claims only)
+          claimed: Boolean(f.fromClaim),
+          photo: f.fromClaim ? f.receipt_path || '' : '',
+          claimedOn: f.claimedOn || '',
+          claimNo: f.claimNo || '',
+          card: f.source === 'cash' ? 'Cash' : c ? `Fleet card ${c.card_no}` : 'Fleet card'
         }
-        if (f.source === 'cash') add('cash', 'Cash claims (no fleet card)', 'z', row)
-        else if (c) add(c.id, `Fleet card ${c.card_no}${c.vehicle_id && vById.get(c.vehicle_id) ? ` (${regOf(vById.get(c.vehicle_id))})` : ''}`, `a${c.card_no}`, row)
-        else add('nocard', 'Fleet card (card not found)', 'y', row)
+        row.cardNo = c?.card_no || ''
+        // Bill to company chosen on the claim receipt (migration 20261229)
+        row.billTo = f.bill_to_company_id ? billName(f.bill_to_company_id) : ''
+        // no company name (the printout has the letterhead): claimed by the driver and the claim no.
+        row.from = f.fromClaim ? [`Claimed by ${row.who}`, f.claimNo ? `Claim ${f.claimNo}` : ''].filter(Boolean).join(' · ') : f.driver ? `Driver ${row.who}` : ''
+        // one group per vehicle and kind: fleet card first, then cash
+        const vk = f.vehicle_id || ''
+        const vOrder = v ? `a${regOf(v)}` : 'zz'
+        add(`${vk}|${f.source}`, f.source === 'cash' ? 'Cash claim' : 'Fleet card', `${vOrder}|${f.source === 'card' ? 'a' : 'b'}`, row)
+        groups.get(`${vk}|${f.source}`).vehicle = { key: vk, title: v ? regOf(v) : 'No vehicle recorded', name: v && v.reg_no && v.reg_no !== v.name ? v.name : '', general: Boolean(v?.general_use) }
+        groups.get(`${vk}|${f.source}`).kind = f.source
       } else {
         const v = vById.get(f.vehicle_id)
         if (v && !listed.some((x) => x.id === v.id)) continue
         const type = v?.machine_type || 'No type'
         add(type, type, type, {
           id: f.id,
+          type,
           date: f.fill_date,
           who: v ? vehicleLabel(v) : 'No machine recorded',
           vehicle: locations.find((l) => l.id === v?.location_id)?.name || '',
@@ -406,23 +471,43 @@ export default function DieselUsage() {
         })
       }
     }
-    return [...groups.values()]
+    const out = [...groups.values()]
       .sort((a, b) => a.order.localeCompare(b.order))
       .map((g) => ({ ...g, rows: g.rows.sort((a, b) => a.date.localeCompare(b.date) || a.who.localeCompare(b.who)) }))
+    // HQ: the vehicle title only above its first section; the fleet card section names the card(s)
+    if (tab === 'hq')
+      out.forEach((g, i) => {
+        g.first = i === 0 || out[i - 1].vehicle?.key !== g.vehicle?.key
+        const nos = [...new Set(g.rows.map((r) => r.cardNo).filter(Boolean))]
+        if (g.kind === 'card' && nos.length) g.title = `Fleet card ${nos.join(', ')}`
+      })
+    return out
   })()
   const detailTotal = detailGroups.reduce((t, g) => ({ litres: t.litres + g.rows.reduce((s, r) => s + r.litres, 0), amount: t.amount + g.rows.reduce((s, r) => s + r.amount, 0), n: t.n + g.rows.length }), { litres: 0, amount: 0, n: 0 })
 
-  // Print: a table, one row per person (HQ: who claimed / drove) or per
-  // machine (estate), Jan – Dec litres and RM of the year, and the average
-  // fuel price per litre.
+  // Print. Chart view: a table, one row per person (HQ: who claimed / drove)
+  // or per machine (estate), Jan – Dec litres and RM of the year, and the
+  // average fuel price per litre. Table view: the receipts table, then (HQ)
+  // every claimed receipt by date, one per page, "Claimed by … on …".
   async function print() {
     setPrinting(true)
     try {
       if (view === 'table') {
+        // The summary table, then every claimed receipt by date, one per page.
+        const claimed =
+          tab === 'hq'
+            ? detailGroups
+                .flatMap((g) => g.rows)
+                .filter((r) => r.claimed)
+                .sort((a, b) => a.date.localeCompare(b.date) || (a.claimedOn || '').localeCompare(b.claimedOn || '') || a.who.localeCompare(b.who))
+            : []
+        const urls = await receiptUrls(claimed.map((r) => r.photo)).catch(() => ({}))
         await printUsageDetail({
-          title: 'Fuel Usage Reports',
+          title: 'Reports',
           hq: tab === 'hq',
           groups: detailGroups,
+          // a receipt with nothing attached gets no page (no "No receipt" sheet in the printout)
+          receipts: claimed.filter((r) => r.photo).map((r) => ({ ...r, url: urls[r.photo] || '', pdf: /\.pdf$/i.test(r.photo) })).filter((r) => r.url || r.pdf),
           lines: [
             `${company.name} · ${tab === 'hq' ? 'HQ Vehicle' : 'Estate Machinery'}`,
             `${A.from ? day(A.from) : 'Start'} – ${A.to ? day(A.to) : 'today'}`,
@@ -451,7 +536,7 @@ export default function DieselUsage() {
         byKey.set(k, r)
       }
       await printUsageTable({
-        title: 'Fuel Usage Reports',
+        title: 'Reports',
         nameHeader: tab === 'hq' ? 'User' : 'Machine',
         year,
         rows: [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name)),
@@ -515,81 +600,70 @@ export default function DieselUsage() {
                   type="button"
                   onClick={() => setTab(k)}
                   data-noprint={tab === k ? undefined : ''}
-                  className={`relative px-6 py-3 text-sm font-bold first:rounded-tl-2xl ${tab === k ? 'bg-white text-brand' : 'bg-slate-50/60 text-slate-600 hover:bg-white/60'}`}
+                  className={`relative px-6 py-3 text-sm font-bold first:rounded-tl-2xl ${tab === k ? 'fx-tab-on bg-white text-brand' : 'bg-slate-50/60 text-slate-600 hover:bg-white/60'}`}
                 >
                   {label}
-                  {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
+                  {tab === k && <span className="fx-line absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
                 </button>
               ))}
               <span className="flex-1 rounded-tr-2xl bg-slate-50/60" />
             </div>
 
-            <div className="border-b border-slate-200 p-3" data-noprint>
-              <div
-                className={`grid gap-3 sm:grid-cols-2 ${
-                  tab === 'hq'
-                    ? 'lg:grid-cols-[minmax(0,1.7fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_auto]' // fleet card widest, driver narrower
-                    : 'lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.4fr)_auto]'
-                }`}
+            {/* Date range at the top left of the table, the search (reload) icon next to it; the
+                other filters are on the column titles. Chart view has no column for the fleet card
+                (HQ) or the location (estate), so those sit here too. */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2.5" data-noprint>
+              {/* date boxes only as wide as the date; the button in the intranet's dark frame colour */}
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                From
+                <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={dateCls} />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                To
+                <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={dateCls} />
+              </label>
+              <button
+                type="button"
+                onClick={search}
+                disabled={searching}
+                title="Search (load the latest data again)"
+                aria-label="Search"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white shadow-sm disabled:opacity-60"
               >
-                {tab === 'hq' ? (
-                  <>
-                    <div>
-                      <MultiPick label="Fleet card" allLabel="All (fleet card and cash)" options={cardOpts} value={cardF} onChange={pickCards} />
-                      {!cardOpts.some((o) => o.value !== 'cash') && (
-                        <p className="mt-1 text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</p>
-                      )}
-                    </div>
-                    <MultiPick label="Driver" allLabel="All drivers" options={driverOpts} value={driverF} onChange={pickDrivers} />
-                    <MultiPick label="Vehicle" allLabel="All HQ vehicles" options={vehicleOpts} value={vehicleF} onChange={setVehicleF} />
-                  </>
-                ) : (
-                  <>
-                    <MultiPick
-                      label="Machine type"
-                      allLabel="All types"
-                      options={typeOpts}
-                      value={typeF}
-                      onChange={(v) => {
-                        setTypeF(v)
-                        setMachineF((m) => m.filter((id) => !v.length || v.includes(vById.get(id)?.machine_type || 'No type')))
-                      }}
-                    />
-                    <MultiPick label="Machine" allLabel="All machines" options={machineOpts} value={machineF} onChange={setMachineF} />
-                    {locations.length > 0 ? (
-                      <MultiPick
-                        label="Location"
-                        allLabel="All locations"
-                        options={locOpts}
-                        value={locF}
-                        onChange={(v) => {
-                          setLocF(v)
-                          setMachineF((m) => m.filter((id) => !v.length || (vById.get(id) && v.includes(locKey(vById.get(id))))))
-                        }}
-                      />
-                    ) : (
-                      <span className="hidden lg:block" />
-                    )}
-                  </>
-                )}
-                <div>
-                  <span className="mb-1 block text-xs font-semibold text-slate-600">Date</span>
-                  <div className="flex items-center gap-2">
-                    <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} h-12 min-w-0 flex-1 rounded-xl px-2 text-sm`} aria-label="From date" />
-                    <span className="text-sm text-slate-400">to</span>
-                    <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`${inputCls} h-12 min-w-0 flex-1 rounded-xl px-2 text-sm`} aria-label="To date" />
-                  </div>
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={search} disabled={searching} className="h-12 w-full lg:w-auto" title="Load the latest data again">
-                    <IconSearch width={18} height={18} /> {searching ? 'Loading…' : 'Search'}
-                  </Button>
-                </div>
-              </div>
+                <IconSearch width={17} height={17} className={searching ? 'animate-pulse' : ''} />
+              </button>
+              {view !== 'table' && tab === 'hq' && <span className="ml-2">{F.card('Fleet card')}</span>}
+              {/* HQ table view is by vehicle: its filters sit here */}
+              {view === 'table' && tab === 'hq' && (
+                <span className="ml-2 flex flex-wrap items-center gap-3">
+                  {F.card()}
+                  {F.driver()}
+                  {F.vehicle()}
+                </span>
+              )}
+              {view !== 'table' && tab !== 'hq' && locations.length > 0 && <span className="ml-2">{F.loc()}</span>}
+              {tab === 'hq' && !cardOpts.some((o) => o.value !== 'cash') && <span className="text-[11px] text-amber-700">No fleet card with a card number in {company.name}.</span>}
             </div>
 
+            {hidden && (hidden.notHq > 0 || (rows.length === 0 && hidden.outside > 0)) && (
+              <div className="space-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900" data-noprint>
+                {hidden.notHq > 0 && (
+                  <p>
+                    {hidden.notHq} receipt{hidden.notHq === 1 ? ' is' : 's are'} in these dates but on a vehicle not ticked <b>HQ vehicle</b> (or with no vehicle), so not shown here. Tick the vehicle in
+                    Machinery Profile to include it.
+                  </p>
+                )}
+                {rows.length === 0 && hidden.outside > 0 && (
+                  <p>
+                    No receipt in these dates. {hidden.outside} HQ vehicle receipt{hidden.outside === 1 ? ' is' : 's are'} outside them
+                    {hidden.latest ? ` (latest ${day(hidden.latest)})` : ''}: change From / To.
+                  </p>
+                )}
+              </div>
+            )}
+
             {view === 'table' ? (
-              <DetailTable groups={detailGroups} total={detailTotal} hq={tab === 'hq'} />
+              tab === 'hq' ? <VehicleTable groups={detailGroups} total={detailTotal} /> : <DetailTable groups={detailGroups} total={detailTotal} hq={false} F={F} />
             ) : (
             <>
             <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-2 text-[11px] text-slate-600">
@@ -611,7 +685,7 @@ export default function DieselUsage() {
               ) : (
                 <>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Operational Diesel Records)
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: ISSUED_COLOR }} /> Diesel issued (from Estate Fuel Record)
                   </span>
                   <button
                     type="button"
@@ -632,8 +706,8 @@ export default function DieselUsage() {
                 <table className="w-full min-w-[980px] text-sm">
                   <thead>
                     <tr className="border-y border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="w-44 px-4 py-2">Vehicle reg no.</th>
-                      <th className="w-40 px-3 py-2">Driver</th>
+                      <th className="w-44 px-4 py-2">{F.vehicle('Vehicle reg no.')}</th>
+                      <th className="w-40 px-3 py-2">{F.driver()}</th>
                       <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
                       <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
                     </tr>
@@ -669,25 +743,32 @@ export default function DieselUsage() {
                   </tbody>
                 </table>
               </div>
-            ) : listed.length === 0 ? (
-              <Empty>
-                {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length || A.locF.length
-                  ? 'No vehicle for this filter.'
-                  : tab === 'hq'
-                    ? 'No HQ vehicles yet. Tick "HQ vehicle" in Machinery Profile.'
-                    : 'No estate machines in Machinery Profile yet.'}
-              </Empty>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[980px] text-sm">
                   <thead>
                     <tr className="border-y border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="w-44 px-4 py-2">{tab === 'hq' ? 'Vehicle reg no.' : 'Machine'}</th>
-                      <th className="w-40 px-3 py-2">{tab === 'hq' ? 'Driver' : 'Type'}</th>
+                      <th className="w-44 px-4 py-2">{tab === 'hq' ? F.vehicle('Vehicle reg no.') : F.machine()}</th>
+                      <th className="w-40 px-3 py-2">{tab === 'hq' ? F.driver() : F.type()}</th>
                       <th className="px-3 py-2">Monthly Fuel Usage (Litre)</th>
                       <th className="px-3 py-2">Monthly Fuel Expenses (RM)</th>
                     </tr>
                   </thead>
+                  {listed.length === 0 && (
+                    <tbody>
+                      <tr>
+                        <td colSpan={4}>
+                          <Empty>
+                            {hqFiltered || A.vehicleF.length || A.typeF.length || A.machineF.length || A.locF.length
+                              ? 'No vehicle for this filter.'
+                              : tab === 'hq'
+                                ? 'No HQ vehicles yet. Tick "HQ vehicle" in Machinery Profile.'
+                                : 'No estate machines in Machinery Profile yet.'}
+                          </Empty>
+                        </td>
+                      </tr>
+                    </tbody>
+                  )}
                   <tbody>
                     {listed.map((v) => (
                       <VehicleRow
@@ -715,24 +796,42 @@ export default function DieselUsage() {
 
 // Table view: groups (fleet card / cash, or machine type) with their receipts,
 // a subtotal per group and the total.
-function DetailTable({ groups, total, hq }) {
-  if (!groups.length) return <Empty>No fuel usage for this filter.</Empty>
-  const cols = hq ? 7 : 6
+function DetailTable({ groups, total, hq, F }) {
+  // Type (fleet card / cash, or machine type) first and narrow; every other column the same width.
+  const cols = hq ? 8 : 7
   const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const even = `${(90 / (cols - 1)).toFixed(3)}%`
+  const span = hq ? 5 : 4
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[860px] text-sm">
+      <table className="w-full min-w-[960px] table-fixed text-sm">
+        <colgroup>
+          <col style={{ width: '10%' }} />
+          {Array.from({ length: cols - 1 }, (_, i) => (
+            <col key={i} style={{ width: even }} />
+          ))}
+        </colgroup>
         <thead>
           <tr className="border-y border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <th className="w-32 px-4 py-2">Date</th>
-            <th className="px-3 py-2">{hq ? 'Driver' : 'Machine'}</th>
-            <th className="px-3 py-2">{hq ? 'Vehicle' : 'Location'}</th>
-            {hq && <th className="px-3 py-2">Receipt no.</th>}
-            <th className="w-28 px-3 py-2 text-right">Litres</th>
-            <th className="w-32 px-3 py-2 text-right">Amount (RM)</th>
-            <th className="w-[24%] px-3 py-2">Remark</th>
+            <th className="px-4 py-2">{hq ? F.card() : F.type()}</th>
+            <th className="px-3 py-2">Date</th>
+            <th className="px-3 py-2">{hq ? F.driver() : F.machine()}</th>
+            <th className="px-3 py-2">{hq ? F.vehicle() : F.loc()}</th>
+            {hq && <th className="px-3 py-2">Claim no.</th>}
+            <th className="px-3 py-2 text-right">Litres</th>
+            <th className="px-3 py-2 text-right">Amount (RM)</th>
+            <th className="px-3 py-2">Remark</th>
           </tr>
         </thead>
+        {groups.length === 0 && (
+          <tbody>
+            <tr>
+              <td colSpan={cols}>
+                <Empty>No fuel usage for this filter.</Empty>
+              </td>
+            </tr>
+          </tbody>
+        )}
         {groups.map((g) => {
           const l = g.rows.reduce((s, r) => s + r.litres, 0)
           const a = g.rows.reduce((s, r) => s + r.amount, 0)
@@ -748,20 +847,27 @@ function DetailTable({ groups, total, hq }) {
               </tr>
               {g.rows.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100 align-top">
-                  <td className="whitespace-nowrap px-4 py-2 text-slate-600">{day(r.date)}</td>
-                  <td className="px-3 py-2 text-slate-800">{r.who}</td>
-                  <td className="px-3 py-2 text-slate-700">
+                  <td className="px-4 py-2">
+                    {hq ? (
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.type === 'Cash' ? 'bg-amber-50 text-amber-800' : 'bg-sky-50 text-sky-800'}`}>{r.type}</span>
+                    ) : (
+                      <span className="text-slate-600">{r.type}</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{day(r.date)}</td>
+                  <td className="break-words px-3 py-2 text-slate-800">{r.who}</td>
+                  <td className="break-words px-3 py-2 text-slate-700">
                     {r.vehicle}
                     {r.general && <span className="ml-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">general</span>}
                   </td>
-                  {hq && <td className="px-3 py-2 text-slate-500">{r.receipt || '—'}</td>}
+                  {hq && <td className="px-3 py-2 text-slate-500">{r.claimNo || '—'}</td>}
                   <td className="px-3 py-2 text-right tabular-nums">{n2(r.litres)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{n2(r.amount)}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.remark || ''}</td>
+                  <td className="break-words px-3 py-2 text-slate-600">{r.remark || ''}</td>
                 </tr>
               ))}
               <tr className="border-t border-slate-200 font-semibold">
-                <td colSpan={hq ? 4 : 3} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
+                <td colSpan={span} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
                   Subtotal
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{n2(l)}</td>
@@ -771,14 +877,232 @@ function DetailTable({ groups, total, hq }) {
             </tbody>
           )
         })}
+        {groups.length > 0 && (
+          <tfoot>
+            <tr className="bg-slate-100 font-bold">
+              <td colSpan={span} className="px-4 py-2.5 text-right text-xs uppercase tracking-wide text-slate-600">
+                Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.litres)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.amount)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </div>
+  )
+}
+
+// HQ table view: per vehicle (title once), a Fleet card section then a Cash
+// claim section, each with its receipts and a subtotal; the total at the end.
+// Columns: Receipt date, Receipt no., Litre, RM/L, Total amount, Remark.
+function VehicleTable({ groups, total }) {
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const perL = (r) => (r.litres > 0 ? (r.amount / r.litres).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '—')
+  const sum = (rows, k) => rows.reduce((s, r) => s + r[k], 0)
+  const head = (
+    <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <th className="px-4 py-1.5">Receipt date</th>
+      <th className="px-3 py-1.5">Receipt no.</th>
+      <th className="px-3 py-1.5 text-right">Litre</th>
+      <th className="px-3 py-1.5 text-right">RM/L</th>
+      <th className="px-3 py-1.5 text-right">Total amount (RM)</th>
+      <th className="px-3 py-1.5">Remark</th>
+    </tr>
+  )
+  const cols = (
+    <colgroup>
+      {[13, 13, 11, 10, 14].map((w, i) => (
+        <col key={i} style={{ width: `${w}%` }} />
+      ))}
+      <col />
+    </colgroup>
+  )
+  if (!groups.length) return <Empty>No fuel usage for this filter.</Empty>
+  return (
+    <div className="space-y-4 p-4">
+      {groups.map((g, gi) => (
+        <div key={g.key}>
+          {g.first && (
+            <h3 className="mb-2 mt-2 flex items-baseline gap-2 border-b-2 border-slate-800 pb-1 first:mt-0">
+              <span className="font-display text-lg font-bold tracking-wide text-slate-900">{g.vehicle.title}</span>
+              {g.vehicle.name && <span className="text-sm text-slate-500">{g.vehicle.name}</span>}
+              {g.vehicle.general && <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">general</span>}
+            </h3>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[820px] table-fixed text-sm">
+              {cols}
+              <thead>
+                <tr className={g.kind === 'cash' ? 'bg-amber-50' : 'bg-sky-50'}>
+                  <th colSpan={6} className={`px-4 py-2 text-left text-sm font-bold ${g.kind === 'cash' ? 'text-amber-900' : 'text-sky-900'}`}>
+                    {g.title}
+                    <span className="ml-2 text-xs font-medium opacity-70">
+                      {g.rows.length} {g.rows.length === 1 ? 'receipt' : 'receipts'}
+                    </span>
+                  </th>
+                </tr>
+                {head}
+              </thead>
+              <tbody>
+                {g.rows.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100 align-top">
+                    <td className="whitespace-nowrap px-4 py-2 text-slate-700">{day(r.date)}</td>
+                    <td className="break-words px-3 py-2 text-slate-600">{r.receipt || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{n2(r.litres)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{perL(r)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{n2(r.amount)}</td>
+                    <td className="break-words px-3 py-2">
+                      {/* claimed by · claim no., then the Bill to company and the note, as plain text */}
+                      {r.from && <span className="block text-xs text-slate-500">{r.from}</span>}
+                      {r.billTo && <span className="block font-semibold text-slate-800">Bill to {r.billTo}</span>}
+                      {r.remark && <span className="block text-slate-700">{r.remark}</span>}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-slate-200 bg-slate-50/70 font-semibold">
+                  <td colSpan={2} className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500">
+                    Subtotal
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n2(sum(g.rows, 'litres'))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">{sum(g.rows, 'litres') > 0 ? perL({ litres: sum(g.rows, 'litres'), amount: sum(g.rows, 'amount') }) : '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n2(sum(g.rows, 'amount'))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {/* after the vehicle's last section: its totals per Bill to company */}
+          {groups[gi + 1]?.vehicle?.key !== g.vehicle?.key && <VehicleBillTo rows={groups.filter((x) => x.vehicle?.key === g.vehicle?.key).flatMap((x) => x.rows)} title={g.vehicle?.title} />}
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold">
+        <span className="text-xs uppercase tracking-wide text-slate-600">
+          Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
+        </span>
+        <span className="tabular-nums">{n2(total.litres)} L</span>
+        <span className="tabular-nums">RM {n2(total.amount)}</span>
+      </div>
+      <BillToSummary rows={groups.flatMap((g) => g.rows)} />
+    </div>
+  )
+}
+
+// One vehicle: total per Bill to company (receipts without one = this company),
+// and the vehicle total. Only when some receipt of the vehicle has a Bill to.
+function VehicleBillTo({ rows, title }) {
+  if (!rows.some((r) => r.billTo)) return null
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const m = new Map()
+  for (const r of rows) {
+    const k = r.billTo || ''
+    const t = m.get(k) || { name: r.billTo || 'Not billed to another company', n: 0, litres: 0, amount: 0 }
+    t.n += 1
+    t.litres += r.litres
+    t.amount += r.amount
+    m.set(k, t)
+  }
+  const list = [...m.entries()].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))).map(([, t]) => t)
+  const all = list.reduce((t, x) => ({ n: t.n + x.n, litres: t.litres + x.litres, amount: t.amount + x.amount }), { n: 0, litres: 0, amount: 0 })
+  return (
+    <div className="mt-2 ml-auto max-w-xl overflow-hidden rounded-xl border border-slate-300 text-sm">
+      <p className="bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600">{title} · total by company</p>
+      <table className="w-full">
+        <tbody>
+          {list.map((t) => (
+            <tr key={t.name} className="border-t border-slate-100">
+              <td className={`px-3 py-1.5 ${t.name.startsWith('Not billed') ? 'text-slate-500' : 'font-semibold text-slate-800'}`}>{t.name}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
+                {t.n} {t.n === 1 ? 'receipt' : 'receipts'}
+              </td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{n2(t.litres)} L</td>
+              <td className="px-3 py-1.5 text-right font-semibold tabular-nums">RM {n2(t.amount)}</td>
+            </tr>
+          ))}
+          <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+            <td className="px-3 py-1.5">Vehicle total</td>
+            <td className="px-3 py-1.5 text-right tabular-nums">{all.n}</td>
+            <td className="px-3 py-1.5 text-right tabular-nums">{n2(all.litres)} L</td>
+            <td className="px-3 py-1.5 text-right tabular-nums">RM {n2(all.amount)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Totals per Bill to company and month (the receipts charged to another
+ * company), for the month-end billing: [{ name, months: [{ month, n, litres, amount }], n, litres, amount }] */
+function billToTotals(rows) {
+  const m = new Map()
+  for (const r of rows) {
+    if (!r.billTo) continue
+    const co = m.get(r.billTo) || { name: r.billTo, byMonth: new Map(), n: 0, litres: 0, amount: 0 }
+    const ym = r.date.slice(0, 7)
+    const mo = co.byMonth.get(ym) || { month: ym, n: 0, litres: 0, amount: 0 }
+    for (const t of [co, mo]) {
+      t.n += 1
+      t.litres += r.litres
+      t.amount += r.amount
+    }
+    co.byMonth.set(ym, mo)
+    m.set(r.billTo, co)
+  }
+  return [...m.values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => ({ ...c, months: [...c.byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)) }))
+}
+const monthName = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-MY', { month: 'long', year: 'numeric' })
+function BillToSummary({ rows }) {
+  const list = billToTotals(rows)
+  if (!list.length) return null
+  const n2 = (v) => Number(v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const grand = list.reduce((t, c) => ({ n: t.n + c.n, litres: t.litres + c.litres, amount: t.amount + c.amount }), { n: 0, litres: 0, amount: 0 })
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-300">
+      <p className="bg-slate-800 px-4 py-2 text-sm font-bold text-white">Bill to other companies · by month</p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-1.5">Company</th>
+            <th className="px-3 py-1.5">Month</th>
+            <th className="px-3 py-1.5 text-right">Receipts</th>
+            <th className="px-3 py-1.5 text-right">Litre</th>
+            <th className="px-4 py-1.5 text-right">Total amount (RM)</th>
+          </tr>
+        </thead>
+        {list.map((c) => (
+          <tbody key={c.name} className="border-t border-slate-200">
+            {c.months.map((mo, i) => (
+              <tr key={mo.month} className={i ? 'border-t border-slate-100' : ''}>
+                <td className="px-4 py-2 font-semibold text-slate-800">{i === 0 ? c.name : ''}</td>
+                <td className="px-3 py-2 text-slate-700">{monthName(mo.month)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{mo.n}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{n2(mo.litres)}</td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums">{n2(mo.amount)}</td>
+              </tr>
+            ))}
+            {c.months.length > 1 && (
+              <tr className="border-t border-slate-200 bg-slate-50 font-bold">
+                <td className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-500" colSpan={2}>
+                  {c.name} total
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{c.n}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{n2(c.litres)}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{n2(c.amount)}</td>
+              </tr>
+            )}
+          </tbody>
+        ))}
         <tfoot>
-          <tr className="bg-slate-100 font-bold">
-            <td colSpan={hq ? 4 : 3} className="px-4 py-2.5 text-right text-xs uppercase tracking-wide text-slate-600">
-              Total · {total.n} {total.n === 1 ? 'receipt' : 'receipts'}
+          <tr className="border-t-2 border-slate-800 bg-slate-100 font-bold">
+            <td className="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-600" colSpan={2}>
+              All companies
             </td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.litres)}</td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{n2(total.amount)}</td>
-            <td />
+            <td className="px-3 py-2 text-right tabular-nums">{grand.n}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{n2(grand.litres)}</td>
+            <td className="px-4 py-2 text-right tabular-nums">{n2(grand.amount)}</td>
           </tr>
         </tfoot>
       </table>

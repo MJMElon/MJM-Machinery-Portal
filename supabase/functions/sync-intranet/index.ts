@@ -21,7 +21,8 @@ Deno.serve(async (req) => {
   const auth = req.headers.get('authorization') ?? ''
   if (!auth.startsWith('Bearer ')) return json({ error: 'unauthorized' }, 401)
   const apiKey = env('GW_API_KEY')
-  if (!apiKey) return json({ error: 'not_configured', detail: 'Set the GW_API_KEY secret.' }, 500)
+  if (!apiKey && !env('GW_API_KEY_DIESEL'))
+    return json({ error: 'not_configured', detail: 'Set the GW_API_KEY (CMMS 2 icon) and GW_API_KEY_DIESEL (Fuel Claims icon) secrets.' }, 500)
 
   const url = env('SUPABASE_URL')
   const asUser = createClient(url, env('SUPABASE_ANON_KEY'), {

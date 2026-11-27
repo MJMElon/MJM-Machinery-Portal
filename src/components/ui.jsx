@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 // Small white/simple UI kit used across every page.
 // Tailwind classes only; no extra component libraries.
 
@@ -138,21 +139,41 @@ export function EmptyState({ title, subtitle, action }) {
   )
 }
 
+// Closes only on a real click outside: pressed AND released on the dark
+// backdrop. Pressing inside (selecting text, dragging) and letting go outside
+// keeps it open.
 export function Modal({ open, onClose, title, children, wide = false }) {
+  const downOutside = useRef(false)
   if (!open) return null
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-      onClick={onClose}
+      onPointerDown={(e) => (downOutside.current = e.target === e.currentTarget)}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && downOutside.current) onClose?.()
+        downOutside.current = false
+      }}
     >
       <div
         className={cx(
-          'max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl',
-          wide ? 'max-w-2xl sm:p-6' : 'max-w-app'
+          'relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 pb-6 sm:rounded-2xl',
+          wide === 'full' ? 'max-w-[min(98vw,110rem)] sm:p-6' : wide === 'xl' ? 'max-w-6xl sm:p-6' : wide ? 'max-w-2xl sm:p-6' : 'max-w-app'
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {title && <h3 className="mb-3 text-base font-bold text-slate-800">{title}</h3>}
+        {/* X: close the window */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Close"
+          title="Close"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+        {title && <h3 className="mb-3 pr-9 text-base font-bold text-slate-800">{title}</h3>}
         {children}
       </div>
     </div>

@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../PageHeader.jsx'
-import { Badge, Button, Card } from '../ui.jsx'
+import { Badge, Button, Card, Modal } from '../ui.jsx'
 import { IconPencil, IconTrash } from '../icons.jsx'
 import { ErrorBox, inputCls } from './shared.jsx'
 import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
-import { RequestTopupModal } from './TopupRequests.jsx'
-import { CARD_STATUS, cardBalances, deleteCard, personLabel, saveCard, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
-import { PasswordField } from './CardPassword.jsx'
+import { NewTopupModal } from './TopupRequests.jsx'
+import { CARD_STATUS, cardBalances, autoTopupCheck, autoTopupStatus, procurementPeople, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel, listNamedDrivers, addNamedDriver, deleteNamedDriver, linkNamedDriver } from '../../lib/diesel.js'
+import { PasswordField, PasswordInput } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
+import { useAuth } from '../../auth/AuthContext.jsx'
 
 // A fleet card in use (tested), one page, edited in place:
 //   top     Fleet card details (Edit → fields, status incl. Inactive, Save,
-//           Delete fleet card) | Fleet card drivers (Edit → add / remove, Save),
+//           Delete fleet card) | Fleet card drivers (Edit → add / remove, Save; a driver
+//           without an account can be added by name + phone, and later linked to a user),
 //           same height, the driver list scrolls
 //   middle  this month's usage (‹ › month) with subsidy / used / balance,
 //           beside the month's usage by driver
@@ -38,12 +40,18 @@ const detailsOf = (c) => ({
 })
 const driversOf = (c) => (c.driver_ids?.length ? c.driver_ids : c.driver_id ? [c.driver_id] : [])
 
-export function FleetCardInUse({ company, access, card, vehicles, people, ledger, reload, startEdit = false }) {
+export function FleetCardInUse({ company, access, card, vehicles, people, ledger, reload, startEdit = false, companyTag = null }) {
   const navigate = useNavigate()
   const canEdit = access.can('cards', 'edit')
   const canDelete = access.can('cards', 'delete')
   const [editDetails, setEditDetails] = useState(startEdit && canEdit)
   const [editDrivers, setEditDrivers] = useState(false)
+  // name-only drivers (no account yet): saved ones, and the edit copy (new ones have no id yet)
+  const [named, setNamed] = useState([])
+  const [namedDraft, setNamedDraft] = useState([])
+  const [newName, setNewName] = useState({ name: '', phone: '' })
+  const [linking, setLinking] = useState(null) // name-only driver being linked to a user
+  const [namedTick, setNamedTick] = useState(0)
   const [form, setForm] = useState(() => detailsOf(card))
   const [drivers, setDrivers] = useState(() => driversOf(card))
   const [vehicleQuery, setVehicleQuery] = useState('')
@@ -52,7 +60,20 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const hasPw = Boolean(card.login_password_set || card.login_password)
   const [error, setError] = useState('')
   const [askTopup, setAskTopup] = useState(false)
+  const [topupSent, setTopupSent] = useState('')
   const [year, setYear] = useState(new Date().getFullYear())
+
+  useEffect(() => {
+    let live = true
+    listNamedDrivers(card.id).then((r) => {
+      if (!live) return
+      setNamed(r)
+      setNamedDraft(r)
+    })
+    return () => {
+      live = false
+    }
+  }, [card.id, namedTick])
 
   // a fresh copy of the card (after saving) resets the boxes
   useEffect(() => {
@@ -100,7 +121,11 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const saveDrivers = () =>
     run(async () => {
       await saveCard(company.id, { id: card.id, driver_ids: drivers, driver_id: drivers[0] || null })
+      for (const n of namedDraft) if (!n.id) await addNamedDriver(company.id, card.id, n)
+      for (const n of named) if (!namedDraft.some((x) => x.id === n.id)) await deleteNamedDriver(n.id)
+      setNewName({ name: '', phone: '' })
       setEditDrivers(false)
+      setNamedTick((t) => t + 1)
       await reload()
     })
   const remove = () => {
@@ -153,15 +178,25 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         backLabel="Back to fleet card list"
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
+            {/* opened from the Consolidate view: the company short name first */}
+            {companyTag && <span className="rounded-lg bg-slate-200 px-2 py-0.5 text-base font-bold text-slate-700">{companyTag}</span>}
             {card.card_no || 'Fleet card'}
             <Badge color={st.color}>{st.label}</Badge>
           </span>
         }
         right={
-          card.card_no && !['cancelled', 'inactive'].includes(card.status) ? <Button onClick={() => setAskTopup(true)}>Request top up</Button> : null
+          <div className="flex flex-wrap gap-2">
+            {access.procurement && card.card_no && !['cancelled', 'inactive'].includes(card.status) && <Button onClick={() => setAskTopup(true)}>Request top up</Button>}
+            {canDelete && (
+              <Button variant="secondary" className="text-red-600" disabled={busy} onClick={remove}>
+                <IconTrash width={18} height={18} /> Delete fleet card
+              </Button>
+            )}
+          </div>
         }
       />
       <ErrorBox>{error}</ErrorBox>
+      {topupSent && <p className="rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-800">{topupSent}</p>}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Fleet card details */}
@@ -230,8 +265,7 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                   <input value={form.login_id} onChange={set('login_id')} maxLength={80} autoComplete="off" className={box} />
                 </Input>
                 <Input label="Login password">
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={form.login_password}
                     onChange={(e) => {
                       setClearPw(false)
@@ -308,6 +342,38 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                     )}
                   </li>
                 ))}
+                {(editDrivers ? namedDraft : named).map((n, i) => (
+                  <li key={n.id || `new-${i}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-50 text-xs font-semibold text-amber-700">{drivers.length + i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-slate-800">
+                      {n.name}
+                      {n.phone && <span className="ml-1.5 text-xs text-slate-500">{n.phone}</span>}
+                    </span>
+                    <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700" title="No Intranet / OPIS PRO account yet">
+                      Name only
+                    </span>
+                    {editDrivers && n.id && (
+                      <button
+                        type="button"
+                        onClick={() => setLinking(n)}
+                        className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        title="This person now has an account: move their fuel records to it"
+                      >
+                        Link to user
+                      </button>
+                    )}
+                    {editDrivers && (
+                      <button
+                        type="button"
+                        onClick={() => setNamedDraft((d) => d.filter((x) => x !== n))}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Remove ${n.name}`}
+                      >
+                        <IconTrash width={15} height={15} />
+                      </button>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
             {editDrivers && (
@@ -327,6 +393,37 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                       </option>
                     ))}
                 </select>
+                {/* a driver without an account yet: name + phone only */}
+                <div className="flex gap-2">
+                  <input
+                    value={newName.name}
+                    onChange={(e) => setNewName((x) => ({ ...x, name: e.target.value }))}
+                    maxLength={80}
+                    placeholder="Name (no account yet)"
+                    className={`${box} min-w-0 flex-1`}
+                    aria-label="Name of a driver without an account"
+                  />
+                  <input
+                    value={newName.phone}
+                    onChange={(e) => setNewName((x) => ({ ...x, phone: e.target.value }))}
+                    maxLength={30}
+                    inputMode="tel"
+                    placeholder="Phone"
+                    className={`${box} w-32`}
+                    aria-label="Phone"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!newName.name.trim()}
+                    onClick={() => {
+                      setNamedDraft((d) => [...d, { name: newName.name.trim(), phone: newName.phone.trim() }])
+                      setNewName({ name: '', phone: '' })
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button
                     type="button"
@@ -334,6 +431,8 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                     disabled={busy}
                     onClick={() => {
                       setDrivers(driversOf(card))
+                      setNamedDraft(named)
+                      setNewName({ name: '', phone: '' })
                       setEditDrivers(false)
                     }}
                   >
@@ -349,8 +448,39 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         </Card>
       </div>
 
+      {linking && (
+        <LinkDriverModal
+          driver={linking}
+          people={people}
+          onClose={() => setLinking(null)}
+          onLinked={async (moved, uid) => {
+            setLinking(null)
+            setDrivers((d) => (d.includes(uid) ? d : [...d, uid]))
+            setNamedDraft((d) => d.filter((x) => x.id !== linking.id))
+            setNamed((d) => d.filter((x) => x.id !== linking.id))
+            setNamedTick((t) => t + 1)
+            setTopupSent(`${linking.name} is now linked to ${nameOf(uid)}: ${moved} fuel record${moved === 1 ? '' : 's'} moved.`)
+            await reload()
+          }}
+        />
+      )}
+
+      {/* automatic top-up request: Procurement sets the balance and the amount */}
+      <AutoTopupBox card={card} canSet={Boolean(access.procurement) && !card.status?.match(/inactive|cancelled/)} nameOf={nameOf} balanceNow={ledger ? balanceNow : null} onSaved={reload} />
+
       {/* this month's usage (with subsidy / used / balance) | usage by driver */}
-      <CardMonthUsage company={company} cardId={card.id} quota={quota} driverNames={driversOf(card).map(nameOf)} />
+      <CardMonthUsage
+        company={company}
+        cardId={card.id}
+        card={card}
+        title={`${card.card_no || 'Fleet card'}${card.vehicle_id && vById.get(card.vehicle_id) ? ` (${vById.get(card.vehicle_id).reg_no || vById.get(card.vehicle_id).name})` : ''}`}
+        drivers={[...driversOf(card).map((id) => ({ id, name: nameOf(id) })), ...named.map((n) => ({ id: null, namedId: n.id, key: `name:${n.name.toUpperCase()}`, name: n.name }))]}
+        canAdd={access.can('usage', 'add')}
+        canDelete={access.can('usage', 'delete')}
+        quota={quota}
+        driverNames={[...driversOf(card).map(nameOf), ...named.map((n) => n.name)]}
+        refresh={namedTick}
+      />
 
       {/* usage by month, litres and RM, and the balance now */}
       <Card className="overflow-hidden">
@@ -375,14 +505,15 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
       </Card>
 
       {askTopup && (
-        <RequestTopupModal
+        // same New Top Up Request window as on Fleet Card Manage, with this card ticked
+        <NewTopupModal
           company={company}
-          cards={[card]}
-          vById={vById}
-          balance={ledger ? cardBalances(ledger) : null}
-          cardId={card.id}
+          preselect={[card.id]}
           onClose={() => setAskTopup(false)}
-          onSaved={() => navigate('/diesel/cards/topup')}
+          onSent={(msg) => {
+            setTopupSent(msg)
+            reload?.()
+          }}
         />
       )}
     </div>
@@ -404,5 +535,223 @@ function Input({ label, wide, children }) {
       <span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span>
       {children}
     </label>
+  )
+}
+
+// "Auto top-up request" box: when the card balance is below RM X, a top-up
+// request of RM Y is sent by itself (checked every hour, when statements come
+// in and when Fleet Card Manage opens; migration 20261220). Only Procurement
+// sets it; "Request top up" by hand stays. Requestor: the Procurement person
+// the requests are sent as (they show in that person's claim list and go to
+// their approvers; migration 20261228).
+function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
+  const { user } = useAuth()
+  const [reqBy, setReqBy] = useState(card.auto_topup_by || '')
+  const [procs, setProcs] = useState(null) // Procurement user ids; null = not known (before the migration)
+  useEffect(() => {
+    let live = true
+    procurementPeople(card.company_id).then((ids) => live && setProcs(ids))
+    return () => {
+      live = false
+    }
+  }, [card.company_id])
+  useEffect(() => setReqBy(card.auto_topup_by || ''), [card.id, card.auto_topup_by])
+  // the requestor shown when nobody is set yet: me (when I am Procurement)
+  const requester = reqBy || (procs?.includes(user?.id) ? user.id : procs?.[0] || '')
+  const reqOpts = [...new Set([...(procs || []), card.auto_topup_by, user?.id].filter(Boolean))].filter((id) => !procs || procs.includes(id) || id === card.auto_topup_by)
+  const ready = 'auto_topup' in card // the database has the columns
+  const [on, setOn] = useState(Boolean(card.auto_topup))
+  // Min balance (auto request below it) and Max balance (no top-up above it)
+  const [below, setBelow] = useState(card.auto_topup_below ?? '')
+  const [amount, setAmount] = useState(card.auto_topup_max ?? '') // Max balance
+  const [topupAmt, setTopupAmt] = useState(card.auto_topup_amount ?? '') // what each automatic request asks for (fixed)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    setOn(Boolean(card.auto_topup))
+    setBelow(card.auto_topup_below ?? '')
+    setAmount(card.auto_topup_max ?? '')
+    setTopupAmt(card.auto_topup_amount ?? '')
+  }, [card.id, card.auto_topup, card.auto_topup_below, card.auto_topup_max, card.auto_topup_amount])
+  // Why a request was / was not sent (balance now, a request still waiting)
+  const [why, setWhy] = useState(null)
+  const [checking, setChecking] = useState(false)
+  useEffect(() => {
+    let live = true
+    if (ready && card.auto_topup) autoTopupStatus(card.id).then((w) => live && setWhy(w))
+    else setWhy(null)
+    return () => {
+      live = false
+    }
+  }, [card.id, card.auto_topup, card.auto_topup_below, card.auto_topup_last_at, ready])
+  async function checkNow() {
+    setChecking(true)
+    setMsg('')
+    const made = await autoTopupCheck(card.company_id)
+    await onSaved()
+    const w = await autoTopupStatus(card.id)
+    setWhy(w)
+    const tu = (n) => `TU-${String(n ?? '').padStart(4, '0')}`
+    if (made && w?.waiting) setMsg(`${tu(w.waiting.request_no)} (${money(w.waiting.amount)}) is newly created and waiting for approval`)
+    else if (made) setMsg('A new request is created and waiting for approval')
+    else if (!w) setMsg('Checked')
+    else if (w.card_status !== 'active') setMsg(`No request: the card is ${w.card_status}`)
+    else if (w.waiting)
+      setMsg(`${tu(w.waiting.request_no)} (${money(w.waiting.amount)}) is ${w.waiting.status === 'pending' ? 'waiting for approval' : 'approved; its top-up claim is not submitted yet'}`)
+    else if (Number(w.balance) >= Number(card.auto_topup_below)) setMsg(`No request needed: balance ${money(w.balance)} is not below the min`)
+    else setMsg(`No request: ${money(card.auto_topup_amount)} would take the card above the max (balance ${money(w.balance)}, on the way ${money(w.on_way || 0)})`)
+    setChecking(false)
+  }
+  const dirty = (procs != null && on && requester !== (card.auto_topup_by || '')) || on !== Boolean(card.auto_topup) || String(below) !== String(card.auto_topup_below ?? '') || String(amount) !== String(card.auto_topup_max ?? '') || String(topupAmt) !== String(card.auto_topup_amount ?? '')
+  // Max above Min when both are filled; the automatic request needs both
+  const orderOk = below === '' || amount === '' || Number(amount) > Number(below)
+  // the top-up amount: not more than the max; needed for the automatic request
+  const amountOk = topupAmt === '' || (Number(topupAmt) > 0 && (amount === '' || Number(topupAmt) <= Number(amount)))
+  const valid = orderOk && amountOk && (!on || topupAmt !== '') && (!on || (below !== '' && Number(below) >= 0 && Number(amount) > 0 && (procs == null || Boolean(requester))))
+
+  async function save() {
+    setBusy(true)
+    setMsg('')
+    try {
+      await setAutoTopup(card.id, on, below, amount, procs != null ? requester : null, topupAmt)
+      await onSaved()
+      setMsg('Saved')
+    } catch (e) {
+      setMsg(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const box = `${inputCls} h-10 pl-11 text-right font-semibold tabular-nums`
+  const rm = (v, set, label, hint = '0.00') => (
+    <span className="relative block w-36">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">RM</span>
+      <input type="number" min="0" step="0.01" inputMode="decimal" value={v} onChange={(e) => set(e.target.value)} disabled={!canSet || busy} aria-label={label} placeholder={hint} className={box} />
+    </span>
+  )
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-display text-lg font-bold text-slate-900 underline decoration-slate-300 underline-offset-4">Card balance limits</h3>
+        <label className={`inline-flex items-center gap-2 text-sm font-semibold ${canSet ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+          <span className={on ? 'text-emerald-700' : 'text-slate-500'}>Auto request {on ? 'on' : 'off'}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            disabled={!canSet || busy || !ready}
+            onClick={() => setOn((v) => !v)}
+            className={`relative h-6 w-11 rounded-full transition ${on ? 'bg-emerald-500' : 'bg-slate-300'} disabled:cursor-not-allowed`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+        </label>
+      </div>
+
+      {!ready ? (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Needs the SQL migration 20261220 (automatic top-up) in the database.</p>
+      ) : (
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-700">
+            <span className="font-semibold">Min balance</span>
+            {rm(below, setBelow, 'Min balance')}
+            <span className="font-semibold">Max balance</span>
+            {rm(amount, setAmount, 'Max balance')}
+            <span className="font-semibold">Top-up amount</span>
+            {rm(topupAmt, setTopupAmt, 'Top-up amount')}
+            {canSet && (
+              <span className="ml-auto flex items-center gap-3">
+                {msg && (
+                  <span className={`text-sm ${msg === 'Saved' || /newly created|^A new request|^No request needed|^Checked/.test(msg) ? 'text-green-700' : /^TU-|^No request:/.test(msg) ? 'text-amber-700' : 'text-red-600'}`}>{msg}</span>
+                )}
+                {card.auto_topup && !dirty && (
+                  <Button size="sm" variant="secondary" disabled={checking || busy} onClick={checkNow}>
+                    {checking ? 'Checking…' : 'Check now'}
+                  </Button>
+                )}
+                <Button size="sm" disabled={busy || !dirty || !valid} onClick={save}>
+                  {busy ? 'Saving…' : 'Save'}
+                </Button>
+              </span>
+            )}
+          </div>
+          {/* Requestor: the Procurement person the automatic requests are sent as */}
+          <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm ${on ? 'text-slate-700' : 'text-slate-400'}`}>
+            <span>Requestor</span>
+            {procs != null && canSet ? (
+              <select
+                value={requester}
+                onChange={(e) => setReqBy(e.target.value)}
+                disabled={!on || busy}
+                aria-label="Requestor"
+                className={`${inputCls} h-10 w-auto min-w-[14rem] font-semibold`}
+              >
+                {!requester && <option value="">Choose a Procurement person…</option>}
+                {reqOpts.map((id) => (
+                  <option key={id} value={id}>
+                    {nameOf(id)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="font-semibold text-slate-800">{card.auto_topup_by ? nameOf(card.auto_topup_by) : '—'}</span>
+            )}
+            <span className="text-xs text-slate-500">The requests are sent in this person's name and show in their claim list.</span>
+          </div>
+          {!orderOk && <p className="mt-2 text-xs font-medium text-red-600">The max balance must be more than the min balance.</p>}
+          {orderOk && !amountOk && <p className="mt-2 text-xs font-medium text-red-600">The top-up amount cannot be more than the max balance.</p>}
+          {on && amountOk && topupAmt === '' && <p className="mt-2 text-xs font-medium text-red-600">Fill in the top-up amount to use the automatic request.</p>}
+        </>
+      )}
+    </Card>
+  )
+}
+
+// Link a name-only driver to the person's account: every fuel record typed for the
+// name moves to the user, and is matched with the user's fuel claim receipts.
+function LinkDriverModal({ driver, people, onClose, onLinked }) {
+  const [uid, setUid] = useState('')
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const term = q.trim().toLowerCase()
+  const list = people.filter((p) => !term || personLabel(p).toLowerCase().includes(term))
+  async function go() {
+    setBusy(true)
+    setError('')
+    try {
+      const moved = await linkNamedDriver(driver.id, uid)
+      await onLinked(moved, uid)
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title={`Link ${driver.name} to a user`}>
+      <p className="mb-3 text-sm text-slate-600">
+        Choose the account this person now has. Every fuel record typed for <b>{driver.name}</b> moves to that user, fill-ups their fuel claims already cover are matched (no double counting), and the name-only driver is removed.
+      </p>
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email…" className={`${box} mb-2 w-full`} aria-label="Search user" />
+      <select value={uid} onChange={(e) => setUid(e.target.value)} size={8} className={`${inputCls} w-full px-2 py-1 text-sm`} aria-label="User">
+        {list.map((p) => (
+          <option key={p.user_id} value={p.user_id}>
+            {personLabel(p)}
+          </option>
+        ))}
+      </select>
+      <p className="mt-1 text-xs text-slate-500">Not in the list? Give them the Fuel module in the Intranet first, then Sync from MJM Intranet.</p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" disabled={busy || !uid} onClick={go}>
+          {busy ? 'Linking…' : 'Link'}
+        </Button>
+      </div>
+    </Modal>
   )
 }

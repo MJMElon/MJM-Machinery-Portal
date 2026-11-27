@@ -1,20 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
-import { Button, Card, Select } from '../../components/ui.jsx'
-import { IconCheck, IconEye, IconX } from '../../components/icons.jsx'
-import { Empty, ErrorBox, Loading, StatusBadge, inputCls } from '../../components/diesel/shared.jsx'
-import { CLAIM_STATUS, isReload, listClaimLines, listClaims, listPeople, personLabel, reviewClaim } from '../../lib/diesel.js'
-import { day, money, num } from '../../lib/format.js'
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
+import { Card } from '../../components/ui.jsx'
+import { Empty, ErrorBox, Loading } from '../../components/diesel/shared.jsx'
+import { decideTopup, isReload, payableLine, undoTopup, listCardData, listClaimLines, listClaims, listPaymentDocs, listPeople, listTopups, listVehicles, personLabel, reviewClaim, topupNo } from '../../lib/diesel.js'
+import { money } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 import { claimNo } from './DieselClaims.jsx'
 import { RejectModal } from './ClaimView.jsx'
+import { ClaimsTable } from '../../components/diesel/ClaimsTable.jsx'
+import { MarkPaidModal } from '../../components/diesel/PaymentDocs.jsx'
+import { IconBack } from '../../components/icons.jsx'
+import { useNotice } from '../../components/Notice.jsx'
 
-// Review claims, in three tabs:
-//   Pending approval  claims waiting for me: the people I am approver for
-//                     (User setting → Claims approved by)
+// Claims Approval (& Payment for accountants), in tabs:
+//   Pending approval  everything waiting for my approval: fuel claims of the
+//                     people I approve, and their fleet card top-up requests
+//                     (approving a top-up request puts a draft top-up claim
+//                     in the requester's My Claims: migration 20261218)
 //   To pay            approved claims, for accountants: mark paid
 //   All claims        every claim I can see (accountants: the whole company)
-// Approve / reject / mark paid right in the row, or several at once.
+// ?tab=pending|topay|all opens that tab (the Fuel Manage task bar).
+// Same table on every claims tab (ClaimsTable.jsx). Approve / reject / mark
+// paid right in the row, or several at once from the toolbar.
 export default function ClaimReview() {
   const { company, access } = useOutletContext()
   const { user, isSuperAdmin } = useAuth()
@@ -24,32 +31,51 @@ export default function ClaimReview() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [picked, setPicked] = useState(() => new Set())
   const [rejecting, setRejecting] = useState(null) // claim
+  const [paying, setPaying] = useState(null) // claims to mark paid
+  const [docs, setDocs] = useState({}) // payment documents by claim
+  const navigate = useNavigate()
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
 
+  const [params] = useSearchParams()
   const approver = isSuperAdmin || access.admin
   const accountant = isSuperAdmin || access.pay
-  const allowed = approver || accountant || access.viewAll
-  const TABS = [approver && ['pending', 'Pending approval'], accountant && ['topay', 'To pay'], ['all', 'All claims']].filter(Boolean)
-  const [tab, setTab] = useState(TABS[0][0])
+  const topupApprover = isSuperAdmin || Boolean(access.topupApprover)
+  // Only accountants and people set to approve claims or top-up requests see this page
+  // (Reports access alone is not enough).
+  const claimsUser = approver || accountant
+  const allowed = claimsUser || topupApprover
+  const TABS = [(approver || topupApprover) && ['pending', 'Pending approval'], accountant && ['topay', 'To pay'], claimsUser && ['all', 'All claims']].filter(Boolean)
+  const wanted = params.get('tab') === 'topup' ? 'pending' : params.get('tab')
+  const [tab, setTab] = useState(TABS.some(([k]) => k === wanted) ? wanted : TABS[0]?.[0])
+  const [tu, setTu] = useState({ topups: [], cById: new Map(), vById: new Map() }) // top-up requests I may approve
 
   const load = useCallback(async () => {
     if (!allowed) return setLoading(false)
     try {
-      const [c, p] = await Promise.all([listClaims(company.id), listPeople(company.id).catch(() => [])])
-      const ls = c.length ? await listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []) : []
+      const [c, p, t] = await Promise.all([
+        claimsUser ? listClaims(company.id) : [],
+        listPeople(company.id).catch(() => []),
+        topupApprover
+          ? Promise.all([listTopups(company.id).catch(() => null), listCardData(company.id).catch(() => ({ cards: [] })), listVehicles(company.id).catch(() => [])])
+          : null
+      ])
+      const [ls, ds] = c.length
+        ? await Promise.all([listClaimLines(company.id, { claimIds: c.map((x) => x.id) }).catch(() => []), listPaymentDocs(c.filter((x) => x.status === 'paid').map((x) => x.id)).catch(() => ({}))])
+        : [[], {}]
+      setDocs(ds)
       setClaims(c)
       setLines(ls)
       setPeople(p)
+      if (t) setTu({ topups: t[0] || [], cById: new Map(t[1].cards.map((x) => [x.id, x])), vById: new Map(t[2].map((v) => [v.id, v])) })
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [company.id, allowed])
+  }, [company.id, allowed, claimsUser, topupApprover])
 
   useEffect(() => {
     setLoading(true)
@@ -58,7 +84,8 @@ export default function ClaimReview() {
 
   const person = new Map(people.map((p) => [p.user_id, p]))
   const nameOf = (id) => (id === user.id ? `${user.fullName || user.email} (you)` : personLabel(person.get(id)))
-  const canApprove = (c) => c.claimant_id !== user.id && access.approves(c.claimant_id)
+  const canApprove = (c) =>
+    c.kind === 'topup' ? c.claimant_id !== user.id || isSuperAdmin : c.claimant_id !== user.id && access.approves(c.claimant_id)
   const canPay = (c) => accountant && (c.claimant_id !== user.id || isSuperAdmin)
   const linesOf = useMemo(() => {
     const m = new Map()
@@ -67,30 +94,83 @@ export default function ClaimReview() {
   }, [lines])
 
   const sorted = [...claims].sort((a, b) => ((a.submitted_on || a.fill_date) < (b.submitted_on || b.fill_date) ? 1 : -1))
-  const pending = sorted.filter((c) => c.status === 'pending' && canApprove(c))
+  // Top-up requests waiting for me, shown as rows of the same table
+  const cardLabel = (id) => {
+    const card = tu.cById.get(id)
+    const v = card?.vehicle_id ? tu.vById.get(card.vehicle_id) : null
+    return card ? `Fleet card ${card.card_no || ''}${v ? ` (${v.reg_no || v.name})` : ''}` : 'Fleet card'
+  }
+  const topupRows = tu.topups
+    .filter((r) => r.status === 'pending' && (r.requested_by !== user.id || isSuperAdmin) && (isSuperAdmin || access.approvesTopup?.(r.requested_by)))
+    .map((r) => ({
+      id: `tu-${r.id}`,
+      kind: 'topup',
+      topup: r,
+      claimant_id: r.requested_by,
+      submitted_on: (r.requested_at || '').slice(0, 10),
+      status: 'pending',
+      amount: Number(r.amount || 0),
+      card: cardLabel(r.card_id),
+      reason: r.reason || ''
+    }))
+  const pending = [...sorted.filter((c) => c.status === 'pending' && canApprove(c)), ...topupRows].sort((a, b) =>
+    (a.submitted_on || a.fill_date || '') < (b.submitted_on || b.fill_date || '') ? 1 : -1
+  )
+  const noOf = (c, i) => (c.kind === 'topup' ? topupNo(c.topup) : claimNo(c, i))
   const toPay = sorted.filter((c) => c.status === 'approved' && canPay(c))
   const t = q.trim().toLowerCase()
   const all = sorted.filter((c) => (!status || c.status === status) && (!t || nameOf(c.claimant_id).toLowerCase().includes(t) || claimNo(c, 0).includes(t)))
   const rows = tab === 'pending' ? pending : tab === 'topay' ? toPay : all
-  const count = { pending: pending.length, topay: toPay.length }
 
-  // Ticks only for rows the current tab can act on in bulk
-  const bulkable = (c) => (tab === 'pending' ? canApprove(c) && c.status === 'pending' : tab === 'topay' ? c.status === 'approved' && canPay(c) : false)
-  const chosen = rows.filter((c) => picked.has(c.id) && bulkable(c))
-  const toggle = (id) => setPicked((s) => {
-    const n = new Set(s)
-    n.has(id) ? n.delete(id) : n.add(id)
-    return n
-  })
-  const allTicked = rows.length > 0 && rows.filter(bulkable).every((c) => picked.has(c.id))
-  const tickAll = () => setPicked(allTicked ? new Set() : new Set(rows.filter(bulkable).map((c) => c.id)))
+  // Small notice at the top right after approve / reject / mark paid (counts down, then goes)
+  const [notice, notify] = useNotice()
+  // Undo from the notice: approve / reject → back to Pending; paid → back to approved
+  async function undo(list, nextStatus) {
+    setBusy(true)
+    setError('')
+    try {
+      for (const c of list)
+        if (c.kind === 'topup') await undoTopup(c.topup.id)
+        else await reviewClaim(c.id, nextStatus === 'paid' ? 'approved' : 'pending', nextStatus === 'rejected' ? null : undefined)
+      notify(list.length === 1 ? `${list[0].kind === 'topup' ? 'Top-up request' : 'Claim'} ${noOf(list[0], 0)}: undone` : `${list.length} items: undone`, nextStatus === 'paid' ? 'Back to Pending for reimbursement.' : 'Back to Pending for approval.', 'blue')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      await load()
+      setBusy(false)
+    }
+  }
+  function announce(list, nextStatus) {
+    const word = { approved: 'approved', rejected: 'rejected', paid: 'marked paid', pending: 'back to pending' }[nextStatus] || 'saved'
+    const tone = nextStatus === 'rejected' ? 'red' : nextStatus === 'paid' ? 'blue' : 'green'
+    const tops = list.filter((c) => c.kind === 'topup')
+    const claimsDone = list.filter((c) => c.kind !== 'topup')
+    if (list.length === 1) {
+      const c = list[0]
+      if (c.kind === 'topup')
+        return notify(
+          `Top-up request ${noOf(c, 0)} ${word}`,
+          nextStatus === 'approved' ? `A draft top-up claim is now in ${nameOf(c.claimant_id)}'s My Claims.` : `${nameOf(c.claimant_id)} · ${money(c.amount)}`,
+          tone,
+          () => undo(list, nextStatus)
+        )
+      return notify(`Claim ${noOf(c, 0)} ${word}`, `${nameOf(c.claimant_id)} · ${money(payableOf(c))}`, tone, () => undo(list, nextStatus))
+    }
+    const parts = [
+      claimsDone.length && `${claimsDone.length} claim${claimsDone.length === 1 ? '' : 's'}`,
+      tops.length && `${tops.length} top-up request${tops.length === 1 ? '' : 's'}`
+    ].filter(Boolean)
+    notify(`${parts.join(' and ')} ${word}`, `Total ${money(list.reduce((t, c) => t + payableOf(c), 0))}`, tone, () => undo(list, nextStatus))
+  }
 
   async function act(list, nextStatus, note) {
     setBusy(true)
     setError('')
     try {
-      for (const c of list) await reviewClaim(c.id, nextStatus, note ?? c.review_note)
-      setPicked(new Set())
+      for (const c of list)
+        if (c.kind === 'topup') await decideTopup(c.topup.id, nextStatus === 'approved', note)
+        else await reviewClaim(c.id, nextStatus, note ?? c.review_note)
+      announce(list, nextStatus)
       await load()
     } catch (e) {
       setError(e.message)
@@ -102,10 +182,10 @@ export default function ClaimReview() {
 
   const sum = (ls, f) => ls.filter(f).reduce((s, l) => s + Number(l.amount || 0), 0)
   const payableOf = (c) => {
+    if (c.kind === 'topup') return c.amount
     const ls = linesOf(c.id)
     return ls.length ? sum(ls, (l) => l.payment !== 'fleet_card' || isReload(l)) : Number(c.payable_amount ?? c.amount ?? 0)
   }
-  const chosenTotal = chosen.reduce((s, c) => s + payableOf(c), 0)
 
   if (!allowed)
     return (
@@ -116,6 +196,18 @@ export default function ClaimReview() {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('/diesel/claims')}
+          className="inline-flex items-center gap-1.5 justify-self-start rounded-xl px-2 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-brand"
+        >
+          <IconBack width={18} height={18} /> Back to My Claims
+        </button>
+        <h2 className="text-center font-display text-2xl font-bold tracking-tight text-slate-900">{accountant ? 'Claims Approval & Payment' : 'Claims Approval'}</h2>
+        <span />
+      </div>
+      {notice}
       <ErrorBox>{error}</ErrorBox>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-2 pt-2">
@@ -124,150 +216,49 @@ export default function ClaimReview() {
               <button
                 key={k}
                 type="button"
-                onClick={() => {
-                  setTab(k)
-                  setPicked(new Set())
-                }}
-                className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold ${tab === k ? 'bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}
+                onClick={() => setTab(k)}
+                className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold ${tab === k ? 'fx-tab-on bg-white text-brand' : 'text-slate-600 hover:bg-white/60'}`}
               >
                 {label}
-                {count[k] > 0 && <span className={`rounded-full px-2 py-0.5 text-xs ${k === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-700'}`}>{count[k]}</span>}
-                {tab === k && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
+                {tab === k && <span className="fx-line absolute inset-x-0 bottom-0 h-0.5 bg-brand" />}
               </button>
             ))}
           </div>
-          {tab === 'all' && (
-            <div className="flex flex-wrap gap-2 pb-2 pr-2">
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or no.…" className={`${inputCls} h-9 w-56`} />
-              <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 w-40" aria-label="Status">
-                <option value="">All statuses</option>
-                {Object.entries(CLAIM_STATUS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
         </div>
-
-        {chosen.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-brand-light/50 px-5 py-2.5 text-sm">
-            <span className="font-semibold text-slate-800">
-              {chosen.length} selected · {money(chosenTotal)}
-            </span>
-            {tab === 'pending' ? (
-              <Button size="sm" disabled={busy} onClick={() => act(chosen, 'approved')}>
-                <IconCheck width={16} height={16} /> Approve selected
-              </Button>
-            ) : (
-              <Button size="sm" disabled={busy} onClick={() => window.confirm(`Mark ${chosen.length} claim${chosen.length === 1 ? '' : 's'} paid (${money(chosenTotal)})?`) && act(chosen, 'paid')}>
-                Mark selected paid
-              </Button>
-            )}
-            <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => setPicked(new Set())}>
-              Clear
-            </button>
-          </div>
-        )}
 
         {loading ? (
           <Loading />
-        ) : rows.length === 0 ? (
-          <Empty>{tab === 'pending' ? 'Nothing waiting for your approval.' : tab === 'topay' ? 'No approved claims waiting for payment.' : 'No claims found.'}</Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {tab !== 'all' && (
-                    <th className="w-10 pl-5 py-2.5">
-                      <input type="checkbox" checked={allTicked} onChange={tickAll} className="h-4 w-4 rounded border-slate-300" aria-label="Tick all" />
-                    </th>
-                  )}
-                  <th className="w-44 px-3 py-2.5">No.</th>
-                  <th className="px-3 py-2.5">Claimant</th>
-                  <th className="px-3 py-2.5">Description</th>
-                  <th className="w-24 px-3 py-2.5 text-right">Litre</th>
-                  <th className="w-36 px-3 py-2.5 text-right">Claim payable</th>
-                  <th className="w-24 px-3 py-2.5">Status</th>
-                  <th className="w-56 px-3 py-2.5 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((c) => {
-                  const ls = linesOf(c.id)
-                  const cash = ls.filter((l) => l.payment !== 'fleet_card' && !isReload(l)).length
-                  const sub = ls.filter((l) => l.payment === 'fleet_card').length
-                  const reload = ls.filter(isReload).length
-                  const litres = ls.length ? ls.reduce((s, l) => s + Number(l.litres || 0), 0) : Number(c.total_litres ?? c.litres ?? 0)
-                  return (
-                    <tr key={c.id} className={`hover:bg-slate-50/60 ${picked.has(c.id) ? 'bg-brand-light/30' : ''}`}>
-                      {tab !== 'all' && (
-                        <td className="pl-5 py-2.5">
-                          {bulkable(c) && <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} className="h-4 w-4 rounded border-slate-300" aria-label={`Tick ${claimNo(c, 0)}`} />}
-                        </td>
-                      )}
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        <Link to={`/diesel/claims/${c.id}?from=review`} className="font-semibold tabular-nums text-slate-800 hover:text-brand">
-                          {claimNo(c, 0)}
-                        </Link>
-                        <span className="ml-2 text-xs text-slate-500">{day(c.submitted_on || c.fill_date)}</span>
-                      </td>
-                      <td className="px-3 py-2.5 font-medium text-slate-800">{nameOf(c.claimant_id)}</td>
-                      <td className="px-3 py-2.5">
-                        <span className="flex flex-wrap gap-x-4 gap-y-0.5">
-                          <span className="whitespace-nowrap text-amber-700">Cash fuel claim: {cash}</span>
-                          <span className="whitespace-nowrap text-emerald-700">Subsidy fuel claim: {sub}</span>
-                          {reload > 0 && <span className="whitespace-nowrap text-sky-700">Fleet card reload: {reload}</span>}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{num(litres, 2)} L</td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900">{money(payableOf(c))}</td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge status={c.status} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {c.status === 'pending' && canApprove(c) && (
-                            <>
-                              <Button size="sm" disabled={busy} onClick={() => act([c], 'approved')}>
-                                <IconCheck width={15} height={15} /> Approve
-                              </Button>
-                              <Button size="sm" variant="secondary" className="text-red-600" disabled={busy} onClick={() => setRejecting(c)}>
-                                <IconX width={15} height={15} /> Reject
-                              </Button>
-                            </>
-                          )}
-                          {c.status === 'approved' && canPay(c) && (
-                            <Button size="sm" disabled={busy} onClick={() => act([c], 'paid')}>
-                              Mark paid
-                            </Button>
-                          )}
-                          <Link to={`/diesel/claims/${c.id}?from=review`} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand" title="View" aria-label="View">
-                            <IconEye width={18} height={18} />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-              {tab === 'topay' && rows.length > 1 && (
-                <tfoot>
-                  <tr className="border-t border-slate-200 bg-slate-50/80 font-semibold">
-                    <td colSpan={5} className="px-3 py-2.5 text-right text-slate-600">
-                      Total to pay
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{money(rows.reduce((s, c) => s + payableOf(c), 0))}</td>
-                    <td colSpan={2} />
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+          <ClaimsTable
+            mode={tab}
+            rows={rows}
+            linesOf={(id) => linesOf(id).filter(payableLine)}
+            nameOf={nameOf}
+            claimNo={noOf}
+            payableOf={payableOf}
+            busy={busy}
+            canApprove={canApprove}
+            canPay={canPay}
+            onApprove={(list) => act(list, 'approved')}
+            onReject={setRejecting}
+            onPay={setPaying}
+            docs={docs}
+            onRefresh={() => {
+              setLoading(true)
+              load()
+            }}
+            search={q}
+            onSearch={setQ}
+            statusFilter={status}
+            onStatusFilter={setStatus}
+            empty={tab === 'pending' ? 'Nothing waiting for your approval.' : tab === 'topay' ? 'No approved claims waiting for payment.' : 'No claims found.'}
+          />
         )}
       </Card>
+
+      {paying && (
+        <MarkPaidModal claims={paying} payableOf={payableOf} claimNo={claimNo} nameOf={nameOf} onPaid={(list) => act(list, 'paid')} onClose={() => setPaying(null)} />
+      )}
 
       {rejecting && (
         <RejectModal

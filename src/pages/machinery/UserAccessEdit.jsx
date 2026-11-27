@@ -133,7 +133,7 @@ export default function UserAccessEdit() {
           From MJM Intranet:{' '}
           {[
             person.intranet_cmms && 'Machinery icon (view Work Manage, Machinery Profile, Suppliers)',
-            person.intranet_fuel && 'Fuel Claims icon (own fuel claims)',
+            person.intranet_fuel && 'Fuel Claims icon (Fuel Claims: View own claims record)',
           ]
             .filter(Boolean)
             .join(' · ')}

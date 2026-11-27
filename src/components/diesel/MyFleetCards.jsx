@@ -20,16 +20,17 @@ export function MyFleetCards({ company }) {
 
   if (!cards) return null // loading, or the database function is not there yet
   if (!cards.length)
-    return <p className="mx-auto mb-4 max-w-3xl text-center text-xs text-slate-400">You are not a driver on any fleet card in {company.name}.</p>
+    return <p className="mx-auto mb-3 max-w-3xl text-center text-xs text-slate-400">You are not a driver on any fleet card in {company.name}.</p>
 
   return (
-    <div className="mx-auto mb-5 max-w-3xl space-y-3">
+    <div className="mx-auto mb-3 max-w-3xl space-y-3">
       {cards.map((c) => (
         <Card key={c.id} className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 px-4 py-2.5">
             <h3 className="font-semibold text-slate-800">My fleet card</h3>
-            <span className="font-bold tracking-wide text-brand-dark">{c.card_no}</span>
-            {c.vehicle && <span className="text-sm text-slate-500">({c.vehicle})</span>}
+            {/* vehicle reg no. first, then the fleet card number in grey */}
+            {c.vehicle && <span className="font-bold tracking-wide text-brand-dark">{c.vehicle}</span>}
+            <span className={c.vehicle ? 'text-sm text-slate-500' : 'font-bold tracking-wide text-brand-dark'}>{c.card_no}</span>
             {c.provider && <span className="text-sm text-slate-500">· {c.provider}</span>}
             {c.status !== 'active' && (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-amber-800">{c.status}</span>
@@ -106,34 +107,39 @@ function Meter({ quota, used, month }) {
   )
 }
 
+// Last purchases: Date, Driver, Litre (the vehicle is in the card heading).
+// The headings stay when there is no purchase yet.
 function Recent({ rows }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Last purchases on this card</p>
-      {rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">No purchase yet.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-              <th className="py-1.5 pr-2 font-medium">Date</th>
-              <th className="py-1.5 pr-2 font-medium">Driver</th>
-              <th className="py-1.5 pr-2 font-medium">Vehicle</th>
-              <th className="py-1.5 text-right font-medium">Litres</th>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last purchases on this card</p>
+      <p className="mb-1.5 text-[10px] text-slate-400">(Data Linked from Fuel Station Portal)</p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+            <th className="py-1.5 pr-2 font-medium">Date</th>
+            <th className="py-1.5 pr-2 font-medium">Driver</th>
+            <th className="py-1.5 text-right font-medium">Litre</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={3} className="py-6 text-center text-sm text-slate-400">
+                No purchase yet.
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((r, i) => (
+          ) : (
+            rows.map((r, i) => (
               <tr key={i}>
                 <td className="whitespace-nowrap py-1.5 pr-2 text-slate-600">{day(r.fill_date)}</td>
                 <td className="py-1.5 pr-2 text-slate-800">{r.driver || '—'}</td>
-                <td className="py-1.5 pr-2 text-slate-600">{r.vehicle || '—'}</td>
                 <td className="py-1.5 text-right font-semibold tabular-nums">{num(r.litres, 2)} L</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }
