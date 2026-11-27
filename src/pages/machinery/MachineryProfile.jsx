@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader.jsx'
 import { Badge, Button, Card, Select, Spinner, TextInput } from '../../components/ui.jsx'
 import { IconEye, IconPencil, IconPlus, IconTrash } from '../../components/icons.jsx'
+import { MultiPick } from '../../components/diesel/MultiPick.jsx'
 import { coverState, deleteMachine, listMachines, listPortalPeople, machineNo, machineStatus, removeMachineFile, useCmmsAccess, userLabel } from '../../lib/cmms.js'
 import { listLocations } from '../../lib/companies.js'
 import { useCompany } from '../../lib/CompanyContext.jsx'
@@ -18,6 +19,11 @@ const LIST_TABS = {
   hq: { label: 'HQ vehicle' },
   inactive: { label: 'Inactive' },
   insurance_only: { label: 'Insurance only' }
+}
+// The value a column filter looks at
+function colValue(m, k) {
+  const v = k === 'type' ? m.machine_type : k === 'brand' ? m.brand : k === 'model' ? m.model : m.reg_no || m.name
+  return String(v || '').trim()
 }
 function inListTab(m, tab) {
   const st = machineStatus(m)
@@ -38,6 +44,8 @@ export default function MachineryProfile() {
   // Tabs: Estate machinery (active, not HQ) · HQ vehicle (active, HQ vehicle tick)
   // · Inactive (estate and HQ together) · Insurance only
   const [tab, setTab] = useState('estate')
+  // Column filters (click Type / Brand / Model / Reg. no. in the header): several values per column, and columns combine
+  const [colF, setColF] = useState({ type: [], brand: [], model: [], reg: [] })
   const [locations, setLocations] = useState([])
   const [loc, setLoc] = useState('') // '' = all, 'none' = without a location, else a location id
   const [busyId, setBusyId] = useState(null)
@@ -75,7 +83,8 @@ export default function MachineryProfile() {
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase()
     const inTab = rows.filter((m) => inListTab(m, tab))
-    const inLoc = !loc || !hasLocations ? inTab : inTab.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
+    const inLoc0 = !loc || !hasLocations ? inTab : inTab.filter((m) => (loc === 'none' ? !locationName.has(m.location_id) : m.location_id === loc))
+    const inLoc = inLoc0.filter((m) => Object.entries(colF).every(([k, vals]) => !vals.length || vals.includes(colValue(m, k))))
     if (!t) return inLoc
     return inLoc.filter((m) =>
       [machineNo(m), m.name, m.reg_no, m.machine_type, m.brand, m.model, m.acc_code, locationName.get(m.location_id), ...drivers(m)].some((v) =>
@@ -83,7 +92,7 @@ export default function MachineryProfile() {
       )
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, q, people, loc, locationName, tab])
+  }, [rows, q, people, loc, locationName, tab, colF])
 
   async function remove(m) {
     if (!window.confirm(`Delete ${m.name}? This cannot be undone.`)) return
@@ -103,7 +112,16 @@ export default function MachineryProfile() {
   const canAdd = access.can('machines', 'add')
   const canEdit = access.can('machines', 'edit')
   const canDelete = access.can('machines', 'delete')
-  const kpdn = rows.filter((r) => r.kpdn_subsidy).length
+  // Filter choices: the values found in this tab (blank shown as "(none)")
+  const tabRows = rows.filter((m) => inListTab(m, tab))
+  const optionsOf = (k) =>
+    [...new Set(tabRows.map((m) => colValue(m, k)))]
+      .sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+      .map((v) => ({ value: v, label: v || '(none)' }))
+  const filtering = Object.values(colF).some((v) => v.length)
+  const colHead = (k, label) => (
+    <MultiPick head searchable label={label} allLabel={`All`} options={optionsOf(k)} value={colF[k]} onChange={(v) => setColF((f) => ({ ...f, [k]: v }))} />
+  )
 
   return (
     <div className="space-y-4">
@@ -111,11 +129,6 @@ export default function MachineryProfile() {
         title="Machinery Profile"
         right={
           <div className="flex flex-wrap items-center gap-2">
-            {kpdn > 0 && (
-              <Link to="/diesel/cards" className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
-                <Badge color="green">{kpdn}</Badge> KPDN subsidy → Fleet Card Manage
-              </Link>
-            )}
             {canAdd && (
               <Button variant="secondary" onClick={() => navigate('/cmms/machines/import')}>
                 Import Excel
@@ -150,7 +163,14 @@ export default function MachineryProfile() {
           ))}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
-          <h3 className="font-semibold text-slate-800">Listing</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-slate-800">Listing</h3>
+            {filtering && (
+              <button type="button" onClick={() => setColF({ type: [], brand: [], model: [], reg: [] })} className="text-sm font-medium text-brand hover:underline">
+                Clear filters ({shown.length} shown)
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {hasLocations && (
               <Select value={loc} onChange={(e) => setLoc(e.target.value)} className="h-10 sm:w-60" aria-label="Location">
@@ -178,11 +198,11 @@ export default function MachineryProfile() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="w-24 px-5 py-2.5">No.</th>
-                  <th className="px-3 py-2.5">Code / Reg. no.</th>
+                  <th className="px-3 py-2.5">{colHead('reg', 'Code / Reg. no.')}</th>
                   {hasLocations && <th className="px-3 py-2.5">Location</th>}
-                  <th className="px-3 py-2.5">Type</th>
-                  <th className="px-3 py-2.5">Brand</th>
-                  <th className="px-3 py-2.5">Model</th>
+                  <th className="px-3 py-2.5">{colHead('type', 'Type')}</th>
+                  <th className="px-3 py-2.5">{colHead('brand', 'Brand')}</th>
+                  <th className="px-3 py-2.5">{colHead('model', 'Model')}</th>
                   <th className="px-3 py-2.5">Driver</th>
                   <th className="px-3 py-2.5">Fuel</th>
                   <th className="px-3 py-2.5">Cover</th>
