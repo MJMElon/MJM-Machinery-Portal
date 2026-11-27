@@ -706,7 +706,11 @@ export function parseReceipt(text) {
     if (amounts.length) out.amount = Math.max(...amounts)
   }
   // If we have litres and unit price but no amount (or vice versa), fill the gap
-  if (out.litres && out.unit_price && !out.amount) out.amount = Math.round(out.litres * out.unit_price * 100) / 100
+  if (out.unit_price) out.pump_price = out.unit_price // as printed (on a subsidised receipt: the pump price)
+  if (out.litres && out.unit_price && !out.amount) {
+    out.amount = Math.round(out.litres * out.unit_price * 100) / 100
+    out.amount_from_price = true // a guess: wrong for a subsidised fleet card fill-up
+  }
   if (out.litres && out.amount && !out.unit_price) out.unit_price = Math.round((out.amount / out.litres) * 1000) / 1000
   // Subsidised receipts (MySubsidy / KPDN) print the pump price but charge
   // less: the claim keeps the price actually paid.
