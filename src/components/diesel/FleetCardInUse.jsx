@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../PageHeader.jsx'
-import { Badge, Button, Card } from '../ui.jsx'
+import { Badge, Button, Card, Modal } from '../ui.jsx'
 import { IconPencil, IconTrash } from '../icons.jsx'
 import { ErrorBox, inputCls } from './shared.jsx'
 import { UsageBars } from './CardCharts.jsx'
 import { CardMonthUsage } from './CardMonthUsage.jsx'
 import { NewTopupModal } from './TopupRequests.jsx'
-import { CARD_STATUS, cardBalances, autoTopupCheck, autoTopupStatus, procurementPeople, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel } from '../../lib/diesel.js'
+import { CARD_STATUS, cardBalances, autoTopupCheck, autoTopupStatus, procurementPeople, deleteCard, personLabel, saveCard, setAutoTopup, setCardPassword, vehicleLabel, listNamedDrivers, addNamedDriver, deleteNamedDriver, linkNamedDriver } from '../../lib/diesel.js'
 import { PasswordField, PasswordInput } from './CardPassword.jsx'
 import { money, num, thisMonth } from '../../lib/format.js'
 import { useAuth } from '../../auth/AuthContext.jsx'
 
 // A fleet card in use (tested), one page, edited in place:
 //   top     Fleet card details (Edit → fields, status incl. Inactive, Save,
-//           Delete fleet card) | Fleet card drivers (Edit → add / remove, Save),
+//           Delete fleet card) | Fleet card drivers (Edit → add / remove, Save; a driver
+//           without an account can be added by name + phone, and later linked to a user),
 //           same height, the driver list scrolls
 //   middle  this month's usage (‹ › month) with subsidy / used / balance,
 //           beside the month's usage by driver
@@ -45,6 +46,12 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const canDelete = access.can('cards', 'delete')
   const [editDetails, setEditDetails] = useState(startEdit && canEdit)
   const [editDrivers, setEditDrivers] = useState(false)
+  // name-only drivers (no account yet): saved ones, and the edit copy (new ones have no id yet)
+  const [named, setNamed] = useState([])
+  const [namedDraft, setNamedDraft] = useState([])
+  const [newName, setNewName] = useState({ name: '', phone: '' })
+  const [linking, setLinking] = useState(null) // name-only driver being linked to a user
+  const [namedTick, setNamedTick] = useState(0)
   const [form, setForm] = useState(() => detailsOf(card))
   const [drivers, setDrivers] = useState(() => driversOf(card))
   const [vehicleQuery, setVehicleQuery] = useState('')
@@ -55,6 +62,18 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const [askTopup, setAskTopup] = useState(false)
   const [topupSent, setTopupSent] = useState('')
   const [year, setYear] = useState(new Date().getFullYear())
+
+  useEffect(() => {
+    let live = true
+    listNamedDrivers(card.id).then((r) => {
+      if (!live) return
+      setNamed(r)
+      setNamedDraft(r)
+    })
+    return () => {
+      live = false
+    }
+  }, [card.id, namedTick])
 
   // a fresh copy of the card (after saving) resets the boxes
   useEffect(() => {
@@ -102,7 +121,11 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
   const saveDrivers = () =>
     run(async () => {
       await saveCard(company.id, { id: card.id, driver_ids: drivers, driver_id: drivers[0] || null })
+      for (const n of namedDraft) if (!n.id) await addNamedDriver(company.id, card.id, n)
+      for (const n of named) if (!namedDraft.some((x) => x.id === n.id)) await deleteNamedDriver(n.id)
+      setNewName({ name: '', phone: '' })
       setEditDrivers(false)
+      setNamedTick((t) => t + 1)
       await reload()
     })
   const remove = () => {
@@ -319,6 +342,38 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                     )}
                   </li>
                 ))}
+                {(editDrivers ? namedDraft : named).map((n, i) => (
+                  <li key={n.id || `new-${i}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-50 text-xs font-semibold text-amber-700">{drivers.length + i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-slate-800">
+                      {n.name}
+                      {n.phone && <span className="ml-1.5 text-xs text-slate-500">{n.phone}</span>}
+                    </span>
+                    <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700" title="No Intranet / OPIS PRO account yet">
+                      Name only
+                    </span>
+                    {editDrivers && n.id && (
+                      <button
+                        type="button"
+                        onClick={() => setLinking(n)}
+                        className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        title="This person now has an account: move their fuel records to it"
+                      >
+                        Link to user
+                      </button>
+                    )}
+                    {editDrivers && (
+                      <button
+                        type="button"
+                        onClick={() => setNamedDraft((d) => d.filter((x) => x !== n))}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Remove ${n.name}`}
+                      >
+                        <IconTrash width={15} height={15} />
+                      </button>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
             {editDrivers && (
@@ -338,6 +393,37 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                       </option>
                     ))}
                 </select>
+                {/* a driver without an account yet: name + phone only */}
+                <div className="flex gap-2">
+                  <input
+                    value={newName.name}
+                    onChange={(e) => setNewName((x) => ({ ...x, name: e.target.value }))}
+                    maxLength={80}
+                    placeholder="Name (no account yet)"
+                    className={`${box} min-w-0 flex-1`}
+                    aria-label="Name of a driver without an account"
+                  />
+                  <input
+                    value={newName.phone}
+                    onChange={(e) => setNewName((x) => ({ ...x, phone: e.target.value }))}
+                    maxLength={30}
+                    inputMode="tel"
+                    placeholder="Phone"
+                    className={`${box} w-32`}
+                    aria-label="Phone"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!newName.name.trim()}
+                    onClick={() => {
+                      setNamedDraft((d) => [...d, { name: newName.name.trim(), phone: newName.phone.trim() }])
+                      setNewName({ name: '', phone: '' })
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button
                     type="button"
@@ -345,6 +431,8 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
                     disabled={busy}
                     onClick={() => {
                       setDrivers(driversOf(card))
+                      setNamedDraft(named)
+                      setNewName({ name: '', phone: '' })
                       setEditDrivers(false)
                     }}
                   >
@@ -360,6 +448,23 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         </Card>
       </div>
 
+      {linking && (
+        <LinkDriverModal
+          driver={linking}
+          people={people}
+          onClose={() => setLinking(null)}
+          onLinked={async (moved, uid) => {
+            setLinking(null)
+            setDrivers((d) => (d.includes(uid) ? d : [...d, uid]))
+            setNamedDraft((d) => d.filter((x) => x.id !== linking.id))
+            setNamed((d) => d.filter((x) => x.id !== linking.id))
+            setNamedTick((t) => t + 1)
+            setTopupSent(`${linking.name} is now linked to ${nameOf(uid)}: ${moved} fuel record${moved === 1 ? '' : 's'} moved.`)
+            await reload()
+          }}
+        />
+      )}
+
       {/* automatic top-up request: Procurement sets the balance and the amount */}
       <AutoTopupBox card={card} canSet={Boolean(access.procurement) && !card.status?.match(/inactive|cancelled/)} nameOf={nameOf} balanceNow={ledger ? balanceNow : null} onSaved={reload} />
 
@@ -369,11 +474,12 @@ export function FleetCardInUse({ company, access, card, vehicles, people, ledger
         cardId={card.id}
         card={card}
         title={`${card.card_no || 'Fleet card'}${card.vehicle_id && vById.get(card.vehicle_id) ? ` (${vById.get(card.vehicle_id).reg_no || vById.get(card.vehicle_id).name})` : ''}`}
-        drivers={driversOf(card).map((id) => ({ id, name: nameOf(id) }))}
+        drivers={[...driversOf(card).map((id) => ({ id, name: nameOf(id) })), ...named.map((n) => ({ id: null, namedId: n.id, key: `name:${n.name.toUpperCase()}`, name: n.name }))]}
         canAdd={access.can('usage', 'add')}
         canDelete={access.can('usage', 'delete')}
         quota={quota}
-        driverNames={driversOf(card).map(nameOf)}
+        driverNames={[...driversOf(card).map(nameOf), ...named.map((n) => n.name)]}
+        refresh={namedTick}
       />
 
       {/* usage by month, litres and RM, and the balance now */}
@@ -600,5 +706,52 @@ function AutoTopupBox({ card, canSet, nameOf, balanceNow, onSaved }) {
         </>
       )}
     </Card>
+  )
+}
+
+// Link a name-only driver to the person's account: every fuel record typed for the
+// name moves to the user, and is matched with the user's fuel claim receipts.
+function LinkDriverModal({ driver, people, onClose, onLinked }) {
+  const [uid, setUid] = useState('')
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const term = q.trim().toLowerCase()
+  const list = people.filter((p) => !term || personLabel(p).toLowerCase().includes(term))
+  async function go() {
+    setBusy(true)
+    setError('')
+    try {
+      const moved = await linkNamedDriver(driver.id, uid)
+      await onLinked(moved, uid)
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title={`Link ${driver.name} to a user`}>
+      <p className="mb-3 text-sm text-slate-600">
+        Choose the account this person now has. Every fuel record typed for <b>{driver.name}</b> moves to that user, fill-ups their fuel claims already cover are matched (no double counting), and the name-only driver is removed.
+      </p>
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email…" className={`${box} mb-2 w-full`} aria-label="Search user" />
+      <select value={uid} onChange={(e) => setUid(e.target.value)} size={8} className={`${inputCls} w-full px-2 py-1 text-sm`} aria-label="User">
+        {list.map((p) => (
+          <option key={p.user_id} value={p.user_id}>
+            {personLabel(p)}
+          </option>
+        ))}
+      </select>
+      <p className="mt-1 text-xs text-slate-500">Not in the list? Give them the Fuel module in the Intranet first, then Sync from MJM Intranet.</p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" disabled={busy || !uid} onClick={go}>
+          {busy ? 'Linking…' : 'Link'}
+        </Button>
+      </div>
+    </Modal>
   )
 }

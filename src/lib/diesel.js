@@ -726,6 +726,32 @@ export async function deleteCardRecord(kind, id) {
   if (error) throw friendly(error)
 }
 
+// ---- name-only fleet card drivers (no account yet; migration 20270107) ----------
+
+const NAMED = 'machinery_card_named_drivers'
+const needNamed = (error) => (['42P01', 'PGRST205'].includes(error?.code) ? new Error('Run the Fuel SQL migration 20270107 (name-only drivers) first.') : friendly(error))
+
+/** The card's name-only drivers [{ id, name, phone }]; [] before migration 20270107. */
+export async function listNamedDrivers(cardId) {
+  const { data, error } = await supabase.from(NAMED).select('id, name, phone, created_at').eq('card_id', cardId).order('created_at')
+  if (error) return []
+  return data || []
+}
+export async function addNamedDriver(companyId, cardId, { name, phone }) {
+  const { error } = await supabase.from(NAMED).insert({ company_id: companyId, card_id: cardId, name: name.trim(), phone: phone?.trim() || null })
+  if (error) throw needNamed(error)
+}
+export async function deleteNamedDriver(id) {
+  const { error } = await supabase.from(NAMED).delete().eq('id', id)
+  if (error) throw needNamed(error)
+}
+/** Move a name-only driver's fill-ups to a user (and match them with the user's claims); returns how many moved. */
+export async function linkNamedDriver(id, userId) {
+  const { data, error } = await supabase.rpc('machinery_link_named_driver', { p_named: id, p_user: userId })
+  if (error) throw needNamed(error)
+  return data || 0
+}
+
 // ---- helpers -------------------------------------------------------------------
 
 function check({ data, error }) {

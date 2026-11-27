@@ -52,7 +52,8 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
   const list = rows || []
   // columns: the card's drivers first, then anyone else who used it this month
   const cols = useMemo(() => {
-    const out = drivers.map((d) => ({ key: d.id, id: d.id, name: d.name }))
+    // a name-only driver (no account) is keyed by the name, like the station's own driver names
+    const out = drivers.map((d) => ({ key: d.key || d.id, id: d.id || null, namedId: d.namedId || null, name: d.name }))
     for (const r of list) {
       const k = colKey(r)
       if (!out.some((c) => c.key === k)) out.push({ key: k, id: r.driver_id || null, name: r.driver || 'No driver recorded' })
@@ -114,7 +115,7 @@ export function CardUsageGrid({ company, card, title, drivers, startMonth, canAd
             amount: r2(c.rm),
             source: 'manual',
             vehicle_id: card.vehicle_id || null,
-            ...(c.col.id ? { driver_id: c.col.id } : { driver_name: c.col.name })
+            ...(c.col.id ? { driver_id: c.col.id } : c.col.namedId ? { named_driver_id: c.col.namedId } : { driver_name: c.col.name })
           })
         else if (c.kind === 'update') await updateUsage(c.had.usage_id, { litres: r2(c.l), amount: r2(c.rm) })
         else if (c.kind === 'delete') await deleteCardRecord('usage', c.had.usage_id)
@@ -351,7 +352,7 @@ function CellEditor({ company, card, date, col, rows, canDelete, onClose, onChan
         amount: Math.round(Number(amount) * 100) / 100,
         source: 'manual',
         vehicle_id: card.vehicle_id || null,
-        ...(col.id ? { driver_id: col.id } : { driver_name: col.name })
+        ...(col.id ? { driver_id: col.id } : col.namedId ? { named_driver_id: col.namedId } : { driver_name: col.name })
       })
     )
   }
