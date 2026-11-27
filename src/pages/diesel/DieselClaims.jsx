@@ -162,7 +162,7 @@ export default function DieselClaims() {
     }
   }
 
-  // Print opens the print dialog right here, over the list (cash receipts only).
+  // Print opens the print dialog right here, over the list (cash and fleet-card receipts).
   async function print(c) {
     setBusyId(c.id)
     setError('')
