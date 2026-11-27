@@ -42,6 +42,7 @@ const blankLine = (mine) => ({
   vehicle_id: mine?.id || '',
   litres: '',
   unit_price: '',
+  pump_price: '', // fleet card (KPDN subsidised): the printed pump price, reference only
   amount: '',
   payment: 'cash',
   subsidised: false,
@@ -55,6 +56,14 @@ const blankLine = (mine) => ({
 })
 
 // An input with its unit printed inside the box (right, or left for RM).
+// A fleet card fill-up = KPDN subsidised diesel: its RM/L is the amount ÷ litres, not the pump price.
+const subsidisedLine = (l) => !isReload(l) && l.payment === 'fleet_card'
+function subsidisedPrice(litres, amount) {
+  const L = Number(litres)
+  const A = Number(amount)
+  return L > 0 && A > 0 ? (Math.round((A / L) * 1000) / 1000).toFixed(3) : ''
+}
+
 function Unit({ unit, left, children }) {
   return (
     <div className="relative">
@@ -91,6 +100,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
           vehicle_id: l.vehicle_id || '',
           litres: l.litres ?? '',
           unit_price: l.unit_price ?? '',
+          pump_price: l.pump_price ?? '',
           amount: l.amount ?? '',
           receipt_no: l.receipt_no || '',
           station: l.station || '',
@@ -139,7 +149,7 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   // Litres and RM amounts are kept to 2 decimals, unit price to 3; the
   // browser refuses to submit a box whose value has more decimals than its
   // step, so rounding happens on autofill, on leaving the box and on save.
-  const DP = { litres: 2, unit_price: 3, amount: 2 }
+  const DP = { litres: 2, unit_price: 3, pump_price: 3, amount: 2 }
   const fixDp = (field, value) => {
     if (value === '' || value == null) return ''
     const n = Number(value)
@@ -153,6 +163,12 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   }
   const setNumber = (l, field, value) => {
     const patch = { [field]: value }
+    if (subsidisedLine(l)) {
+      // Fleet card (KPDN subsidy): litres and amount come from the receipt; the
+      // subsidised RM/L = amount ÷ litres. The pump price is only kept for reference.
+      if (field === 'litres' || field === 'amount') patch.unit_price = subsidisedPrice(field === 'litres' ? value : l.litres, field === 'amount' ? value : l.amount)
+      return update(l.key, patch)
+    }
     const L = field === 'litres' ? Number(value) : Number(l.litres)
     const P = field === 'unit_price' ? Number(value) : Number(l.unit_price)
     const A = field === 'amount' ? Number(value) : Number(l.amount)
@@ -171,7 +187,13 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   }
   const vehicleValue = (l) => (isReload(l) ? `card:${l.card_id}` : l.vehicle_id)
   // Fleet card = KPDN subsidised diesel; cash at the pump = non-subsidised.
-  const setPayment = (l, payment) => update(l.key, { payment, subsidised: payment === 'fleet_card' })
+  // To fleet card: the unit price becomes amount ÷ litres (a typed price is kept as the pump price);
+  // back to cash: the pump price, if any, becomes the unit price again (litres × unit price = amount).
+  const setPayment = (l, payment) => {
+    if (payment === 'fleet_card' && !isReload(l))
+      return update(l.key, { payment, subsidised: true, pump_price: l.pump_price || l.unit_price || '', unit_price: subsidisedPrice(l.litres, l.amount) })
+    return update(l.key, { payment, subsidised: payment === 'fleet_card', ...(l.payment === 'fleet_card' && l.pump_price ? { unit_price: l.pump_price } : {}), pump_price: '' })
+  }
 
   // Receipt files: one row per file, read for a draft, attached to the row.
   const readable = (f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
@@ -208,12 +230,18 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
         ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
         ...(draft.station ? { station: draft.station } : {})
       })
+    const card = (draft.payment || row.payment) === 'fleet_card'
+    const litres = draft.litres ? fixDp('litres', draft.litres) : row.litres
+    // a fleet card row: no amount guessed from litres × pump price (the card is charged less)
+    const amount = draft.amount && !(card && draft.amount_from_price) ? fixDp('amount', draft.amount) : row.amount
     update(row.key, {
       scan: 'done',
       ...(draft.fill_date ? { fill_date: draft.fill_date } : {}),
-      ...(draft.litres ? { litres: fixDp('litres', draft.litres) } : {}),
-      ...(draft.unit_price ? { unit_price: fixDp('unit_price', draft.unit_price) } : {}),
-      ...(draft.amount ? { amount: fixDp('amount', draft.amount) } : {}),
+      ...(draft.litres ? { litres } : {}),
+      ...(card
+        ? { unit_price: subsidisedPrice(litres, amount), ...(draft.pump_price || draft.unit_price ? { pump_price: fixDp('pump_price', draft.pump_price || draft.unit_price) } : {}) }
+        : draft.unit_price ? { unit_price: fixDp('unit_price', draft.unit_price) } : {}),
+      ...(amount !== row.amount ? { amount } : {}),
       ...(draft.receipt_no ? { receipt_no: draft.receipt_no } : {}),
       // The person's own vehicle (driver in Machinery Profile) when the row has none yet
       ...(!row.vehicle_id && !row.card_id && mine ? { vehicle_id: mine.id, ...(draft.product ? {} : { description: fuelWord(mine) }) } : {}),
@@ -265,7 +293,8 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
             fill_date: l.fill_date || today(),
             amount: Number(l.amount) > 0 ? l.amount : 0,
             litres: Number(l.litres) > 0 ? l.litres : '',
-            unit_price: Number(l.unit_price) >= 0 ? l.unit_price : ''
+            unit_price: Number(l.unit_price) >= 0 ? l.unit_price : '',
+            pump_price: Number(l.pump_price) > 0 ? l.pump_price : ''
           })
       }
       const wasDraft = claim?.status === 'draft'
@@ -417,9 +446,21 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                         <Unit unit="L">
                           <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Litre'} disabled={isReload(l)} value={l.litres} onChange={(e) => setNumber(l, 'litres', e.target.value)} onBlur={() => blurNumber(l, 'litres')} className={`${cell} pr-8 text-right`} title="Litres" />
                         </Unit>
-                        <Unit unit="RM/L">
-                          <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Unit price'} disabled={isReload(l)} value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
-                        </Unit>
+                        {subsidisedLine(l) ? (
+                          <>
+                            <Unit unit="RM/L">
+                              <input value={l.unit_price} readOnly tabIndex={-1} placeholder="Amount ÷ litres" className={`${cell} cursor-default bg-emerald-50/60 pr-12 text-right`} title="Subsidised RM/L = Amount ÷ Litres (worked out, not typed)" />
+                            </Unit>
+                            <p className="-mt-1 text-right text-[10px] font-medium text-emerald-700">Subsidised RM/L</p>
+                            <Unit unit="RM/L">
+                              <input type="number" inputMode="decimal" min="0" step="any" placeholder="Pump price" value={l.pump_price} onChange={(e) => setNumber(l, 'pump_price', e.target.value)} onBlur={() => blurNumber(l, 'pump_price')} className={`${cell} pr-12 text-right text-slate-500`} title="Pump price printed on the receipt (reference only, not used in any sum)" />
+                            </Unit>
+                          </>
+                        ) : (
+                          <Unit unit="RM/L">
+                            <input type="number" inputMode="decimal" min="0" step="any" placeholder={isReload(l) ? '—' : 'Unit price'} disabled={isReload(l)} value={l.unit_price} onChange={(e) => setNumber(l, 'unit_price', e.target.value)} onBlur={() => blurNumber(l, 'unit_price')} className={`${cell} pr-12 text-right`} title="Unit price" />
+                          </Unit>
+                        )}
                       </div>
                     </td>
                     <td className="px-2 py-3">

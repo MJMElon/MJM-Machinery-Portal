@@ -1,4 +1,4 @@
-import { listPeople, personLabel, receiptUrl, vehicleLabel } from '../../lib/diesel.js'
+import { isSubsidisedFill, linePrice, listPeople, personLabel, receiptUrl, vehicleLabel } from '../../lib/diesel.js'
 import { day } from '../../lib/format.js'
 import { printHtml } from '../../lib/printFrame.js'
 
@@ -105,7 +105,7 @@ export function claimFormHtml({ company, claim, lines, vehicles, cards = [], cla
         <td class="wrap">${esc(l.receipt_no || '—')}</td>
         <td>${describe(l)}${l.bill_to_company_id && billTo(l.bill_to_company_id) ? `<span class="remark">Bill to: ${esc(billTo(l.bill_to_company_id))}</span>` : ''}${l.remark ? `<span class="remark">Remark: ${esc(l.remark)}</span>` : ''}</td>
         <td class="r">${l.litres != null ? Number(l.litres).toFixed(2) : '—'}</td>
-        <td class="r">${l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</td>
+        <td class="r">${linePrice(l) || '—'}${isSubsidisedFill(l) ? '<span class="remark">subsidised</span>' : ''}</td>
         <td class="r">${Number(l.amount || 0).toFixed(2)}</td>
       </tr>`
     )

@@ -12,6 +12,8 @@ import {
   payableLine,
   listPaymentDocs,
   isReload,
+  isSubsidisedFill,
+  linePrice,
   listClaimCards,
   listPeople,
   listVehicles,
@@ -315,10 +317,15 @@ export default function ClaimView() {
                             <span>{l.litres != null ? num(l.litres, 2) : '—'}</span>
                             <span className="text-xs text-slate-400">L</span>
                           </div>
-                          <div className={`${cell} justify-between tabular-nums`}>
-                            <span>{l.unit_price != null ? Number(l.unit_price).toFixed(3) : '—'}</span>
+                          <div className={`${cell} justify-between tabular-nums`} title={isSubsidisedFill(l) ? 'Subsidised RM/L = Amount ÷ Litres' : 'Unit price'}>
+                            <span>{linePrice(l) || '—'}</span>
                             <span className="text-xs text-slate-400">RM/L</span>
                           </div>
+                          {isSubsidisedFill(l) && (
+                            <p className="text-right text-[10px] font-medium text-emerald-700">
+                              Subsidised RM/L{l.pump_price != null ? ` · pump ${Number(l.pump_price).toFixed(3)}` : ''}
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-3">

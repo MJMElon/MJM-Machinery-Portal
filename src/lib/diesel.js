@@ -216,6 +216,13 @@ export const PAYMENT_NOTE = { cash: 'Non-subsidised', fleet_card: 'KPDN subsidy'
 // A line is a fill-up (receipt for fuel) or a fleet card reload: the person
 // paid cash to top up a fleet card and claims it back (payable, no litres).
 export const isReload = (l) => l?.line_kind === 'reload'
+/** A fleet card fill-up (KPDN subsidised diesel): its RM/L is amount ÷ litres, not the printed pump price. */
+export const isSubsidisedFill = (l) => !isReload(l) && l?.payment === 'fleet_card'
+/** The RM/L to show for a claim row ('' when there is none). */
+export const linePrice = (l) =>
+  isSubsidisedFill(l)
+    ? Number(l.litres) > 0 ? (Number(l.amount || 0) / Number(l.litres)).toFixed(3) : ''
+    : l?.unit_price != null && l.unit_price !== '' ? Number(l.unit_price).toFixed(3) : ''
 export const cardLabel = (c) => (c ? [c.card_no, c.provider].filter(Boolean).join(' · ') : '—')
 export const reloadLabel = (c) => `Fleet card reload · ${c?.card_no || '—'}`
 
@@ -339,8 +346,10 @@ async function replaceLines(claimId, lines) {
     const { error } = await supabase.from(LINES).delete().in('id', gone)
     if (error) throw friendly(error)
   }
+  // Every row carries its own id: in one bulk upsert, rows without an id would be sent
+  // as id: null (the columns are shared by all rows), so new rows get a uuid here.
   const rows = lines.map((l, i) => ({
-    ...(l.id ? { id: l.id } : {}),
+    id: l.id || crypto.randomUUID(),
     claim_id: claimId,
     company_id: l.company_id,
     line_no: i + 1,
@@ -350,7 +359,14 @@ async function replaceLines(claimId, lines) {
     card_id: isReload(l) ? l.card_id || null : null,
     vehicle_id: isReload(l) ? null : l.vehicle_id || null,
     litres: isReload(l) || l.litres === '' || l.litres == null ? null : round(l.litres, 2),
-    unit_price: isReload(l) || l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
+    // Fleet card (KPDN subsidised) fill: RM/L = amount ÷ litres (the database works it out the same way);
+    // the printed pump price is kept apart, for reference only.
+    unit_price: isReload(l)
+      ? null
+      : (l.payment || 'cash') === 'fleet_card'
+        ? Number(l.litres) > 0 ? round(Number(l.amount || 0) / Number(l.litres), 3) : null
+        : l.unit_price === '' || l.unit_price == null ? null : round(l.unit_price, 3),
+    pump_price: !isReload(l) && (l.payment || 'cash') === 'fleet_card' && Number(l.pump_price) > 0 ? round(l.pump_price, 3) : null,
     amount: round(l.amount || 0, 2),
     payment: isReload(l) ? 'cash' : l.payment || 'cash',
     subsidised: !isReload(l) && (l.payment || 'cash') === 'fleet_card',
@@ -364,10 +380,17 @@ async function replaceLines(claimId, lines) {
     ...(l.bill_to_company_id ? { bill_to_company_id: l.bill_to_company_id } : 'bill_to_company_id' in l ? { bill_to_company_id: null } : {})
   }))
   if (!rows.length) return
-  let { error } = await supabase.from(LINES).upsert(rows, { onConflict: 'id' })
-  if (error && ['PGRST204', '42703'].includes(error.code) && /bill_to/.test(error.message || '')) {
-    if (rows.some((r) => r.bill_to_company_id)) throw new Error('Bill to company needs the SQL migration 20261229 in the database first.')
-    ;({ error } = await supabase.from(LINES).upsert(rows.map(({ bill_to_company_id, ...r }) => r), { onConflict: 'id' })) // eslint-disable-line no-unused-vars
+  // Columns an older database may not have yet: saved without them (pump price = reference only)
+  let send = rows
+  let { error } = await supabase.from(LINES).upsert(send, { onConflict: 'id' })
+  for (let i = 0; i < 2 && error && ['PGRST204', '42703'].includes(error.code); i++) {
+    const msg = error.message || ''
+    if (/bill_to/.test(msg)) {
+      if (send.some((r) => r.bill_to_company_id)) throw new Error('Bill to company needs the SQL migration 20261229 in the database first.')
+      send = send.map(({ bill_to_company_id, ...r }) => r) // eslint-disable-line no-unused-vars
+    } else if (/pump_price/.test(msg)) send = send.map(({ pump_price, ...r }) => r) // eslint-disable-line no-unused-vars
+    else break
+    ;({ error } = await supabase.from(LINES).upsert(send, { onConflict: 'id' }))
   }
   if (error) throw friendly(error)
 }
