@@ -200,7 +200,6 @@ export default function MachineryProfile() {
                           {m.name}
                         </Link>
                         {m.reg_no && m.reg_no.trim().toUpperCase() !== m.name.trim().toUpperCase() && <span className="block text-xs text-slate-500">{m.reg_no}</span>}
-                        {m.acc_code && <span className="block text-xs text-slate-400">{m.acc_code}</span>}
                       </td>
                       {hasLocations && <td className="px-3 py-3 text-slate-700">{locationName.get(m.location_id) || '—'}</td>}
                       <td className="px-3 py-3 text-slate-700">

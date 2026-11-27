@@ -9,9 +9,19 @@ const KEY = 'portal.company'
 
 // MJM Intranet opens CMMS 2 with the company chosen there in the link:
 // ?gw_company=<code or name>&gw_company_name=<name>&gw_company_short=<short>.
-// Read once at start-up (before anything rewrites the address bar) and the
-// matching company is selected as soon as the list is loaded.
-const WANTED = readWantedCompany()
+// Read once at start-up and taken out of the address bar straight away, so a
+// refresh (or hard refresh) keeps the company the person is working in. A
+// reload or back/forward never applies it, even if the address still has it.
+const WANTED = isReload() ? null : readWantedCompany()
+dropWantedFromUrl()
+function isReload() {
+  try {
+    const nav = performance.getEntriesByType?.('navigation')?.[0]
+    return nav ? nav.type === 'reload' || nav.type === 'back_forward' : false
+  } catch {
+    return false
+  }
+}
 function readWantedCompany() {
   const pick = (params) => {
     const w = { company: params.get('gw_company'), name: params.get('gw_company_name'), short: params.get('gw_company_short') }
@@ -28,6 +38,7 @@ function readWantedCompany() {
 }
 function dropWantedFromUrl() {
   try {
+    if (!/[?&#]gw_company/.test(window.location.href)) return
     const url = new URL(window.location.href)
     for (const k of ['gw_company', 'gw_company_name', 'gw_company_short']) url.searchParams.delete(k)
     const i = url.hash.indexOf('?')
@@ -74,7 +85,6 @@ export function CompanyProvider({ children }) {
           setCurrentId(hit.id)
           write(hit.id)
         }
-        dropWantedFromUrl()
       }
     } catch (e) {
       setError(e.message || 'Could not load companies.')
