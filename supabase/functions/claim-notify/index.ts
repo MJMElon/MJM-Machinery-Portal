@@ -26,7 +26,7 @@ const env = (k: string) => (Deno.env.get(k) ?? '').trim()
 const CORS = {
   // Only our own site may call this from a browser (override with the ALLOWED_ORIGIN secret)
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') ?? 'https://mjmelon.github.io',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-application-name, x-region, x-supabase-api-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 const reply = (body: unknown, status = 200) =>
@@ -206,5 +206,6 @@ Deno.serve(async (req) => {
     }
   }
   if (logged?.[0]?.id) await db.from('machinery_claim_notifications').update({ recipients: to, errors: failed.length ? failed : null }).eq('id', logged[0].id)
-  return reply({ sent, failed })
+  // Only the count goes back to the browser (addresses and mail-server errors stay in machinery_claim_notifications)
+  return reply({ sent, failed: failed.length })
 })
