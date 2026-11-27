@@ -134,8 +134,11 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
       fuel = await fetchMasterData(fuelKey)
       payload.diesel_company_ids = companiesWithIcon(fuel)
     } catch (e) {
-      fuelNote = String((e as Error)?.message ?? e)
+      fuelNote = `Fuel Claims icon not synced: ${String((e as Error)?.message ?? e)}`
     }
+  } else {
+    // Without its key the Fuel Claims icon cannot be read: say so instead of skipping it quietly
+    fuelNote = 'Fuel Claims icon not synced: set the GW_API_KEY_DIESEL secret (the Fuel Claims icon\'s API key from MJM Intranet) in this project\'s Edge Functions.'
   }
   const { data: result, error } = await db.rpc('machinery_apply_intranet_master', { p: payload })
   if (error) throw new Error(`apply master data: ${error.message}`)
@@ -175,5 +178,6 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
   } catch (e) {
     users = { users_warning: String((e as Error)?.message ?? e) }
   }
-  return { ...(result ?? {}), ...users, exported_at: data.exported_at, ...(fuelNote ? { fuel_icon_warning: fuelNote } : {}) }
+  const fuelUsers = fuel?.module_users?.length ?? null
+  return { ...(result ?? {}), ...users, ...(fuelUsers != null ? { fuel_users: fuelUsers } : {}), exported_at: data.exported_at, ...(fuelNote ? { fuel_icon_warning: fuelNote } : {}) }
 }
