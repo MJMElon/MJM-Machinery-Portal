@@ -683,8 +683,8 @@ function VehiclePick({ value, onChange, mine, general, others, cards, vById, cla
             {cards.length > 0 && tabBtn('card', 'Fleet card')}
           </div>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tab === 'vehicle' ? 'Key in reg. no. to find others' : 'Search card no.'} className={`${inputCls} mb-1.5 h-9 w-full px-2.5 text-sm`} />
-          <div className="max-h-72 overflow-y-auto">
-            {tab === 'vehicle' && !term && item('', '— None —', !value)}
+          {/* same height on both tabs (the window does not shrink on Fleet card) */}
+          <div className="h-64 overflow-y-auto">
             {groups.map(([title, vs]) =>
               vs.length ? (
                 <div key={title} className="mt-1">
