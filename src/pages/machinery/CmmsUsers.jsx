@@ -74,7 +74,7 @@ export default function CmmsUsers() {
     setSyncMsg('')
     try {
       const r = await syncFromIntranet()
-      const warn = [r.users_warning, r.companies_warning, r.fuel_icon_warning].filter(Boolean).join(' · ')
+      const warn = [r.cmms_icon_warning, r.fuel_icon_warning, r.users_warning, r.companies_warning].filter(Boolean).join(' · ')
       const fuel = r.fuel_users != null ? ` (${r.fuel_users} with the Fuel Claims icon)` : ''
       setSyncMsg(`Synced ${r.users ?? 0} user${r.users === 1 ? '' : 's'} with an icon in MJM Intranet${fuel}.${warn ? ` But: ${warn}` : ''}`)
       await load()

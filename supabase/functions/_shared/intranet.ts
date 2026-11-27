@@ -118,28 +118,39 @@ async function ensureUsers(db: any, users: IntranetUser[]): Promise<Map<string, 
 
 // deno-lint-ignore no-explicit-any
 export async function syncMasterData(db: any, apiKey: string): Promise<Record<string, unknown>> {
-  const data = await fetchMasterData(apiKey)
-  const payload: Record<string, unknown> = {
-    businesses: data.businesses,
-    companies: data.companies,
-    links: data.links,
-    cmms_company_ids: companiesWithIcon(data),
-  }
-  // Fuel Manage Icon has its own key; without it the Fuel flags are left alone.
+  // The two Intranet Icons are read with their own API keys (secrets of THIS project, from
+  // MJM Intranet → Master Manage → Module → Generate key): GW_API_KEY = the CMMS 2 Icon,
+  // GW_API_KEY_DIESEL = the Fuel Claims Icon. Each is read on its own: a key that fails
+  // changes nothing for its Icon (old flags and permissions stay), the other one still syncs.
   const fuelKey = env('GW_API_KEY_DIESEL')
-  let fuel: MasterData | null = null
-  let fuelNote: string | undefined
-  if (fuelKey) {
+  const read = async (key: string, secret: string, icon: string): Promise<MasterData> => {
+    if (!key) throw new Error(`${icon} icon not synced: the ${secret} secret is not set in this project (Edge Functions → Secrets).`)
     try {
-      fuel = await fetchMasterData(fuelKey)
-      payload.diesel_company_ids = companiesWithIcon(fuel)
+      return await fetchMasterData(key)
     } catch (e) {
-      fuelNote = `Fuel Claims icon not synced: ${String((e as Error)?.message ?? e)}`
+      const msg = String((e as Error)?.message ?? e)
+      if (/invalid_api_key|api_key_required/.test(msg))
+        throw new Error(`${icon} icon not synced: MJM Intranet does not accept the ${secret} secret (it starts with "${key.slice(0, 10)}"). ` +
+          `In MJM Intranet → Master Manage → Module → ${icon}, compare "API key: …" with that start; if it differs, press "Generate API key" there and put the new key in ${secret}.`)
+      throw new Error(`${icon} icon not synced: ${msg}`)
     }
-  } else {
-    // Without its key the Fuel Claims icon cannot be read: say so instead of skipping it quietly
-    fuelNote = 'Fuel Claims icon not synced: set the GW_API_KEY_DIESEL secret (the Fuel Claims icon\'s API key from MJM Intranet) in this project\'s Edge Functions.'
   }
+  const [mainRes, fuelRes] = await Promise.allSettled([read(apiKey, 'GW_API_KEY', 'CMMS 2'), read(fuelKey, 'GW_API_KEY_DIESEL', 'Fuel Claims')])
+  const data: MasterData | null = mainRes.status === 'fulfilled' ? mainRes.value : null
+  const fuel: MasterData | null = fuelRes.status === 'fulfilled' ? fuelRes.value : null
+  const why = (r: PromiseSettledResult<unknown>) => (r.status === 'rejected' ? String((r.reason as Error)?.message ?? r.reason) : undefined)
+  const cmmsNote = why(mainRes)
+  const fuelNote = why(fuelRes)
+  // Neither Icon could be read: stop here, nothing is changed
+  if (!data && !fuel) throw new Error([cmmsNote, fuelNote].filter(Boolean).join(' · '))
+  const base = (data ?? fuel)!
+  const payload: Record<string, unknown> = {
+    businesses: base.businesses,
+    companies: base.companies,
+    links: base.links,
+  }
+  if (data) payload.cmms_company_ids = companiesWithIcon(data)
+  if (fuel) payload.diesel_company_ids = companiesWithIcon(fuel)
   const { data: result, error } = await db.rpc('machinery_apply_intranet_master', { p: payload })
   if (error) throw new Error(`apply master data: ${error.message}`)
 
@@ -147,14 +158,14 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
   let users: Record<string, unknown> = {}
   try {
     const all = new Map<string, IntranetUser>()
-    for (const u of data.module_users ?? []) all.set(u.id, u)
+    for (const u of data?.module_users ?? []) all.set(u.id, u)
     for (const u of fuel?.module_users ?? []) all.set(u.id, u)
     const ids = await ensureUsers(db, [...all.values()])
     const flags: Record<string, unknown> = {}
-    if (data.module_users) flags.cmms = data.module_users.map((u) => ids.get(u.id)).filter(Boolean)
+    if (data?.module_users) flags.cmms = data.module_users.map((u) => ids.get(u.id)).filter(Boolean)
     if (fuel?.module_users) flags.fuel = fuel.module_users.map((u) => ids.get(u.id)).filter(Boolean)
     // Intranet Super Admins → super admin here (only when the Intranet already sends is_super_admin)
-    const everyone = [...(data.module_users ?? []), ...(fuel?.module_users ?? [])]
+    const everyone = [...(data?.module_users ?? []), ...(fuel?.module_users ?? [])]
     if (everyone.some((u) => typeof u.is_super_admin === 'boolean')) {
       flags.super = [...new Set(everyone.filter((u) => u.is_super_admin).map((u) => ids.get(u.id)).filter(Boolean))]
     }
@@ -167,7 +178,7 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
         ? list.map((u) => ({ user_id: ids.get(u.id), company_ids: u.company_ids })).filter((x) => x.user_id)
         : null
     const companies: Record<string, unknown> = {}
-    const cmmsScope = scope(data.module_users)
+    const cmmsScope = scope(data?.module_users)
     const fuelScope = scope(fuel?.module_users)
     if (cmmsScope) companies.cmms = cmmsScope
     if (fuelScope) companies.fuel = fuelScope
@@ -179,5 +190,12 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
     users = { users_warning: String((e as Error)?.message ?? e) }
   }
   const fuelUsers = fuel?.module_users?.length ?? null
-  return { ...(result ?? {}), ...users, ...(fuelUsers != null ? { fuel_users: fuelUsers } : {}), exported_at: data.exported_at, ...(fuelNote ? { fuel_icon_warning: fuelNote } : {}) }
+  return {
+    ...(result ?? {}),
+    ...users,
+    ...(fuelUsers != null ? { fuel_users: fuelUsers } : {}),
+    exported_at: base.exported_at,
+    ...(cmmsNote ? { cmms_icon_warning: cmmsNote } : {}),
+    ...(fuelNote ? { fuel_icon_warning: fuelNote } : {}),
+  }
 }
