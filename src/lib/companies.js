@@ -198,20 +198,32 @@ export async function deleteBlock(id) {
 }
 
 // ---- locations of a company (plantations / estates / sites) -----------------
-// Machines in Machinery Profile can be put under one of these.
+// Machines in Machinery Profile can be put under one of these. For a company
+// from MJM Intranet they come from Master Manage → Company → Locations (per
+// business) through the sync, and are read-only here.
 
-/** Locations of a company, by name ([] before the locations migration). */
+/**
+ * Locations of a company in use, in the Intranet's order (by business, then
+ * its sort order), each with `business` (name) and `from_intranet`.
+ * [] before the locations migration.
+ */
 export async function listLocations(companyId) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from(LOCATION_TABLE)
-    .select('id, name, notes')
+    .select('id, name, notes, short_name, area_ha, sort_order, is_active, intranet_id, business:machinery_businesses(name, sort_order)')
     .eq('company_id', companyId)
-    .order('name')
+  // Before the locations_from_intranet migration: the older columns only
+  if (error && ['42703', 'PGRST200', 'PGRST204'].includes(error.code)) {
+    ;({ data, error } = await supabase.from(LOCATION_TABLE).select('id, name, notes').eq('company_id', companyId))
+  }
   if (error) {
     if (missing(error)) return []
     throw friendly(error)
   }
-  return data || []
+  return (data || [])
+    .filter((l) => l.is_active !== false)
+    .map((l) => ({ ...l, business: l.business?.name || '', business_order: l.business?.sort_order ?? 0, from_intranet: Boolean(l.intranet_id) }))
+    .sort((a, b) => a.business_order - b.business_order || a.business.localeCompare(b.business) || (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
 }
 
 export async function createLocation(companyId, location) {

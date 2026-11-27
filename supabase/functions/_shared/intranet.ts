@@ -37,6 +37,8 @@ export interface MasterData {
   links: { group_id: string; company_id: string }[]
   module_company_ids: string[]
   module_business_ids?: string[]
+  /** Master Manage → Company → Locations (per company and business). Absent from older Intranets. */
+  locations?: { id: string; company_id: string; group_id: string | null; name: string }[]
   exported_at: string
 }
 
@@ -154,6 +156,14 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
   const { data: result, error } = await db.rpc('machinery_apply_intranet_master', { p: payload })
   if (error) throw new Error(`apply master data: ${error.message}`)
 
+  // Locations of the companies (after the companies and businesses exist here).
+  // Only when the Intranet sends them; a failure is a warning, the rest is kept.
+  let locs: Record<string, unknown> = {}
+  if (Array.isArray(base.locations)) {
+    const { data: l, error: le } = await db.rpc('machinery_apply_intranet_locations', { p: base.locations })
+    locs = le ? { locations_warning: /function|does not exist|PGRST202/i.test(le.message) ? 'Run the SQL migration …locations_from_intranet.sql in Supabase.' : le.message } : (l ?? {})
+  }
+
   // People with access to the Icons → portal users + flags
   let users: Record<string, unknown> = {}
   try {
@@ -192,6 +202,7 @@ export async function syncMasterData(db: any, apiKey: string): Promise<Record<st
   const fuelUsers = fuel?.module_users?.length ?? null
   return {
     ...(result ?? {}),
+    ...locs,
     ...users,
     ...(fuelUsers != null ? { fuel_users: fuelUsers } : {}),
     exported_at: base.exported_at,

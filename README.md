@@ -52,7 +52,7 @@ The two systems use **different Supabase projects**, so the portal keeps a copy 
 every sign-in from the Intranet (`gw-login`) and the "Sync from MJM Intranet" button (`sync-intranet`) pull the
 businesses, companies and links from the Intranet's `gw-master-data` function (same API key) and apply them with
 `machinery_apply_intranet_master()`. Names, codes, status and business links follow the Intranet (those fields are
-read-only here); module access, WhatsApp numbers and area are set here. Companies removed in the Intranet become
+read-only here); module access, WhatsApp numbers and area are set here. **Locations** of a company come from MJM Intranet too (Master Manage → Company → Locations, per business; `machinery_apply_intranet_locations()`); Settings → Locations shows them read-only, and machines are put under them in Machinery Profile. Companies removed in the Intranet become
 inactive here. The Intranet side registers the portal as an Icon by SQL (`gw_register_system`, see the Intranet repo).
 
 ## Fuel Manage (was Diesel Manage)

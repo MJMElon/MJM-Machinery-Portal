@@ -98,6 +98,9 @@ export default function CompanySettings() {
         </div>
 
         <div className="space-y-5">
+        {fromIntranet(current) ? (
+          <IntranetLocations locations={locations} machines={machines} loading={loading} />
+        ) : (
         <Card className="overflow-hidden">
           <div className="border-b border-slate-200 px-5 py-4">
             <p className="font-semibold text-slate-800">Locations</p>
@@ -133,6 +136,7 @@ export default function CompanySettings() {
             </div>
           )}
         </Card>
+        )}
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
@@ -358,6 +362,57 @@ function SyncButton({ onDone }) {
       </Button>
       {msg && <span className={`text-xs ${/failed|not|error/i.test(msg) ? 'text-red-700' : 'text-green-700'}`}>{msg}</span>}
     </div>
+  )
+}
+
+// Locations of a company from MJM Intranet: read-only, by business.
+function IntranetLocations({ locations, machines, loading }) {
+  const groups = []
+  for (const l of locations) {
+    const g = groups.find((x) => x.business === l.business)
+    if (g) g.items.push(l)
+    else groups.push({ business: l.business, items: [l] })
+  }
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <p className="font-semibold text-slate-800">Locations</p>
+        <p className="text-sm text-slate-500">
+          From MJM Intranet → Master Manage → Company → Locations (changed there; refreshed with “Sync from MJM Intranet” and at sign-in). Machines in
+          Machinery Profile can be put under a location.
+        </p>
+      </div>
+      {loading ? (
+        <Loading />
+      ) : locations.length === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-slate-400">
+          No locations yet. Add them in MJM Intranet (Master Manage → Company → Locations), then press “Sync from MJM Intranet”.
+        </p>
+      ) : (
+        groups.map((g) => (
+          <div key={g.business || 'none'}>
+            <p className="border-y border-slate-200 bg-slate-50/80 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{g.business || 'No business'}</p>
+            <div className="divide-y divide-slate-100">
+              {g.items.map((l) => {
+                const n = machines.filter((m) => m.location_id === l.id).length
+                return (
+                  <div key={l.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-5 py-2.5 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-semibold text-slate-800">{l.name}</span>
+                      {l.short_name && <span className="ml-2 text-xs text-slate-500">{l.short_name}</span>}
+                    </span>
+                    <span className="tabular-nums text-slate-600">{l.area_ha != null ? fmtHa(l.area_ha) : ''}</span>
+                    <span className="w-24 text-right tabular-nums text-slate-600">
+                      {n} machine{n === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))
+      )}
+    </Card>
   )
 }
 
