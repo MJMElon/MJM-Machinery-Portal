@@ -306,8 +306,10 @@ export async function updateClaimWithLines(claimId, header, lines) {
     .update({ submitted_on: header.submitted_on, fill_date: header.submitted_on, notes: header.notes || null })
     .eq('id', claimId)
   if (error) throw friendly(error)
+  // back to Draft first, then the rows (a submitted top-up claim's rows can only change as a draft)
+  if (header.status === 'draft') await setClaimStatus(claimId, 'draft')
   await replaceLines(claimId, lines)
-  if (header.status) await setClaimStatus(claimId, header.status)
+  if (header.status && header.status !== 'draft') await setClaimStatus(claimId, header.status)
   // a pending claim whose receipts changed: checked again (nothing to pay back → Recorded)
   else await supabase.from(DIESEL.claims).update({ status: 'pending' }).eq('id', claimId).eq('status', 'pending')
 }
