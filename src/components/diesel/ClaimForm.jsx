@@ -139,7 +139,14 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
   const sameAmount = (a, b) => Math.round(Number(a || 0) * 100) === Math.round(Number(b || 0) * 100)
   const topupOk = !topup || Boolean(topupRow && sameAmount(topupRow.amount, topup.amount))
   const fileInput = useRef(null)
-  const vById = useMemo(() => Object.fromEntries(usable.map((v) => [v.id, v])), [usable])
+  // every vehicle of the company (a receipt can be for someone else's car, found with the search)
+  const vById = useMemo(() => Object.fromEntries(vehicles.map((v) => [v.id, v])), [vehicles])
+  // anyone else's vehicle (also one already on this claim): found with the search
+  const others = useMemo(
+    () => vehicles.filter((v) => !drives(v) && !v.general_use && (inUse(v) || initialLines?.some((l) => l.vehicle_id === v.id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vehicles, initialLines, user.id]
+  )
 
   const update = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const remove = (key) => setLines((ls) => ls.filter((l) => l.key !== key))
@@ -419,18 +426,16 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
                   <tr key={l.key} className={l.scan === 'scanning' ? 'bg-amber-50/40' : ''}>
                     <td className="px-3 py-3 align-top pt-4 font-semibold text-slate-500">{i + 1}</td>
                     <td className="px-2 py-3">
-                      <select value={vehicleValue(l)} onChange={(e) => setVehicle(l, e.target.value)} className={`${tall} tracking-wide ${isReload(l) ? 'font-semibold text-emerald-700' : ''}`} title="Vehicle, or a fleet card to reload">
-                        {opt(usable.map((v) => [v.id, vehicleLabel(v)]), '— No vehicle —')}
-                        {cards.length > 0 && (
-                          <optgroup label="Fleet card reload">
-                            {cards.map((c) => (
-                              <option key={c.id} value={`card:${c.id}`}>
-                                Reload · {cardLabel(c)}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
+                      <VehiclePick
+                        value={vehicleValue(l)}
+                        onChange={(v) => setVehicle(l, v)}
+                        mine={usable.filter(drives)}
+                        general={usable.filter((v) => !drives(v) && v.general_use)}
+                        others={others}
+                        cards={cards}
+                        vById={vById}
+                        className={`${tall} tracking-wide ${isReload(l) ? 'font-semibold text-emerald-700' : ''}`}
+                      />
                     </td>
                     <td className="px-2 py-3">
                       <div className="space-y-1.5">
@@ -584,5 +589,98 @@ export function ClaimForm({ company, user, vehicles, cards = [], claim, lines: i
 
       {buttons}
     </form>
+  )
+}
+
+// Vehicle of a receipt: my own vehicles and the general-use cars are listed;
+// anyone else's vehicle is found with the search box (e.g. fuel bought for a
+// colleague driving another person's car). Also the fleet cards to reload.
+function VehiclePick({ value, onChange, mine, general, others, cards, vById, className }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [pos, setPos] = useState(null)
+  const btn = useRef(null)
+  const box = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e) => box.current && !box.current.contains(e.target) && btn.current && !btn.current.contains(e.target) && setOpen(false)
+    const esc = (e) => e.key === 'Escape' && setOpen(false)
+    const moved = (e) => box.current && !box.current.contains(e.target) && setOpen(false)
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    window.addEventListener('scroll', moved, true)
+    window.addEventListener('resize', moved)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', esc)
+      window.removeEventListener('scroll', moved, true)
+      window.removeEventListener('resize', moved)
+    }
+  }, [open])
+  const toggle = () => {
+    if (open) return setOpen(false)
+    const r = btn.current.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom
+    setPos({ left: r.left, width: Math.max(r.width, 280), ...(below < 320 ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) })
+    setQ('')
+    setOpen(true)
+  }
+  const pick = (v) => {
+    onChange(v)
+    setOpen(false)
+  }
+  const term = q.trim().toLowerCase()
+  const hit = (v) => !term || [v.reg_no, v.name, v.brand, v.model, v.machine_type].filter(Boolean).join(' ').toLowerCase().includes(term)
+  const card = value.startsWith('card:') ? cards.find((c) => `card:${c.id}` === value) : null
+  const label = card ? `Reload · ${cardLabel(card)}` : value && vById[value] ? vehicleLabel(vById[value]) : '— No vehicle —'
+  const groups = [
+    ['My vehicle', mine.filter(hit)],
+    ['General car', general.filter(hit)],
+    // other people's vehicles only when searching
+    ...(term ? [['Other vehicles', others.filter(hit)]] : [])
+  ]
+  const cardHits = cards.filter((c) => !term || cardLabel(c).toLowerCase().includes(term))
+  const item = (val, text, on) => (
+    <button
+      key={val || 'none'}
+      type="button"
+      onClick={() => pick(val)}
+      className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm ${on ? 'bg-brand/10 font-semibold text-brand-dark' : 'text-slate-700 hover:bg-slate-100'}`}
+    >
+      {text}
+    </button>
+  )
+  const nothing = groups.every(([, vs]) => !vs.length) && !cardHits.length
+  return (
+    <>
+      <button ref={btn} type="button" onClick={toggle} className={`${className} flex w-full items-center text-left`} title="Vehicle, or a fleet card to reload">
+        <span className="line-clamp-2 flex-1">{label}</span>
+        <span className="ml-1 text-slate-400">▾</span>
+      </button>
+      {open && pos && (
+        <div ref={box} style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, zIndex: 60 }} className="rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reg. no. (any vehicle)…" className={`${inputCls} mb-1.5 h-9 w-full px-2.5 text-sm`} />
+          <div className="max-h-72 overflow-y-auto">
+            {!term && item('', '— No vehicle —', !value)}
+            {groups.map(([title, vs]) =>
+              vs.length ? (
+                <div key={title} className="mt-1">
+                  <p className="px-2.5 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+                  {vs.map((v) => item(v.id, vehicleLabel(v), v.id === value))}
+                </div>
+              ) : null
+            )}
+            {cardHits.length > 0 && (
+              <div className="mt-1">
+                <p className="px-2.5 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fleet card reload</p>
+                {cardHits.map((c) => item(`card:${c.id}`, `Reload · ${cardLabel(c)}`, `card:${c.id}` === value))}
+              </div>
+            )}
+            {nothing && <p className="px-2.5 py-3 text-sm text-slate-400">No vehicle found.</p>}
+            {!term && others.length > 0 && <p className="mt-1.5 border-t border-slate-100 px-2.5 pt-1.5 text-xs text-slate-500">Someone else's vehicle? Type its reg. no. above.</p>}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
